@@ -176,13 +176,29 @@ Implementation detail:
 
 `Authorization: Bearer`.
 
-\- Refresh tokens: stored server-side (hashed) and issued to the client
+\- Refresh tokens: stored server-side hashed with SHA-256, and issued to
 
-only as an httpOnly, Secure, SameSite=Strict cookie — never stored in
+the client only as an httpOnly, Secure, SameSite=Strict cookie — never
 
-localStorage or exposed to JavaScript.
+stored in localStorage or exposed to JavaScript.
 
 \- Passwords are hashed using Argon2id.
+
+\- These two hashing algorithms are deliberately different and must not be
+
+conflated: Argon2id (slow, memory-hard) is for passwords, which are
+
+low-entropy human-chosen secrets that must resist offline brute-force
+
+guessing. SHA-256 (fast) is for refresh tokens, which are already
+
+high-entropy, randomly generated values — hashing them with a slow,
+
+memory-hard algorithm on every authenticated request would add
+
+unnecessary computational overhead with no corresponding security
+
+benefit.
 
 
 
@@ -198,7 +214,13 @@ frontend and backend responsibilities clearly separated. httpOnly cookies
 
 protect refresh tokens from XSS-based exfiltration, and Argon2id is a
 
-current recommended password-hashing algorithm.
+current recommended password-hashing algorithm. Refresh tokens use
+
+SHA-256 rather than Argon2id specifically because they are not
+
+human-chosen secrets, so a fast cryptographic hash is sufficient and
+
+appropriate.
 
 
 

@@ -10,19 +10,19 @@ Project status: In Progress
 
 
 
-Current phase: Phase 2 — Database
+Current phase: Phase 3 — Backend Foundation
 
 
 
-Current task: Configure PostgreSQL and Prisma
+Current task: Initialize NestJS application
 
 
 
-Last completed task: Phase 1 — Architecture & Technical Foundation (reviewed and approved)
+Last completed task: Phase 2 — Database (implemented, migrated, seeded and verified)
 
 
 
-Next task: Configure PostgreSQL
+Next task: Initialize NestJS application
 
 
 
@@ -163,6 +163,126 @@ Next:
 design initial schema (users/roles, tickets, comments, history, SLA,
 
 assets, knowledge base, notifications, audit log)
+
+
+
+\---
+
+
+
+\### 2026-09-14 — Phase 2 Database Implemented
+
+
+
+Completed:
+
+
+
+\- Set up the Prisma foundation under `backend/` (package.json, tsconfig.json,
+
+`.env.example`) without scaffolding NestJS — Phase 3 remains untouched.
+
+\- Installed PostgreSQL 17 locally (Windows service) since no database or
+
+Docker was available in this environment; created the `opsnow_dev` database
+
+and a dedicated `opsnow` role.
+
+\- Wrote `backend/prisma/schema.prisma` covering all 18 approved tables and
+
+7 enums, matching the approved Phase 2 model exactly (UUID primary keys,
+
+approved delete behaviors, approved indexes).
+
+\- Generated the initial migration in draft mode, hand-reviewed it, and added
+
+the PostgreSQL-specific SQL Prisma cannot express declaratively: 5 CHECK
+
+constraints, 7 partial/filtered unique indexes, and a STORED generated
+
+`tsvector` column with a GIN index for knowledge-base full-text search.
+
+\- Applied the migration to `opsnow_dev` and generated the Prisma Client.
+
+\- Wrote `backend/prisma/seed.ts` with realistic ITSM seed data: 7 users
+
+(one per role plus extra employees/agents), a hierarchical ticket-category
+
+tree, 6 asset types, 5 assets with assignment history, 4 SLA policies (one
+
+active per priority), 3 knowledge-base articles, and 5 tickets spanning
+
+New/InProgress/OnHold/Resolved/Open (including one reopened ticket showing
+
+the "no new SLA cycle on reopen" behavior).
+
+\- Verified the database directly: table/row counts, all 7 partial unique
+
+indexes and all 5 CHECK constraints present, full-text search returning
+
+correct results, and a CHECK constraint plus a partial unique index both
+
+confirmed to actually reject bad inserts (not just declared). Verified
+
+relationships resolve correctly through Prisma Client (ticket → requester
+
+/assignee/category/history/sla/linked article; asset → current holder/
+
+assignment history; category → parent/children).
+
+\- Updated ADR-005 to explicitly document Argon2id for password hashing and
+
+SHA-256 for refresh-token hashing.
+
+
+
+Verification results:
+
+
+
+\- `prisma validate`: schema valid.
+
+\- `prisma migrate status`: database schema up to date, no drift.
+
+\- `tsc --noEmit`: seed script type-checks cleanly.
+
+\- Manual SQL checks: full-text search query returned the expected article;
+
+an out-of-range `sla_policies` insert was rejected by its CHECK constraint;
+
+a second open `asset_assignments` row for the same asset was rejected by
+
+its partial unique index.
+
+\- `npm audit`: 3 high-severity findings, all in a transitive dev-tool
+
+dependency (`deepmerge-ts`, via `@prisma/config`) used only by the Prisma
+
+CLI's own config loader — not part of the application runtime, no fix
+
+currently available without a breaking change.
+
+
+
+Git status:
+
+
+
+\- Not yet committed at the time this entry was written; see the following
+
+commit for the recorded Phase 2 changes.
+
+
+
+Next:
+
+
+
+\- Begin Phase 3 — Backend Foundation: initialize the NestJS application,
+
+configure environment variables, logging, global validation, error
+
+handling, API documentation, and a health-check endpoint.
 
 
 
