@@ -1,16 +1,25 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
     "module": "commonjs",
     "moduleResolution": "node",
+    "target": "ES2022",
     "lib": ["ES2022"],
-    "strict": true,
+    "declaration": false,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
+    "sourceMap": true,
+    "incremental": true,
     "skipLibCheck": true,
+    "strict": true,
     "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true,
-    "outDir": "dist",
-    "rootDir": "."
+    "outDir": "./dist",
+    "rootDir": "./",
+    "baseUrl": "./"
   },
-  "include": ["prisma/**/*.ts"]
+  "include": ["src/**/*.ts", "prisma/**/*.ts", "test/**/*.ts"]
 }

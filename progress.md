@@ -10,19 +10,19 @@ Project status: In Progress
 
 
 
-Current phase: Phase 3 — Backend Foundation
+Current phase: Phase 4 — Authentication
 
 
 
-Current task: Initialize NestJS application
+Current task: Create user model
 
 
 
-Last completed task: Phase 2 — Database (implemented, migrated, seeded and verified)
+Last completed task: Phase 3 — Backend Foundation (NestJS application initialized, configured, tested and verified)
 
 
 
-Next task: Initialize NestJS application
+Next task: Create user model
 
 
 
@@ -283,6 +283,262 @@ Next:
 configure environment variables, logging, global validation, error
 
 handling, API documentation, and a health-check endpoint.
+
+
+
+\---
+
+
+
+\### 2026-09-14 — Phase 3 Backend Foundation Implemented
+
+
+
+Completed:
+
+
+
+\- Initialized the NestJS application under `backend/src` alongside the existing
+
+Phase 2 Prisma layer: `main.ts` bootstrap, `AppModule`, a shared `configureApp()`
+
+helper (prefix/versioning/validation/error-filter wiring, used by both `main.ts`
+
+and the e2e test bootstrap so they cannot drift apart).
+
+\- Configured environment variables via `@nestjs/config` with a Joi-based
+
+`validate` function (`src/config/env.validation.ts`) checking `NODE_ENV`, `PORT`,
+
+and `DATABASE_URL`; app fails fast on invalid/missing config. Added `NODE_ENV`
+
+and `PORT` to `.env` / `.env.example` alongside the existing `DATABASE_URL`.
+
+\- Wired the existing Prisma layer into Nest via a `@Global()` `PrismaModule` /
+
+`PrismaService` (connect/disconnect on module lifecycle hooks; `enableShutdownHooks()`
+
+added in `main.ts` so `$disconnect()` actually runs on SIGTERM).
+
+\- Added a database-backed health check at `GET /api/v1/health` using
+
+`@nestjs/terminus`'s official `HealthCheckService` + built-in `PrismaHealthIndicator`
+
+(reused rather than writing a custom indicator).
+
+\- Added a global `AllExceptionsFilter` producing a consistent `{statusCode,
+
+timestamp, path, message}` error body; preserves any extra diagnostic fields an
+
+`HttpException` body carries (e.g. Terminus's `info`/`error`/`details` on a
+
+health-check failure) while never returning a stack trace — stack traces are
+
+logged server-side only, and only for 5xx/non-HTTP exceptions.
+
+\- Added global `ValidationPipe` (whitelist, forbidNonWhitelisted, transform),
+
+`/api/v1` URI versioning, and Swagger/OpenAPI docs at `/api/docs`.
+
+\- Established the backend testing foundation: Jest unit tests (health controller,
+
+Prisma service lifecycle, exception filter) and a Supertest e2e suite
+
+(`test/app.e2e-spec.ts`) exercising `/api/v1/health` against the real local
+
+Postgres dev database and a structured-404 case. 5 unit tests + 2 e2e tests, all
+
+passing.
+
+\- Updated `backend/package.json`: added the NestJS v11.x package line (not the
+
+newest v12.x — see Key decisions), `class-validator`, `class-transformer`,
+
+`joi`, `reflect-metadata`, `rxjs` as runtime deps, and the matching dev/test
+
+tooling (`@nestjs/cli`, `@nestjs/testing`, `jest`, `ts-jest`, `supertest`,
+
+`@types/express`, `@types/jest`, `@types/supertest`).
+
+\- Closed two high-severity transitive `npm audit` findings via an `overrides`
+
+block: `multer` pinned to `2.3.0` (pulled in vulnerable at `2.2.0` by
+
+`@nestjs/platform-express`) and `deepmerge-ts` pinned to `8.0.2` (pulled in
+
+vulnerable by Prisma's own `@prisma/config` — previously an accepted-risk item
+
+in the Phase 2 log; now actually fixed instead of just accepted).
+
+`npm audit` reports 0 vulnerabilities.
+
+
+
+Review findings (QA/Security and Senior Review, run independently against the
+
+actual code and test suite):
+
+
+
+\- 2 HIGH findings, both fixed and re-verified against a real running server
+
+with the local Postgres instance stopped/restarted: (1) `PrismaService.onModuleInit`
+
+previously let a startup connection failure crash the whole app instead of
+
+starting and letting `/health` report `503` — now catches and logs instead of
+
+throwing. (2) `AllExceptionsFilter` previously collapsed every error to a bare
+
+`message`, discarding Terminus's `info`/`error`/`details` on a health-check
+
+failure — now preserves them. Both fixes have regression tests
+
+(`prisma.service.spec.ts`, `all-exceptions.filter.spec.ts`).
+
+\- 2 MEDIUM findings from Senior Review, fixed: missing `app.enableShutdownHooks()`;
+
+e2e test bootstrap duplicated `main.ts`'s config instead of sharing it (now
+
+both use `configureApp()`).
+
+\- 1 MEDIUM finding, deferred (documented, not blocking — no HIGH/CRITICAL
+
+remains): the `allowScripts` block in `backend/package.json` (a Phase
+
+2-originated convention for gating npm install/postinstall scripts) has no
+
+effect under plain npm — it requires a tool like `@lavamoat/allow-scripts` or
+
+an `.npmrc` with `ignore-scripts=true` plus explicit rebuild steps to actually
+
+enforce anything. Confirmed `@scarf/scarf`'s telemetry postinstall script ran
+
+despite being marked `false`. Follow-up: decide and wire up a real enforcement
+
+mechanism (tracked, not silently dropped).
+
+\- 2 LOW findings, fixed: stray `tsconfig.build.tsbuildinfo` wasn't gitignored
+
+(also relocated it inside `dist/` via `tsBuildInfoFile`, since it living at the
+
+project root was independently found to cause a stale-incremental-build bug —
+
+see Key decisions); unused `source-map-support` dev dependency removed.
+
+\- 1 LOW finding, informational only per reviewer instruction (not blocking):
+
+Swagger UI is mounted unauthenticated at `/api/docs` in every environment —
+
+worth revisiting before a real production deploy.
+
+
+
+Key decisions:
+
+
+
+\- Pinned the whole `@nestjs/*` family to the v11.x line (`@nestjs/config`
+
+further back at `^4.0.4`) rather than the newest v12.x. `@nestjs/core`,
+
+`@nestjs/platform-express`, `@nestjs/terminus`, and `@nestjs/swagger` at v12 are
+
+now ESM-only (`"type":"module"`), which is incompatible with this project's
+
+CommonJS `ts-jest`/Jest setup and with Prisma's existing `ts-node`-based seed
+
+tooling; migrating the whole toolchain to ESM was judged unnecessary complexity
+
+at this stage (ADR-017) versus pinning a still-current, actively maintained,
+
+fully CommonJS major version. `@nestjs/config@12` also dropped native Joi
+
+`validationSchema` support in favor of the "Standard Schema" spec (Zod/Valibot/
+
+etc.); `env.validation.ts` uses `ConfigModule`'s `validate` custom-function hook
+
+instead, which is stable across both API generations.
+
+\- Reused `@nestjs/terminus`'s official built-in `PrismaHealthIndicator` for the
+
+health check instead of writing a custom indicator (Terminus ships one; no
+
+reason to duplicate it).
+
+\- Discovered and fixed a TypeScript incremental-build trap: `tsc`'s default
+
+`.tsbuildinfo` cache location (project root) sits outside `dist/`, so deleting
+
+only `dist/` left `tsc` believing stale output was still current and it silently
+
+emitted nothing on the next build. Fixed by setting `tsBuildInfoFile` inside
+
+`dist/` so `nest build`'s `deleteOutDir` clears both together.
+
+\- No ADR was written for this phase: NestJS, `/api/v1` versioning, and
+
+Jest/Supertest were already decided in ADR-003/007/008/014; the version-pinning
+
+and tooling choices above are implementation-level and reversible, not new
+
+architectural boundaries.
+
+
+
+Verification results:
+
+
+
+\- `npx tsc --noEmit`: clean. `npm run build`: clean, `dist/main.js` emits at the
+
+top level as expected.
+
+\- `npm test`: 3 suites, 5 tests, all passing.
+
+\- `npm run test:e2e`: 1 suite, 2 tests, all passing against the real local
+
+`opsnow_dev` Postgres database.
+
+\- `npm audit`: 0 vulnerabilities.
+
+\- `npx prisma migrate status`: database schema up to date, no drift (Phase 2
+
+layer untouched).
+
+\- Manually verified against a real running instance (`node dist/main.js`):
+
+normal boot + `/api/v1/health` returns `200` with the DB reachable; app boots
+
+successfully and `/api/v1/health` returns `503` with full diagnostic detail
+
+when the DB is unreachable (verified by pointing `DATABASE_URL` at a closed
+
+port); recovers to `200` once the DB is reachable again; `/api/docs` (Swagger)
+
+returns `200`.
+
+
+
+Git status:
+
+
+
+\- Not yet committed at the time this entry was written; see the following
+
+commit for the recorded Phase 3 changes.
+
+
+
+Next:
+
+
+
+\- Begin Phase 4 — Authentication: user model, registration/login flows,
+
+password hashing (Argon2id per ADR-005), access/refresh tokens, logout, expired
+
+token handling, route protection, and authentication tests.
 
 
 

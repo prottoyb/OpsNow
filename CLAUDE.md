@@ -2,6 +2,28 @@
 
 
 
+\## Shared AI Software Team Constitution
+
+
+
+@D:\Projects\Claude\AI-Software-Team\CLAUDE.md
+
+
+
+The shared engineering constitution, mandatory gates, policy precedence,
+
+and agent/rule/skill definitions above are maintained as the single
+
+source of truth at D:\Projects\Claude\AI-Software-Team and made
+
+available here via the symlinked `.claude\agents`, `.claude\rules`, and
+
+`.claude\skills` directories. OpsNow-specific instructions below are
+
+additive and must not contradict it.
+
+
+
 \## Project
 
 
@@ -294,9 +316,19 @@ Prefer small changes that can be verified independently.
 
 
 
-OpsNow project repository initialized.
+Phases 0–3 are complete: project foundation, approved architecture (ADR-001
+
+through ADR-017 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, and
+
+the NestJS backend foundation (application bootstrap, environment validation,
+
+global validation/error handling, logging, `/api/v1` versioning, Swagger docs,
+
+a database-backed health check, and the backend testing foundation).
 
 
 
-Development has not started yet.
+Phase 4 — Authentication is next. See `TASKS.md` for the current task list and
+
+`progress.md` for the full development log.
 
