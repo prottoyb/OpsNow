@@ -30,6 +30,8 @@ design, authentication, authorization, testing, containerization and CI/CD.
 
 \- Vite
 
+\- Tailwind CSS
+
 
 
 \### Backend
@@ -50,6 +52,8 @@ design, authentication, authorization, testing, containerization and CI/CD.
 
 \- PostgreSQL
 
+\- Prisma (ORM and migrations)
+
 
 
 \### Infrastructure \& DevOps
@@ -66,11 +70,11 @@ design, authentication, authorization, testing, containerization and CI/CD.
 
 
 
-\- Vitest
+\- Jest \& Supertest (backend unit/integration)
 
-\- Supertest
+\- Vitest (frontend unit/component)
 
-\- Playwright
+\- Playwright (end-to-end)
 
 
 
@@ -172,13 +176,17 @@ usage limits and interruptions.
 
 
 
-Development has not started yet.
+The Phase 1 architecture (application, frontend, backend, database,
+
+authentication, authorization, API conventions, error handling and
+
+testing strategy) has been defined, reviewed and approved.
 
 
 
-The project repository and development-control structure have been
+Application implementation has not started yet. Development is currently
 
-initialized.
+entering Phase 2 — Database.
 
 
 

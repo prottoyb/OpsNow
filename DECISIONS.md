@@ -154,7 +154,7 @@ capabilities.
 
 
 
-Status: Planned
+Status: Accepted
 
 
 
@@ -162,9 +162,27 @@ Decision:
 
 
 
-OpsNow will use token-based authentication with short-lived access tokens
+OpsNow will use token-based authentication with short-lived JWT access
 
-and refresh tokens.
+tokens and longer-lived refresh tokens.
+
+
+
+Implementation detail:
+
+
+
+\- Access tokens: short-lived JWTs (10–15 minutes), sent via
+
+`Authorization: Bearer`.
+
+\- Refresh tokens: stored server-side (hashed) and issued to the client
+
+only as an httpOnly, Secure, SameSite=Strict cookie — never stored in
+
+localStorage or exposed to JavaScript.
+
+\- Passwords are hashed using Argon2id.
 
 
 
@@ -176,7 +194,11 @@ The application requires authenticated users and protected API resources.
 
 The implementation must provide secure authentication while keeping the
 
-frontend and backend responsibilities clearly separated.
+frontend and backend responsibilities clearly separated. httpOnly cookies
+
+protect refresh tokens from XSS-based exfiltration, and Argon2id is a
+
+current recommended password-hashing algorithm.
 
 
 
@@ -188,7 +210,7 @@ frontend and backend responsibilities clearly separated.
 
 
 
-Status: Planned
+Status: Accepted
 
 
 
@@ -196,11 +218,13 @@ Decision:
 
 
 
-OpsNow will implement backend-enforced role-based access control (RBAC).
+OpsNow will implement backend-enforced role-based access control (RBAC)
+
+using a fixed set of roles.
 
 
 
-Initial roles:
+Roles:
 
 
 
@@ -214,6 +238,22 @@ Initial roles:
 
 
 
+Implementation detail:
+
+
+
+\- Roles are stored as a fixed enum on the user record, not a dynamic
+
+permissions table.
+
+\- Authorization is enforced in the NestJS backend via guards and role
+
+decorators on every protected route. Frontend role-based UI is cosmetic
+
+only and is never relied upon for security.
+
+
+
 Reason:
 
 
@@ -221,6 +261,12 @@ Reason:
 Different users require different levels of access. Authorization must be
 
 enforced by the backend rather than relying only on frontend visibility.
+
+A flat role enum is sufficient for four fixed roles and is simpler to
+
+build, test and explain than a granular permissions system; that can be
+
+revisited later if a concrete need for finer-grained permissions arises.
 
 
 
@@ -242,7 +288,9 @@ Decision:
 
 Use RESTful HTTP APIs for communication between the React frontend and
 
-NestJS backend.
+NestJS backend. The API is versioned from the start under `/api/v1/...`
+
+to allow non-breaking evolution as the application grows.
 
 
 
@@ -272,17 +320,21 @@ Decision:
 
 
 
-Use automated testing at multiple levels.
+Use automated testing at multiple levels, with each application using the
+
+testing tool best aligned to its own ecosystem.
 
 
 
-Planned tools:
+Tools:
 
 
 
-\- Vitest for unit testing
+\- Jest for backend (NestJS) unit and integration testing
 
 \- Supertest for backend API/integration testing
+
+\- Vitest for frontend unit and component testing
 
 \- Playwright for end-to-end testing
 
@@ -294,7 +346,13 @@ Reason:
 
 The project should demonstrate that features are verified rather than only
 
-implemented.
+implemented. Jest is used for the backend because it is NestJS's default
+
+and best-supported test runner; Vitest is used for the frontend because it
+
+is Vite's native test runner. Splitting by ecosystem avoids forcing one
+
+runner onto a framework where it is not the natural fit.
 
 
 
@@ -501,4 +559,148 @@ interrupted sessions, terminal closure and other development interruptions.
 A new AI session should be able to reconstruct the current project state
 
 from the repository itself.
+
+
+
+\---
+
+
+
+\## ADR-014 — ORM and Database Migrations
+
+
+
+Status: Accepted
+
+
+
+Decision:
+
+
+
+Use Prisma as the ORM and migration tool for PostgreSQL.
+
+
+
+Reason:
+
+
+
+Prisma provides type-safe database access that matches the project's
+
+TypeScript-first approach, and its migration system (`prisma migrate`)
+
+serves as the single source of truth for database schema. Schema changes
+
+are made only through migrations, in every environment including local
+
+development — no schema auto-sync is used anywhere.
+
+
+
+\---
+
+
+
+\## ADR-015 — Primary Key Strategy
+
+
+
+Status: Accepted
+
+
+
+Decision:
+
+
+
+Use UUID primary keys for all database tables.
+
+
+
+Reason:
+
+
+
+UUIDs avoid exposing sequential record counts through public-facing
+
+identifiers such as ticket numbers and asset tags, and are simpler to
+
+generate safely than coordinating auto-incrementing integers across
+
+future distributed scenarios. The minor storage and index overhead
+
+compared to integer keys is an acceptable trade-off at this project's
+
+scale.
+
+
+
+\---
+
+
+
+\## ADR-016 — Frontend Styling
+
+
+
+Status: Accepted
+
+
+
+Decision:
+
+
+
+Use Tailwind CSS for frontend styling.
+
+
+
+Reason:
+
+
+
+Tailwind provides a consistent, utility-based styling approach that fits
+
+a component-driven React architecture and avoids maintaining a separate
+
+hand-written CSS or design-system layer for a project of this scope.
+
+
+
+\---
+
+
+
+\## ADR-017 — Repository and Infrastructure Simplicity
+
+
+
+Status: Accepted
+
+
+
+Decision:
+
+
+
+OpsNow will remain a single Git repository without monorepo tooling (Nx,
+
+Turborepo, npm/yarn/pnpm workspaces), microservices, or message queues.
+
+
+
+Reason:
+
+
+
+The application's scope does not currently justify the operational and
+
+cognitive overhead of multi-package build orchestration, service
+
+decomposition, or asynchronous messaging infrastructure. Backend domains
+
+communicate in-process, and the frontend and backend remain two plain
+
+applications within one repository.
 
