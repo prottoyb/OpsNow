@@ -1,6 +1,11 @@
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { normalizeEmail, toSafeUser, UsersService } from './users.service';
+import {
+  normalizeEmail,
+  toSafeUser,
+  toUserSummary,
+  UsersService,
+} from './users.service';
 
 describe('normalizeEmail', () => {
   it('trims and lowercases', () => {
@@ -33,6 +38,33 @@ describe('toSafeUser', () => {
       lastName: 'Doe',
       role: Role.Employee,
     });
+    expect(result).not.toHaveProperty('passwordHash');
+  });
+});
+
+describe('toUserSummary', () => {
+  it('strips email, passwordHash, and every other field down to the narrow set', () => {
+    const result = toUserSummary({
+      id: 'user-1',
+      email: 'jane@opsnow.local',
+      passwordHash: 'super-secret-hash',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      role: Role.SupportAgent,
+      isActive: true,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    } as never);
+
+    expect(result).toEqual({
+      id: 'user-1',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      role: Role.SupportAgent,
+    });
+    expect(result).not.toHaveProperty('email');
     expect(result).not.toHaveProperty('passwordHash');
   });
 });

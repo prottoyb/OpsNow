@@ -816,3 +816,231 @@ Every future public route (and every PR reviewing one) must remember
 
 middleware outside Nest's controller/route pipeline, not a guarded route.
 
+
+
+\---
+
+
+
+\## ADR-019 — Ticket Access Control and State Transitions
+
+
+
+Status: Accepted
+
+
+
+Context:
+
+
+
+Phase 6a introduces the project's first resource where authorization
+
+depends on data, not just role: an Employee may only see and act on
+
+tickets they themselves filed, while Support Agent/Team Lead/Administrator
+
+may see and act on any ticket. `RolesGuard` (ADR-006/018) only answers "is
+
+this role allowed to hit this route at all" — it has no way to answer "is
+
+this specific row this user's to see." Phase 6a also introduces the
+
+project's first non-trivial state machine (`TicketStatus`), and the first
+
+case where "the resource exists but isn't yours" needs a consistent answer
+
+about what the caller is told.
+
+
+
+Problem:
+
+
+
+Three related questions needed a project-wide answer, not a per-endpoint
+
+improvisation: (1) where does per-row ownership get enforced, given guards
+
+can't do it; (2) what does an out-of-scope resource return — 404 or 403;
+
+(3) how are ticket status changes validated so they're actual "status
+
+management," not a bare enum write.
+
+
+
+Options considered:
+
+
+
+For (1): a generic authorization/policy engine (e.g. a CASL-style ability
+
+system) evaluated per-request; a custom `@Owns()` decorator plus a third
+
+global guard mirroring `RolesGuard`'s shape; or plain service-layer query
+
+scoping. The first two were rejected as premature for a single resource
+
+type — ADR-006 already commits to revisiting finer-grained permissions
+
+"later if a concrete need arises," and a policy engine derived from one
+
+example is exactly the kind of speculative abstraction the constitution's
+
+Scope Control warns against. A guard was rejected for a structural reason,
+
+not just a style preference: a guard can decide yes/no on a request it has
+
+already been handed, but it cannot narrow a `WHERE` clause — it cannot make
+
+a list endpoint only ever fetch the caller's own rows in the first place.
+
+
+
+For (2): returning 403 for every out-of-scope ticket, matching typical
+
+REST intuition ("you don't have permission"); or 404, treating an
+
+out-of-scope ticket as indistinguishable from a nonexistent one.
+
+
+
+For (3): a bare `status: TicketStatus` field update validated only by the
+
+enum type; or an explicit transition matrix enforced in the service layer.
+
+
+
+Decision:
+
+
+
+1. Ownership is enforced by a single service-layer helper
+
+(`ticketVisibilityWhere(user)`) that every ticket query — list, get-by-id,
+
+and the lookup inside every mutating method — passes through. For an
+
+Employee it adds `requesterId: user.id`; for staff it adds nothing beyond
+
+excluding soft-deleted rows. No policy engine, no ownership guard.
+
+
+
+2. A ticket outside the caller's scope (wrong owner, or soft-deleted)
+
+returns 404, not 403, on every ownership-checked route that takes a ticket
+
+id — `GET`, `PATCH`, comment creation, and comment listing. The three
+
+routes gated purely by role (`assignment`, `priority`, `history`) return
+
+403 for a non-staff caller before the ownership check ever runs, id-
+
+independent of whether the ticket exists — that is a role decision, not an
+
+ownership one, and is unaffected by this rule. A ticket that *is* in scope
+
+but where the specific action is disallowed (e.g. the requester editing
+
+their own ticket after it has left `New`) also returns 403, since the
+
+caller already knows the ticket exists.
+
+
+
+3. Ticket status changes are validated against an explicit
+
+`ALLOWED_TRANSITIONS` matrix (`tickets.constants.ts`), not a free-form
+
+enum write. `Closed` is a terminal state in Phase 6a: no role, including
+
+Administrator, can transition a `Closed` ticket anywhere else. A closed
+
+issue that recurs is filed as a new ticket rather than reopening the
+
+historical one. The only reopen path is `Resolved` → `Open`, and only the
+
+ticket's own requester (in addition to any staff role) may perform it.
+
+Every status change funnels through one `applyStatusTransition()` method.
+
+
+
+Rationale:
+
+
+
+Query-scoping is the only one of the three ownership options that can
+
+actually prevent an Employee's ticket list from ever containing another
+
+employee's row — a guard or policy check applied after the query runs can
+
+only filter or reject a response that has already been assembled, which is
+
+strictly weaker. 404-over-403 avoids confirming a ticket id's existence to
+
+someone not entitled to know about it, at the cost of an Employee seeing
+
+"not found" instead of "forbidden" for a ticket that does exist — judged an
+
+acceptable trade favoring the party who would otherwise leak information
+
+about other employees' tickets. Terminal `Closed` was a deliberate product
+
+decision (not a default): a closed issue reopening into its old history is
+
+a source of stale-context confusion in real ITSM tools, and a fresh ticket
+
+is a cleaner unit of work; this is revisitable if a concrete need for
+
+closed-ticket reopening arises later, the same way ADR-006 left room for
+
+revisiting RBAC granularity.
+
+
+
+Consequences:
+
+
+
+Enforcement lives in the service layer, not in a guard or middleware — a
+
+future controller or script that reaches `PrismaService` directly instead
+
+of going through `TicketsService` would bypass `ticketVisibilityWhere`
+
+entirely. Every new ticket-adjacent read must remember to route through the
+
+helper; there is no framework-level backstop the way there is for
+
+authentication (ADR-018) and role checks (ADR-006). The schema also has a
+
+generic `AuditLog` model in addition to `TicketHistory`; Phase 6a writes
+
+only `TicketHistory` (what TASKS.md's checklist names), and the boundary
+
+between the two audit mechanisms is left for whichever future phase owns
+
+`AuditLog` to resolve, not decided here.
+
+
+
+Risks:
+
+
+
+If a later phase adds a second resource with the same per-row-ownership
+
+shape (e.g. assets scoped to their current holder), duplicating
+
+`ticketVisibilityWhere`'s pattern by hand a second and third time is a
+
+signal — not yet a requirement — to revisit whether a shared abstraction
+
+has become justified; until then, per ADR-006 and this ADR, one-off
+
+service-layer helpers remain the simpler and better-understood choice.
+

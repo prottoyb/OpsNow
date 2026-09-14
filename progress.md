@@ -10,25 +10,23 @@ Project status: In Progress
 
 
 
-Current phase: Phase 6 — Ticket Management
+Current phase: Phase 6b — Ticket Management Frontend UI
 
 
 
-Current task: Create ticket entity
+Current task: Scaffold the frontend application
 
 
 
-Last completed task: Phase 5 — Authorization & RBAC (@Roles()/RolesGuard
+Last completed task: Phase 6a — Ticket Management Backend API (ticket
 
-as a global default-deny mechanism, Administrator-only GET /api/v1/users
+CRUD, assignment, status/priority management, categories, comments,
 
-demonstration endpoint, all four role boundaries tested — implemented,
-
-reviewed and verified)
+internal notes, history — implemented, reviewed and verified)
 
 
 
-Next task: Create ticket entity
+Next task: Scaffold the frontend application
 
 
 
@@ -776,6 +774,433 @@ attaches to `request.user`.
 
 \---
 
+
+
+\### 2026-09-14 — Phase 5 Authorization \& RBAC Implemented
+
+
+
+Completed:
+
+
+
+\- Added a `@Roles(...roles)` decorator and a `RolesGuard`, registered as a
+
+SECOND global `APP_GUARD` in `AuthModule` (after `JwtAuthGuard`, same
+
+providers array) — an architect-role review corrected an earlier per-route
+
+`@UseGuards()` draft to this global approach specifically because a
+
+per-route guard can be forgotten and fails open, the same risk ADR-018
+
+already eliminated for authentication.
+
+\- No permissions table and no new Prisma migration — per ADR-006's
+
+explicit "fixed enum, not a dynamic permissions table" decision, already
+
+fully supported by the Phase 2 `Role` enum.
+
+\- Shipped one concrete, non-speculative demonstration endpoint:
+
+`GET /api/v1/users` (Administrator-only, paginated, safe fields only),
+
+extending the existing `UsersService`.
+
+\- New ADR-018 (Default-Deny Route Protection) recorded in `DECISIONS.md`.
+
+
+
+Review findings (independent QA/Security and Senior Review):
+
+
+
+\- No CRITICAL/HIGH findings from either reviewer. Guard-ordering
+
+correctness was verified directly against `@nestjs/core`'s own scanner
+
+and guards-consumer source, not just trusted.
+
+\- Fixed: `progress.md` and `TASKS.md` had drifted out of sync with each
+
+other (a MEDIUM finding); `RolesGuard` now explicitly `implements
+
+CanActivate` with proper `Role[]` typing and fails closed on an empty
+
+`@Roles()` list instead of silently allowing everyone through; a dead
+
+`SafeUser` type re-export was removed; `UsersService.findAll`'s `orderBy`
+
+gained an `id` tie-breaker for stable pagination.
+
+\- Flagged for later, not fixed in Phase 5: no ESLint config or CI
+
+pipeline exists anywhere in the project — a known, tracked, pre-existing
+
+gap in the Merge Readiness Gate's "CI passes" item, requiring an explicit
+
+human decision on when to address it.
+
+
+
+Verification: `tsc --noEmit`/`npm run build` clean; 39 unit + 24 e2e tests
+
+passing; `npm audit` 0 vulnerabilities; manual verification of all four
+
+seeded roles' access to `GET /api/v1/users` against a real running server;
+
+confirmed Phases 3–4 behavior unaffected.
+
+
+
+Git status: committed as `45333d1`.
+
+
+
+Next:
+
+
+
+\- Begin Phase 6 — Ticket Management.
+
+
+
+\---
+
+
+
+\### 2026-09-15 — Phase 6a Ticket Management Backend API Implemented
+
+
+
+Completed:
+
+
+
+\- Planned in Claude Code's plan mode with three parallel exploration
+
+passes (Prisma ticket schema/seed data, TASKS.md/ADR scope, Phase 3–5
+
+code conventions) followed by an independent architect-role review before
+
+any code was written. The review found one CRITICAL gap (soft-delete
+
+filtering was entirely missing from the draft) and several HIGH gaps
+
+(no concurrency control on assignment/status races, internal-note counts
+
+leaking via pagination `total`, inconsistent 404-vs-403, free-form status
+
+writes, unbounded text fields) — all folded into the plan before
+
+implementation. You then made two further changes to the approved plan:
+
+`Closed` is terminal (only `Resolved → Open` reopens, not `Closed → Open`)
+
+and ticket-facing user summaries use a new narrow `UserSummary` (no
+
+email), not the existing `SafeUser`.
+
+\- No new Prisma migration — Phase 2's `Ticket`/`TicketComment`/
+
+`TicketHistory`/`TicketCategory`/`TicketSla` schema, enums, and CHECK
+
+constraints already fully supported this phase.
+
+\- Extracted a shared `PaginationQueryDto` (`backend/src/common/dto/`) from
+
+Phase 5's `ListUsersQueryDto` as its own commit first, with a regression
+
+test (an unknown-query-param 400 case) added and confirmed passing both
+
+before and after the refactor.
+
+\- Added `backend/src/ticket-categories/` (read-only `GET /ticket-categories`
+
+— any authenticated user, active categories only, needed so a client can
+
+discover valid `categoryId` values) and `backend/src/tickets/` (`TicketsModule`/
+
+`TicketsService`/`TicketsController`, an explicit `ALLOWED_TRANSITIONS`
+
+status matrix in `tickets.constants.ts`, and DTOs including Swagger
+
+response classes rather than interfaces).
+
+\- Added `UserSummary`/`toUserSummary()` to `UsersService` alongside the
+
+existing `SafeUser`/`toSafeUser()` — narrower (no `email`), used for every
+
+requester/assignee/comment-author/history-actor field on ticket responses.
+
+\- Ownership/visibility enforced via one `ticketVisibilityWhere(user)`
+
+service-layer helper used by every ticket read — Employees see only their
+
+own tickets, staff see all; a ticket outside scope (wrong owner or
+
+soft-deleted) returns 404 everywhere, not just on `GET`; an in-scope
+
+ticket where the action itself is disallowed returns 403.
+
+\- Optimistic concurrency (the same conditional-`updateMany`-inside-
+
+`$transaction` pattern `AuthService.refresh()` established for refresh-
+
+token rotation) on the two endpoints that actually need it: ticket
+
+assignment and status transitions — `409 Conflict` on a lost race, no
+
+schema change. Every ticket mutation that also writes a `TicketHistory`
+
+row does so atomically in one transaction.
+
+\- Status transitions go through an explicit matrix, not a free-form enum
+
+write; `Closed` is terminal for every role including Administrator;
+
+reopening (`Resolved → Open` only) clears `resolvedAt`/`closedAt` and
+
+increments `reopenedCount`, writing two history rows exactly mirroring
+
+the Phase 2 seed's own ticket5 reopen pattern. Resolving/closing correctly
+
+set `resolvedAt`/`closedAt` per the `tickets_closed_requires_resolved`
+
+CHECK constraint — deliberately diverging from the seed's own ticket5,
+
+which reached `Resolved` in its history without ever actually setting
+
+`resolvedAt`; the CHECK constraint is the specification, the seed's gap is
+
+not something to replicate going forward.
+
+\- Internal notes (`CommentVisibility.Internal`) remain staff-only to
+
+create; an Employee's comment listing excludes them from both the
+
+returned rows AND the `total` count (filtering only the rows would have
+
+leaked how many internal notes exist). Ticket history stays staff-only
+
+entirely, including for the ticket's own requester.
+
+\- Defense-in-depth: `assign()`, `updatePriority()`, and `findHistory()`
+
+independently re-verify the caller is staff inside the service, not just
+
+via the controller's `@Roles()` guard.
+
+\- New \*\*ADR-019\*\* ("Ticket Access Control and State Transitions"),
+
+full seven-section structure, covering the three linked decisions: service-
+
+layer query-scoping over a policy engine or ownership guard, 404-over-403
+
+for out-of-scope resources, and the explicit transition matrix with
+
+`Closed` as terminal.
+
+\- Tests: unit tests for `TicketCategoriesService`, the transition-matrix
+
+constants, `UsersService`'s new `toUserSummary()`, and a comprehensive
+
+`TicketsService` suite (ownership scoping, 404s, the full transition
+
+matrix including every-role-blocked-from-`Closed`, reopen semantics, CAS
+
+409s on both assignment and status races, comment visibility filtering of
+
+both rows and count, defense-in-depth staff checks). E2E tests
+
+(`tickets.e2e-spec.ts`, `ticket-categories.e2e-spec.ts`) against the real
+
+local Postgres dev database, logging in as the real seeded users across
+
+all four roles, covering the full role grid, cross-employee 404s on every
+
+`:id` route, the terminal-`Closed` behavior, and internal-note visibility
+
+end to end.
+
+\- Discovered and fixed a test-infrastructure gap while re-verifying:
+
+with three e2e spec files now sharing one live dev database, Jest's
+
+default parallel workers let two suites race each other (`test:e2e` was
+
+already fixed to `--runInBand` during Phase 5 — reconfirmed still correct
+
+here now that a third and fourth suite exist).
+
+
+
+Review findings (independent QA/Security and Senior Review, run against
+
+the actual code and a real running server):
+
+
+
+\- No CRITICAL or HIGH findings from either reviewer. Both independently
+
+verified the CAS/concurrency logic by reasoning through Postgres's
+
+READ COMMITTED semantics (not just reading the code's own comments), and
+
+both confirmed no email/passwordHash leakage anywhere in ticket-adjacent
+
+responses.
+
+\- Fixed (found independently by both reviewers — high confidence): no
+
+`ParseUUIDPipe` on any `:id` route param, so a malformed (non-UUID) ticket
+
+id caused a raw Prisma `P2023` error to surface as an uncaught 500 instead
+
+of a clean 400 — added `@Param('id', ParseUUIDPipe)` to all eight
+
+`:id`-taking routes. `PATCH /tickets/:id` (subject/description/category)
+
+had no optimistic concurrency control at all, unlike `assign()`/status
+
+transitions in the same file — added the identical conditional-`updateMany`
+
+CAS pattern, gated on `updatedAt`.
+
+\- Fixed (QA/Security): the CAS `updateMany` where-clauses for `assign()`
+
+and status transitions didn't re-assert `ticketVisibilityWhere` at write
+
+time, only at the earlier read — added it to both, as defense in depth
+
+for whenever a delete/reassignment feature lands later. `createComment()`
+
+bypassed the file's own established `runTransaction`/error-mapping
+
+pattern — wrapped it to match every other mutating method.
+
+\- Fixed (Senior Review): `findAll`'s `where` clause spread the ownership
+
+filter alongside the query filters rather than isolating it, so a future
+
+filter could have silently overwritten (and disabled) the visibility
+
+scoping — restructured as an explicit `AND` wrapper. Added a direct unit
+
+test asserting `deletedAt: null` on the ticket-visibility lookup — the
+
+exact clause the pre-implementation architect review had rated CRITICAL,
+
+which had no dedicated test until this fix. Also fixed: the non-staff
+
+reopen check used a hardcoded parallel condition instead of consulting
+
+`ALLOWED_TRANSITIONS` as the single source of truth; a `trim()` transform
+
+was duplicated verbatim across three DTOs (extracted to
+
+`common/transforms/`); ADR-019's wording overstated the 404-vs-403 rule
+
+for the three purely role-gated routes (`assignment`/`priority`/`history`,
+
+which 403 before any ownership check runs); TASKS.md's "Implement ticket
+
+categories" line lacked the same "here's what this actually means" note
+
+the entity/repository line already had.
+
+\- Deferred, documented, not blocking (no CRITICAL/HIGH exists on this
+
+change, per `engineering.md`'s deferral rule): `UpdateTicketDto.categoryId`
+
+has no way to explicitly clear a ticket's category once set (`AssignTicketDto`
+
+solved the analogous problem correctly with `@ValidateIf`); `GET /ticket-categories`
+
+returns a bare array rather than ADR-007's `{data,total}` envelope
+
+(defensible — it's a small fixed reference list, not a paginated
+
+resource, not something either reviewer treated as blocking).
+
+
+
+Verification results:
+
+
+
+\- `npx tsc --noEmit` / `npm run build`: clean.
+
+\- `npm test`: 99 unit tests passing (up from 94 pre-Phase-6a; the new
+
+tests cover `TicketsService`, `TicketCategoriesService`, the transition
+
+matrix constants, and `UsersService`'s new `toUserSummary()`).
+
+\- `npm run test:e2e`: 67 e2e tests passing (5 suites), run five times in
+
+total across the implementation and review-fix cycle to confirm no
+
+flakiness, against the real local `opsnow_dev` Postgres.
+
+\- `npm audit`: 0 vulnerabilities.
+
+\- Manually verified the complete role grid against a real running
+
+instance: create → assign → status transitions (including the reopen and
+
+the terminal-`Closed` rejection) → comments (public/internal visibility)
+
+→ history (staff-only), the malformed-UUID-id fix (400, not 500), plus a
+
+full Phase 3–5 regression check
+
+(health/Swagger/users-RBAC/register-login-refresh-logout). Also fired two
+
+genuinely concurrent `PATCH` requests at the same ticket via backgrounded
+
+curl processes — both succeeded sequentially (6ms apart) rather than
+
+colliding, which is expected: forcing a true sub-millisecond Postgres-level
+
+race non-deterministically from a shell isn't a reliable repro technique,
+
+which is exactly why the CAS logic is verified deterministically in the
+
+unit tests (mocking a `count: 0` write) instead — both independent
+
+reviewers read the actual code against Postgres's READ COMMITTED semantics
+
+and confirmed the logic is correct. Seeded data (7 users, 5 tickets, 3
+
+comments, 14 history rows) confirmed unchanged after every verification
+
+pass, including this manual round (one stray ticket from a shell-scripting
+
+mistake during verification was caught and cleaned up before finishing).
+
+
+
+Git status: see the following commit for the recorded Phase 6a changes.
+
+
+
+Next:
+
+
+
+\- Begin Phase 6b — Ticket Management Frontend UI: scaffold the frontend
+
+application (Vite/React/TypeScript/Tailwind per ADR-002/016 — not yet
+
+started anywhere in the repo) and build the ticket list/creation/detail
+
+pages against the Phase 6a API.
+
+
+
+\---
 
 
 \## Resume Instructions

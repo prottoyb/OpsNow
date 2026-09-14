@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 6 — Ticket Management (Phase 5 — Authorization & RBAC complete)
+Current Phase: Phase 6b — Ticket Management Frontend UI (Phase 6a — Ticket Management Backend API complete)
 
 
 
@@ -234,41 +234,99 @@ starting in Phase 6, using this same mechanism.
 
 
 
-\# Phase 6 — Ticket Management
+\# Phase 6a — Ticket Management (Backend API)
 
 
 
-\- \[ ] Create ticket entity
+\- \[x] Create ticket entity
 
-\- \[ ] Create ticket repository
+\- \[x] Create ticket repository
 
-\- \[ ] Create ticket service
+\- \[x] Create ticket service
 
-\- \[ ] Create ticket controller
+\- \[x] Create ticket controller
 
-\- \[ ] Add ticket validation
+\- \[x] Add ticket validation
 
-\- \[ ] Create ticket creation API
+\- \[x] Create ticket creation API
 
-\- \[ ] Create ticket retrieval API
+\- \[x] Create ticket retrieval API
 
-\- \[ ] Create ticket update API
+\- \[x] Create ticket update API
 
-\- \[ ] Implement ticket assignment
+\- \[x] Implement ticket assignment
 
-\- \[ ] Implement ticket status management
+\- \[x] Implement ticket status management
 
-\- \[ ] Implement ticket priority management
+\- \[x] Implement ticket priority management
 
-\- \[ ] Implement ticket categories
+\- \[x] Implement ticket categories
 
-\- \[ ] Implement ticket comments
+\- \[x] Implement ticket comments
 
-\- \[ ] Implement internal notes
+\- \[x] Implement internal notes
 
-\- \[ ] Implement ticket history
+\- \[x] Implement ticket history
 
-\- \[ ] Add ticket backend tests
+\- \[x] Add ticket backend tests
+
+\- \[x] Test complete ticket workflow (backend API e2e slice — see Phase 6b
+
+for the UI workflow test)
+
+
+
+Note: no separate repository/entity layer was added — consistent with
+
+Phases 3–5's established pattern, `UsersService`/`TicketsService` talk to
+
+`PrismaService` directly and the Prisma model \*is\* the entity (this isn't
+
+TypeORM). "Create ticket entity"/"Create ticket repository" are satisfied
+
+by the existing Phase 2 Prisma schema and the same direct-Prisma-access
+
+pattern, not a new abstraction layer.
+
+
+
+Note: "Implement ticket categories" means ticket creation/update validates
+
+against, and a `GET /api/v1/ticket-categories` endpoint exposes, the
+
+existing Phase 2 seeded category tree — there is no category CRUD API.
+
+Categories remain admin-managed seed data; management endpoints are not
+
+part of Phase 6a and are not currently planned for any specific future
+
+phase.
+
+
+
+\---
+
+
+
+\# Phase 6b — Ticket Management (Frontend UI)
+
+
+
+Split out from the original Phase 6 (see ADR-019's context and
+
+progress.md's Phase 6a entry): no frontend has been scaffolded anywhere in
+
+the repo yet (Phases 0–5 were entirely backend), so bootstrapping an
+
+entire Vite/React/Tailwind application (ADR-002/016) belongs in its own
+
+reviewed effort rather than bundled into the backend ticket-API work.
+
+
+
+\- \[ ] Scaffold the frontend application (Vite/React/TypeScript/Tailwind
+
+per ADR-002/016 — not yet done anywhere in the repo)
 
 \- \[ ] Build ticket list page
 
@@ -278,7 +336,7 @@ starting in Phase 6, using this same mechanism.
 
 \- \[ ] Connect frontend to backend
 
-\- \[ ] Test complete ticket workflow
+\- \[ ] Test complete ticket workflow (UI workflow test)
 
 
 

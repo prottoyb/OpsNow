@@ -17,6 +17,16 @@ export interface SafeUser {
   role: Role;
 }
 
+/** Narrower than SafeUser — no `email`. For embedding a user in another
+ * domain's response (tickets now; assets/knowledge-base later) where the
+ * viewer isn't necessarily entitled to see that user's email address. */
+export interface UserSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+}
+
 export interface FindAllOptions {
   limit: number;
   offset: number;
@@ -93,6 +103,15 @@ export function toSafeUser(user: User): SafeUser {
   return {
     id: user.id,
     email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+  };
+}
+
+export function toUserSummary(user: User): UserSummary {
+  return {
+    id: user.id,
     firstName: user.firstName,
     lastName: user.lastName,
     role: user.role,
