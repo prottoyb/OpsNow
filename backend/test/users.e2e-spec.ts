@@ -82,6 +82,7 @@ describe('Users RBAC (e2e)', () => {
     ['limit=101 (over the max)', { limit: 101 }],
     ['limit=abc (non-numeric)', { limit: 'abc' }],
     ['offset=-1 (negative)', { offset: -1 }],
+    ['an unknown query param', { foo: 'bar' }],
   ])('rejects an invalid query (%s) with 400', async (_label, query) => {
     const token = await loginAs(app, 'admin@opsnow.local');
 
