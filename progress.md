@@ -10,23 +10,25 @@ Project status: In Progress
 
 
 
-Current phase: Phase 5 — Authorization & RBAC
+Current phase: Phase 6 — Ticket Management
 
 
 
-Current task: Create roles
+Current task: Create ticket entity
 
 
 
-Last completed task: Phase 4 — Authentication (registration, login, JWT access
+Last completed task: Phase 5 — Authorization & RBAC (@Roles()/RolesGuard
 
-tokens, rotating refresh tokens, logout, route protection, tests — all
+as a global default-deny mechanism, Administrator-only GET /api/v1/users
 
-implemented, reviewed and verified)
+demonstration endpoint, all four role boundaries tested — implemented,
+
+reviewed and verified)
 
 
 
-Next task: Create roles
+Next task: Create ticket entity
 
 
 

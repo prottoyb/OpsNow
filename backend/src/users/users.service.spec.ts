@@ -1,5 +1,6 @@
+import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { normalizeEmail, UsersService } from './users.service';
+import { normalizeEmail, toSafeUser, UsersService } from './users.service';
 
 describe('normalizeEmail', () => {
   it('trims and lowercases', () => {
@@ -9,11 +10,40 @@ describe('normalizeEmail', () => {
   });
 });
 
+describe('toSafeUser', () => {
+  it('strips passwordHash and every other field down to the safe set', () => {
+    const result = toSafeUser({
+      id: 'user-1',
+      email: 'jane@opsnow.local',
+      passwordHash: 'super-secret-hash',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      role: Role.Employee,
+      isActive: true,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    } as never);
+
+    expect(result).toEqual({
+      id: 'user-1',
+      email: 'jane@opsnow.local',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      role: Role.Employee,
+    });
+    expect(result).not.toHaveProperty('passwordHash');
+  });
+});
+
 describe('UsersService', () => {
   let service: UsersService;
   let prisma: {
     user: {
       findFirst: jest.Mock;
+      findMany: jest.Mock;
+      count: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
     };
@@ -23,6 +53,8 @@ describe('UsersService', () => {
     prisma = {
       user: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
+        count: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -78,6 +110,58 @@ describe('UsersService', () => {
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'user-1' },
       data: { lastLoginAt: expect.any(Date) },
+    });
+  });
+
+  describe('findAll', () => {
+    it('paginates, excludes soft-deleted users, and returns safe fields only', async () => {
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: 'user-1',
+          email: 'jane@opsnow.local',
+          passwordHash: 'secret',
+          firstName: 'Jane',
+          lastName: 'Doe',
+          role: Role.Administrator,
+        },
+      ]);
+      prisma.user.count.mockResolvedValue(1);
+
+      const result = await service.findAll({ limit: 20, offset: 0 });
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        where: { deletedAt: null },
+        take: 20,
+        skip: 0,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+      expect(prisma.user.count).toHaveBeenCalledWith({
+        where: { deletedAt: null },
+      });
+      expect(result).toEqual({
+        data: [
+          {
+            id: 'user-1',
+            email: 'jane@opsnow.local',
+            firstName: 'Jane',
+            lastName: 'Doe',
+            role: Role.Administrator,
+          },
+        ],
+        total: 1,
+      });
+      expect(result.data[0]).not.toHaveProperty('passwordHash');
+    });
+
+    it('passes the requested limit/offset through unchanged', async () => {
+      prisma.user.findMany.mockResolvedValue([]);
+      prisma.user.count.mockResolvedValue(0);
+
+      await service.findAll({ limit: 5, offset: 10 });
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 5, skip: 10 }),
+      );
     });
   });
 });

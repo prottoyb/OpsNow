@@ -326,6 +326,22 @@ and is appropriate for demonstrating full-stack API development.
 
 
 
+Addendum (Phase 5):
+
+
+
+Paginated list endpoints return `{ data: T[], total: number }`, with
+
+`limit`/`offset` query parameters (`limit` defaulting to 20, capped at 100).
+
+`GET /api/v1/users` (Phase 5) is the first endpoint to use this shape; later
+
+list endpoints (tickets, assets, knowledge-base articles, etc.) should reuse
+
+it rather than inventing a different envelope per resource.
+
+
+
 \---
 
 

@@ -7,12 +7,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, Role, User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { DEFAULT_REFRESH_TOKEN_TTL_SECONDS } from '../config/env.validation';
 import { PrismaService } from '../prisma/prisma.service';
-import { UsersService } from '../users/users.service';
+import { SafeUser, toSafeUser, UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './types/jwt-payload.interface';
@@ -20,14 +20,6 @@ import { JwtPayload } from './types/jwt-payload.interface';
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
-}
-
-export interface SafeUser {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: Role;
 }
 
 export interface RequestMeta {
@@ -68,7 +60,7 @@ export class AuthService {
         firstName: dto.firstName,
         lastName: dto.lastName,
       });
-      return { user: this.toSafeUser(user) };
+      return { user: toSafeUser(user) };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -110,7 +102,7 @@ export class AuthService {
     await this.usersService.touchLastLogin(user.id);
 
     const tokens = await this.issueTokens(user, meta);
-    return { ...tokens, user: this.toSafeUser(user) };
+    return { ...tokens, user: toSafeUser(user) };
   }
 
   async refresh(rawToken: string, meta: RequestMeta): Promise<AuthTokens> {
@@ -246,15 +238,5 @@ export class AuthService {
       });
     }
     return this.dummyHash;
-  }
-
-  private toSafeUser(user: User): SafeUser {
-    return {
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-    };
   }
 }

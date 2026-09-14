@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 4 — Authentication (Phase 3 — Backend Foundation complete)
+Current Phase: Phase 6 — Ticket Management (Phase 5 — Authorization & RBAC complete)
 
 
 
@@ -192,25 +192,41 @@ endpoints. See progress.md's Phase 4 entry for the full rationale.
 
 
 
-\- \[ ] Create roles
+\- \[x] Create roles
 
-\- \[ ] Create permissions
+\- \[x] Create permissions
 
-\- \[ ] Implement role-based authorization
+\- \[x] Implement role-based authorization
 
-\- \[ ] Implement backend authorization guards
+\- \[x] Implement backend authorization guards
 
-\- \[ ] Create employee permissions
+\- \[x] Create employee permissions
 
-\- \[ ] Create support-agent permissions
+\- \[x] Create support-agent permissions
 
-\- \[ ] Create team-lead permissions
+\- \[x] Create team-lead permissions
 
-\- \[ ] Create administrator permissions
+\- \[x] Create administrator permissions
 
-\- \[ ] Add authorization tests
+\- \[x] Add authorization tests
 
-\- \[ ] Verify unauthorized API access is blocked
+\- \[x] Verify unauthorized API access is blocked
+
+
+
+Note: per ADR-006, roles are a fixed enum, not a dynamic permissions table —
+
+"create X permissions" above is satisfied by the \`@Roles()\`/\`RolesGuard\`
+
+mechanism being enforced and tested per role (see the Administrator-only
+
+\`GET /api/v1/users\` endpoint and its e2e tests), not by a standalone
+
+permissions artifact. Concrete per-role permission sets for real business
+
+resources (tickets, assets, knowledge base, etc.) are defined per-endpoint
+
+starting in Phase 6, using this same mechanism.
 
 
 
