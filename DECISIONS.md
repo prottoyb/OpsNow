@@ -726,3 +726,77 @@ communicate in-process, and the frontend and backend remain two plain
 
 applications within one repository.
 
+
+
+\---
+
+
+
+\## ADR-018 — Default-Deny Route Protection
+
+
+
+Status: Accepted
+
+
+
+Decision:
+
+
+
+Every backend route requires a valid access token by default. This is
+
+enforced by registering `JwtAuthGuard` as a global `APP_GUARD`; a route
+
+must opt out explicitly with a `@Public()` decorator to be reachable
+
+without authentication.
+
+
+
+Options considered:
+
+
+
+\- Per-route `@UseGuards(JwtAuthGuard)`, applied only where authentication
+
+is required. Rejected: a controller or route added later that forgets
+
+the guard fails open — it is silently unprotected rather than erroring.
+
+\- Global guard with an explicit `@Public()` opt-out (chosen). A route
+
+added later without `@Public()` fails closed — it requires
+
+authentication by default, and the omission is easy to notice in review
+
+("why doesn't this have `@Public()`?") rather than easy to miss.
+
+
+
+Reason:
+
+
+
+Authentication is "Sensitive Functionality" and the constitution's
+
+security rules say "when in doubt, treat as sensitive." A default-deny
+
+posture matches that: the safe outcome is what happens automatically, and
+
+an engineer has to make a deliberate, visible choice to relax it for a
+
+specific route (health check, registration, login, refresh).
+
+
+
+Consequences:
+
+
+
+Every future public route (and every PR reviewing one) must remember
+
+`@Public()`. Swagger's `/api/docs` is unaffected — it is mounted as raw
+
+middleware outside Nest's controller/route pipeline, not a guarded route.
+

@@ -152,27 +152,35 @@ Current Phase: Phase 4 — Authentication (Phase 3 — Backend Foundation comple
 
 
 
-\- \[ ] Create user model
+\- \[x] Create user model
 
-\- \[ ] Create registration flow
+\- \[x] Create registration flow
 
-\- \[ ] Create login flow
+\- \[x] Create login flow
 
-\- \[ ] Implement password hashing
+\- \[x] Implement password hashing
 
-\- \[ ] Implement access tokens
+\- \[x] Implement access tokens
 
-\- \[ ] Implement refresh tokens
+\- \[x] Implement refresh tokens
 
-\- \[ ] Implement logout
+\- \[x] Implement logout
 
-\- \[ ] Handle expired tokens
+\- \[x] Handle expired tokens
 
-\- \[ ] Protect backend routes
+\- \[x] Protect backend routes
 
-\- \[ ] Add authentication tests
+\- \[x] Add authentication tests
 
-\- \[ ] Test authentication workflow
+\- \[x] Test authentication workflow
+
+\- \[ ] (Deferred) Rate-limit /auth/login and /auth/register — no
+
+brute-force/credential-stuffing protection exists yet; flagged by
+
+Phase 4's architect review as a real exposure for sensitive auth
+
+endpoints. See progress.md's Phase 4 entry for the full rationale.
 
 
 

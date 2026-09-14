@@ -1,4 +1,5 @@
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 /**
@@ -7,6 +8,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
  * bootstrap so the two can never drift apart.
  */
 export function configureApp(app: INestApplication): void {
+  app.use(cookieParser());
   app.setGlobalPrefix('api');
   app.enableVersioning({
     type: VersioningType.URI,

@@ -10,19 +10,23 @@ Project status: In Progress
 
 
 
-Current phase: Phase 4 — Authentication
+Current phase: Phase 5 — Authorization & RBAC
 
 
 
-Current task: Create user model
+Current task: Create roles
 
 
 
-Last completed task: Phase 3 — Backend Foundation (NestJS application initialized, configured, tested and verified)
+Last completed task: Phase 4 — Authentication (registration, login, JWT access
+
+tokens, rotating refresh tokens, logout, route protection, tests — all
+
+implemented, reviewed and verified)
 
 
 
-Next task: Create user model
+Next task: Create roles
 
 
 
@@ -539,6 +543,232 @@ Next:
 password hashing (Argon2id per ADR-005), access/refresh tokens, logout, expired
 
 token handling, route protection, and authentication tests.
+
+
+
+\---
+
+
+
+\### 2026-09-14 — Phase 4 Authentication Implemented
+
+
+
+Completed:
+
+
+
+\- Planned Phase 4 in Claude Code's plan mode: an independent architect-role
+
+review validated the design against ADR-005/006 and the actual Phase 2 schema
+
+before any code was written, and required several corrections that were
+
+folded into the plan (soft-delete/email-casing handling, atomic refresh
+
+rotation, timing-safe login, a new ADR for the route-protection posture, and
+
+a tracked rate-limiting follow-up) — see the approved plan for the full
+
+design rationale.
+
+\- No new Prisma migration was needed: Phase 2's schema already had
+
+`User.passwordHash`/`role`/`isActive`/`deletedAt` and a fully rotation-capable
+
+`RefreshToken` model (`tokenHash`, `expiresAt`, `revokedAt`, `replacedById`).
+
+\- Added `backend/src/users/` (`UsersService`/`UsersModule`) — email
+
+normalized to lowercase on every read/write, soft-deleted users always
+
+filtered out.
+
+\- Added `backend/src/auth/` — `AuthController`/`AuthService`, a Passport
+
+`JwtStrategy`, a globally-registered `JwtAuthGuard` (default-deny; every
+
+route requires a valid access token unless marked `@Public()` — recorded as
+
+**ADR-018**), `@Public()`/`@CurrentUser()` decorators, `RegisterDto`/`LoginDto`.
+
+\- Endpoints: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`,
+
+`POST /auth/logout`, `GET /auth/me`. Access tokens are short-lived JWTs
+
+(`@nestjs/jwt`); refresh tokens are opaque random values, SHA-256 hashed
+
+before storage, delivered only via an httpOnly/SameSite=Strict/path-scoped
+
+cookie (ADR-005). Refresh rotation is atomic (DB transaction, conditional
+
+update gated on the token still being unrevoked) so concurrent requests for
+
+the same token can't both succeed. Reuse of an already-rotated token is
+
+treated as suspected theft and revokes the user's entire active-token family.
+
+Login runs a real Argon2 verify against a dummy hash on the "unknown email"
+
+path so response timing doesn't leak whether an account exists.
+
+\- `backend/src/health/health.controller.ts` marked `@Public()` so it kept
+
+working once the global guard was added.
+
+\- New dependencies: `@nestjs/jwt`, `@nestjs/passport`, `passport`,
+
+`passport-jwt`, `cookie-parser` (+ type packages) — all pinned to their
+
+v11.x-compatible lines, continuing Phase 3's established pattern of avoiding
+
+`@nestjs/*` v12 (ESM-only, incompatible with this project's CommonJS
+
+Jest/ts-node setup).
+
+\- Tests: 30 unit tests (`UsersService`, `AuthService` incl. registration
+
+race handling, timing-safe login, atomic rotation, reuse/theft detection,
+
+deactivated/deleted-user rejection; `JwtStrategy`; `JwtAuthGuard`'s
+
+`@Public()` bypass) + 13 e2e tests (`backend/test/auth.e2e-spec.ts`, against
+
+the real local Postgres dev database) covering the full
+
+register→login→me→refresh→logout flow, duplicate registration, wrong
+
+password, no/malformed token, refresh-token reuse and family revocation, a
+
+deactivated user's refresh being rejected, and a cross-origin `Origin` header
+
+being rejected on `/refresh`. All 43 tests passing; the 7 Phase-2-seeded
+
+`@opsnow.local` accounts were confirmed untouched throughout (test-created
+
+users are cleaned up in `afterAll`).
+
+
+
+Review findings (independent QA/Security and Senior Review, run against the
+
+actual code and running server, same process as Phase 3):
+
+
+
+\- No CRITICAL or HIGH findings from either reviewer.
+
+\- QA/Security raised 2 MEDIUM findings: (1) missing test coverage for
+
+`refresh()` when the token's user has since been deactivated or deleted —
+
+fixed, with both a unit test and an e2e test added; (2) rate limiting on
+
+`/auth/login`/`/auth/register` is still absent — already an explicitly
+
+tracked, documented deferral (see below), confirmed by QA/Security to
+
+satisfy the deferral rule since no CRITICAL/HIGH exists on this change, but
+
+flagged that it should not be allowed to slip past Phase 16.
+
+\- Senior Review found no correctness bugs, confirmed the refresh-rotation
+
+transaction is genuinely safe (the FK-driven "create child, then
+
+conditionally update parent" ordering was deliberately verified, not just
+
+assumed), and raised 1 LOW finding (the refresh-token TTL default was
+
+hardcoded independently in three places) — fixed, by extracting
+
+`DEFAULT_JWT_ACCESS_EXPIRES_IN`/`DEFAULT_REFRESH_TOKEN_TTL_SECONDS` as shared
+
+constants in `env.validation.ts`. Two OPTIONAL notes (no CSRF origin-check on
+
+login/register — low-impact "login CSRF", mitigated by SameSite=Strict; a
+
+minor message-wording inconsistency) were left as-is, not blocking.
+
+
+
+Known, deliberately deferred (not silently dropped — tracked in `TASKS.md`'s
+
+Phase 4 section):
+
+
+
+\- **Rate limiting on `/auth/login` and `/auth/register`.** No brute-force or
+
+credential-stuffing protection exists yet on these endpoints. Both
+
+independent reviewers confirmed this is an acceptable, documented MEDIUM
+
+deferral for this phase (no CRITICAL/HIGH exists), but it must be closed
+
+before Phase 16 (deployment) or any public-facing demo.
+
+
+
+Verification results:
+
+
+
+\- `npx tsc --noEmit`: clean. `npm run build`: clean.
+
+\- `npm test`: 7 suites, 30 tests, all passing.
+
+\- `npm run test:e2e`: 2 suites, 13 tests, all passing against the real local
+
+`opsnow_dev` Postgres database.
+
+\- `npm audit`: 0 vulnerabilities.
+
+\- Manually verified against a real running instance (`node dist/main.js`):
+
+logged in as a real Phase-2-seeded user (`employee1@opsnow.local`), called
+
+`/auth/me` with the resulting access token, rotated via `/auth/refresh`,
+
+confirmed both the pre- and post-rotation refresh cookies were rejected
+
+after a reuse attempt (whole-family revocation), confirmed a cross-origin
+
+`Origin` header was rejected (403) on `/auth/refresh`, logged out (204) and
+
+confirmed the refresh cookie no longer worked (401), registered and then
+
+duplicate-registered a fresh user (201 then 409), and confirmed both
+
+`/api/v1/health` and `/api/docs` (Swagger) remained reachable without a
+
+token. All manually-created accounts were cleaned up afterward; seeded user
+
+count confirmed back at 7.
+
+
+
+Git status:
+
+
+
+\- Not yet committed at the time this entry was written; see the following
+
+commit for the recorded Phase 4 changes.
+
+
+
+Next:
+
+
+
+\- Begin Phase 5 — Authorization \& RBAC: roles, permissions, backend
+
+authorization guards, and per-role permission sets (Employee, Support Agent,
+
+Team Lead, Administrator) built on top of the `role` claim Phase 4 already
+
+attaches to `request.user`.
 
 
 
