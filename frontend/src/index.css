@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+
+/*
+ * Ticket descriptions and comment bodies are rendered as plain React text
+ * nodes (never dangerouslySetInnerHTML). Multi-line user content keeps its
+ * line breaks through CSS alone — no injected <br> elements.
+ */
+@utility user-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

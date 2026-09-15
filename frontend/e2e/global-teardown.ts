@@ -1,0 +1,42 @@
+import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
+
+/**
+ * Deletes the tickets this suite created, and only those.
+ *
+ * The work is done by `backend/test/support/cleanup-e2e-tickets.ts` (exposed
+ * as `npm run test:e2e:cleanup`), which lives in the backend because that is
+ * where the Prisma client and the database credentials are. It matches the
+ * fixed `[E2E]` subject prefix rather than this run's id, so leftovers from a
+ * crashed run are swept up by the next one.
+ *
+ * Best effort by design: teardown runs after a pass or a failure, and a
+ * cleanup problem is logged but never thrown — failing the teardown would
+ * mask the actual test result.
+ */
+export default async function globalTeardown(): Promise<void> {
+  const backendDir = resolve(import.meta.dirname, '..', '..', 'backend');
+  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+
+  await new Promise<void>((resolvePromise) => {
+    const child = spawn(npm, ['run', 'test:e2e:cleanup'], {
+      cwd: backendDir,
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+    });
+
+    child.on('error', (error) => {
+      console.warn('e2e teardown: could not run the cleanup script:', error.message);
+      resolvePromise();
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        console.warn(
+          `e2e teardown: cleanup exited with code ${code}. Tagged [E2E] tickets may remain; re-running the suite will remove them.`,
+        );
+      }
+      resolvePromise();
+    });
+  });
+}
