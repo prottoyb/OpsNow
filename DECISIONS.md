@@ -1044,3 +1044,419 @@ has become justified; until then, per ADR-006 and this ADR, one-off
 
 service-layer helpers remain the simpler and better-understood choice.
 
+
+
+---
+
+
+
+\## ADR-020 — SLA Calculation, Pause Semantics, and Concurrency Model
+
+
+
+Status: Accepted
+
+
+
+Context:
+
+
+
+Phase 7 adds per-ticket SLA tracking (response and resolution due dates,
+
+breach/at-risk state) on top of Phase 6a's ticket lifecycle and its
+
+existing optimistic-concurrency (CAS) pattern for status/assignment/
+
+priority mutations (ADR-019). SLA data must stay consistent under the
+
+same concurrent-mutation conditions Phase 6a already defends against,
+
+plus two conditions unique to SLA: a clock that can be paused and
+
+resumed (`OnHold`), and a completed clock that can effectively
+
+un-complete (`Resolved -> Open` reopen).
+
+
+
+Problem:
+
+
+
+Four questions needed a single, explicit answer rather than per-hook
+
+improvisation: (1) how is a ticket's SLA commitment determined, and can
+
+it drift after the fact; (2) how does pausing/resuming avoid either
+
+freezing or falsely burning down the clock; (3) what happens to a
+
+completed SLA clock when a resolved ticket reopens; (4) how do SLA
+
+writes avoid corruption when they race the ticket mutations that
+
+trigger them, or each other.
+
+
+
+Options considered:
+
+
+
+For (1): recomputing due dates on every read from whatever policy is
+
+currently active for the ticket's priority, vs. snapshotting the
+
+policy's targets onto the ticket at creation. For (2): representing
+
+pause as a status flag consulted only at read time, vs. shifting the
+
+persisted due dates by the elapsed pause duration once the pause ends.
+
+For (3): giving a reopened ticket a brand-new SLA cycle, vs. crediting
+
+the resolved-to-reopened interval as if it were a pause. For (4):
+
+computing SLA timestamps in application code and writing them with a
+
+plain `UPDATE`, vs. confining every SLA-clock mutation to a single
+
+parameterized `$executeRaw` statement that reads its own inputs from
+
+the database row inside that same statement. A background scheduler
+
+that periodically recomputes and persists breach/at-risk state was also
+
+considered and rejected for Phase 7 (see Decision 8).
+
+
+
+Decision:
+
+
+
+1. Policy snapshotting. `attachOnCreate` selects the active `SlaPolicy`
+
+for the ticket's priority — priority is the only selection criterion —
+
+and copies its `responseTimeMinutes`/`resolutionTimeMinutes` onto the
+
+new `TicketSla` row as `responseTargetMinutes`/`resolutionTargetMinutes`,
+
+alongside `responseDueAt`/`resolutionDueAt` computed from the ticket's
+
+own DB-assigned `createdAt`. A later edit or deactivation of the policy
+
+never retroactively changes a ticket already attached to it. If no
+
+active policy exists for the priority, the ticket is created without a
+
+`TicketSla` row and only a warning is logged — an SLA configuration gap
+
+must never block ticket intake.
+
+
+
+2. Two independent clocks. Response and resolution each have their own
+
+target, due date, and derived state (`Running`/`AtRisk`/`Breached`/
+
+`Paused`/`Met`, plus `NoResponse` for the response clock only — a
+
+ticket resolved without ever getting a qualifying reply is a first-class
+
+outcome, not an error). "At risk" is `remainingMinutes <= 0.2 *
+
+targetMinutes` (`AT_RISK_FRACTION`), a fraction rather than a fixed
+
+number of minutes because targets range from 15 minutes (Critical
+
+response) up to 1440 minutes/24h (Low resolution).
+
+
+
+3. Pause is due-date shifting, not clock-stopping. Entering `OnHold`
+
+records `on_hold_started_at = now()` using the database clock. Leaving
+
+`OnHold` — to any destination status — adds the elapsed `now() -
+
+on_hold_started_at` onto both `response_due_at` and `resolution_due_at`
+
+in the same statement, then clears the anchor. While paused,
+
+`remainingMinutes` is computed against the pause's start instant rather
+
+than the still-unshifted due date, so the reported remaining time holds
+
+constant instead of appearing to burn down during the hold.
+
+`total_paused_minutes` accumulates for display only; it is never read
+
+back into an authoritative SLA calculation.
+
+
+
+4. First response qualifies narrowly. A response is recorded only for a
+
+`Public`-visibility comment from a staff-role author who is not the
+
+ticket's own requester (a staff member who filed their own ticket can
+
+never satisfy their own response SLA; `Internal` notes never qualify).
+
+The write is guarded by `response_at IS NULL`, making it exactly-once
+
+by construction — a second qualifying reply, including a concurrent
+
+one, is a silent no-op. `responseAt`/`responseBreached` are only ever
+
+set together, only once, from the qualifying comment's own `createdAt`
+
+— never fabricated, never backfilled from a separately read clock.
+
+
+
+5. Reopen reuses the pause mechanism, not a new cycle.
+
+`onHoldStartedAt` is a dual-purpose clock-stop anchor: resolving a
+
+ticket (either `->Resolved` or a direct `->Closed`) records the
+
+resolution outcome and sets `on_hold_started_at = resolved_at`,
+
+repurposing the same column pause uses as a general "clock stopped at"
+
+marker for a second, mutually exclusive reason — "resolved, pending a
+
+possible reopen." Reopening (`Resolved -> Open`, the only reopen path)
+
+then runs the identical resume statement used for leaving `OnHold`: it
+
+credits `now() - resolved_at` onto both due dates as if the resolved
+
+interval were a pause, and clears the anchor. The two purposes never
+
+collide, because `status` is a single enum value and an `OnHold ->
+
+Resolved` transition always clears the anchor via the resume path
+
+before the resolution hook sets it again. `Closed` remains terminal
+
+(ADR-019); a `Closed` ticket's SLA clocks are never touched again.
+
+
+
+6. Priority change re-derives targets, not the whole row.
+
+`handlePriorityChange` looks up the active policy for the new priority
+
+and applies the delta between the new and the row's currently stored
+
+target minutes to both due dates in one statement, updates the stored
+
+targets and `sla_policy_id`, and leaves the original clock start
+
+(`createdAt`) and any already-persisted breach flag on a completed
+
+clock untouched. If no active policy exists for the new priority, the
+
+existing SLA snapshot is left unchanged (warning only, never blocking);
+
+a ticket with no `TicketSla` row at all is a no-op.
+
+
+
+7. Concurrency model. Every SLA-clock write is a single parameterized
+
+`$executeRaw` statement (never `$executeRawUnsafe`) that (a) is a pure
+
+additive/commutative delta — `due_at = due_at + delta` — never an
+
+absolute reconstruction, and (b) reads whatever anchor or current value
+
+it needs (`on_hold_started_at`, the stored target minutes, `resolved_at`)
+
+from the database row inside that same statement, never from a value
+
+read earlier in application code and passed in. This makes every hook
+
+immune to the ABA hazard of an interleaved pause/resume, or a `Resolved
+
+-> Open -> ... -> Resolved` cycle, silently over- or under-crediting
+
+time — there is no stale application-level read followed by a delayed
+
+timing update. Every SLA hook is called from inside `TicketsService`'s
+
+existing transaction, strictly after the corresponding ticket-row CAS
+
+(`updateMany` + `count !== 1` -> `409 Conflict`, the pattern already
+
+established for `assign`/status transitions in Phase 6a) has already
+
+succeeded — never before, and never on a failed CAS. `updatePriority`,
+
+which previously used a plain `update`, is extended to the same CAS
+
+pattern in this phase specifically so a concurrent priority change can
+
+never apply its SLA delta twice.
+
+
+
+8. No background scheduler in Phase 7. Breach and at-risk state are
+
+pure functions of stored due dates and the current instant
+
+(`sla.calculations.ts`), computed at read time, never a status
+
+persisted by a poller or cron job. The persisted `responseBreached`/
+
+`resolutionBreached` columns are written exactly once, only when their
+
+clock actually completes, and are trustworthy only then; an incomplete
+
+clock's breach/at-risk state is always derived fresh on read rather
+
+than trusted from those columns. This avoids both a missed-write
+
+staleness window and the operational cost of a scheduler, at the cost
+
+of doing the derivation work on every read instead of once per tick —
+
+judged the right trade for Phase 7's read volume. SLA analytics/
+
+dashboards beyond the narrow metrics in this phase, and any future need
+
+for a scheduler-driven notification (e.g. "breach imminent" alerts),
+
+are left to Phase 10, not decided here.
+
+
+
+Rationale:
+
+
+
+Snapshotting at creation (Decision 1) is what makes a ticket's SLA
+
+commitment a fact about that ticket rather than a moving target of
+
+current policy configuration — the alternative (recompute from current
+
+policy on every read) would silently change a ticket's due dates
+
+whenever an administrator edited or deactivated a policy, which is not
+
+how SLA commitments work in practice. Due-date shifting (Decision 3)
+
+was chosen over a stored "paused" flag because a flag still needs the
+
+same shift computed at read time on every request for the life of the
+
+pause, repeatedly, whereas shifting once at resume computes it exactly
+
+once and lets every subsequent read stay a simple comparison. Reusing
+
+the pause mechanism for reopen (Decision 5) is not a shortcut of
+
+convenience: crediting resolved-to-reopened time as paused time is the
+
+same time-elapsed-but-shouldn't-count-against-the-team semantic already
+
+established for `OnHold`, so introducing a second, parallel mechanism
+
+for the same idea would be needless duplication of exactly the kind the
+
+constitution's Scope Control warns against. Confining every mutation to
+
+a same-statement read-then-write (Decision 7) was chosen over reading
+
+state in application code and writing it back because the latter has a
+
+window between the read and the write in which a concurrent hook can
+
+invalidate the value that was read — the same class of bug the CAS
+
+pattern in ADR-019 already exists to prevent.
+
+
+
+Consequences:
+
+
+
+`SlaService` owns every `TicketSla` database access; `TicketsService`
+
+never touches the `ticket_sla` table directly, and the dependency
+
+direction is `tickets -> sla` only (`SlaService` must never import
+
+`TicketsService`; `ticket-visibility.ts` was extracted out of
+
+`TicketsService` specifically so `SlaService` can scope its own
+
+staff-only reads without that import). Every SLA hook is a silent no-op
+
+or a logged warning on a missing policy, never a thrown error — an SLA
+
+configuration gap must never block ticket creation, comments, status
+
+changes, or priority changes. The read model (`toTicketSlaResponse`) is
+
+the only place breach/at-risk state is computed for an incomplete
+
+clock; any future consumer of `TicketSla` (a dashboard, a report) must
+
+go through it or the same derivation rather than reading the persisted
+
+breach columns directly, or it will misreport an in-flight clock as
+
+never breaching. Because there is no scheduler, nothing proactively
+
+notifies anyone of an approaching breach — that remains a manual/
+
+polling concern for whichever client renders the SLA state until
+
+Phase 10 addresses it.
+
+
+
+Risks:
+
+
+
+The pause/reopen dual use of `on_hold_started_at` (Decision 5) is a
+
+deliberate space-saving reuse of one column for two mutually-exclusive
+
+meanings; it is correct only because the ordering guarantee in
+
+Decision 7 holds (resume-before-resolve on every status path) — a
+
+future change to `applyStatusTransition` that reorders those calls, or
+
+a new status-transition path that bypasses it, would silently corrupt
+
+SLA timing without a schema-level safeguard to catch it.
+
+`total_paused_minutes` is display-only by design (Decision 3); if a
+
+later phase is tempted to use it in an authoritative calculation, it
+
+will be wrong the moment any priority-change delta (Decision 6) has
+
+occurred, since that delta is never reflected in the paused-minutes
+
+counter. Read-time derivation (Decision 8) means SLA state for a large
+
+ticket list costs proportionally more compute than a precomputed column
+
+would at very high read volume; this is an acceptable and revisitable
+
+trade at the project's current and expected scale, not a permanent
+
+constraint.
+
