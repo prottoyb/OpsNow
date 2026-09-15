@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TicketPriority, TicketStatus } from '@prisma/client';
 import { UserSummaryResponseDto } from '../../common/dto/user-summary-response.dto';
+import { TicketSlaResponseDto } from '../../sla/dto/ticket-sla-response.dto';
 import { TicketCategoryResponseDto } from '../../ticket-categories/dto/ticket-category-response.dto';
 
 export class TicketResponseDto {
@@ -45,6 +46,13 @@ export class TicketResponseDto {
 
   @ApiPropertyOptional({ type: TicketCategoryResponseDto, nullable: true })
   category!: TicketCategoryResponseDto | null;
+
+  @ApiPropertyOptional({
+    type: TicketSlaResponseDto,
+    nullable: true,
+    description: 'Null only when no SLA policy was active for this priority at creation time.',
+  })
+  sla!: TicketSlaResponseDto | null;
 }
 
 export class TicketListResponseDto {

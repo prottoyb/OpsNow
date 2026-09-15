@@ -7,6 +7,7 @@ import {
 import { CommentVisibility, Role, TicketPriority, TicketStatus } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { PrismaService } from '../prisma/prisma.service';
+import { SlaService } from '../sla/sla.service';
 import { TicketCategoriesService } from '../ticket-categories/ticket-categories.service';
 import { UsersService } from '../users/users.service';
 import { TicketsService } from './tickets.service';
@@ -48,6 +49,7 @@ function buildTicket(overrides: Record<string, unknown> = {}) {
     requester: buildUserRecord(),
     assignee: null,
     category: null,
+    sla: null,
     ...overrides,
   };
 }
@@ -85,6 +87,15 @@ describe('TicketsService', () => {
   };
   let usersService: { findById: jest.Mock };
   let ticketCategoriesService: { findActiveById: jest.Mock };
+  let slaService: {
+    attachOnCreate: jest.Mock;
+    recordFirstResponse: jest.Mock;
+    pauseForHold: jest.Mock;
+    resumeFromPause: jest.Mock;
+    handlePriorityChange: jest.Mock;
+    recordResolutionOutcome: jest.Mock;
+    toTicketSlaResponse: jest.Mock;
+  };
 
   beforeEach(() => {
     prisma = {
@@ -107,11 +118,21 @@ describe('TicketsService', () => {
     };
     usersService = { findById: jest.fn() };
     ticketCategoriesService = { findActiveById: jest.fn() };
+    slaService = {
+      attachOnCreate: jest.fn(),
+      recordFirstResponse: jest.fn(),
+      pauseForHold: jest.fn(),
+      resumeFromPause: jest.fn(),
+      handlePriorityChange: jest.fn(),
+      recordResolutionOutcome: jest.fn(),
+      toTicketSlaResponse: jest.fn().mockReturnValue(null),
+    };
 
     service = new TicketsService(
       prisma as unknown as PrismaService,
       usersService as unknown as UsersService,
       ticketCategoriesService as unknown as TicketCategoriesService,
+      slaService as unknown as SlaService,
     );
   });
 
@@ -129,7 +150,8 @@ describe('TicketsService', () => {
     });
 
     it('creates with requesterId from the caller and defaults priority to Medium', async () => {
-      prisma.ticket.create.mockResolvedValue(buildTicket());
+      const created = buildTicket();
+      prisma.ticket.create.mockResolvedValue(created);
       prisma.ticketHistory.create.mockResolvedValue({});
       prisma.ticket.findFirst.mockResolvedValue(buildTicket());
 
@@ -148,6 +170,25 @@ describe('TicketsService', () => {
           newValue: TicketStatus.New,
         }),
       });
+    });
+
+    it('attaches an SLA snapshot for the new ticket, inside the same transaction, after the ticket row is created', async () => {
+      const created = buildTicket({ priority: TicketPriority.High });
+      prisma.ticket.create.mockResolvedValue(created);
+      prisma.ticketHistory.create.mockResolvedValue({});
+      prisma.ticket.findFirst.mockResolvedValue(created);
+
+      await service.create(
+        { subject: 'x', description: 'y', priority: TicketPriority.High },
+        authUser(),
+      );
+
+      expect(slaService.attachOnCreate).toHaveBeenCalledWith(
+        prisma,
+        created.id,
+        TicketPriority.High,
+        created.createdAt,
+      );
     });
   });
 
@@ -533,6 +574,139 @@ describe('TicketsService', () => {
       );
     });
 
+    describe('SLA hook wiring (ADR-020)', () => {
+      it('pauses the SLA clock when entering OnHold, after the CAS succeeds', async () => {
+        const before = buildTicket({ status: TicketStatus.InProgress });
+        prisma.ticket.findFirst
+          .mockResolvedValueOnce(before)
+          .mockResolvedValueOnce({ ...before, status: TicketStatus.OnHold });
+        prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+        prisma.ticketHistory.createMany.mockResolvedValue({});
+
+        await service.updateStatus(
+          'ticket-1',
+          { status: TicketStatus.OnHold },
+          staffUser,
+        );
+
+        expect(slaService.pauseForHold).toHaveBeenCalledWith(prisma, 'ticket-1');
+        expect(slaService.resumeFromPause).not.toHaveBeenCalled();
+        expect(slaService.recordResolutionOutcome).not.toHaveBeenCalled();
+        expect(prisma.ticket.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+          slaService.pauseForHold.mock.invocationCallOrder[0],
+        );
+      });
+
+      it('resumes the SLA clock when leaving OnHold to a non-terminal status', async () => {
+        const before = buildTicket({ status: TicketStatus.OnHold });
+        prisma.ticket.findFirst
+          .mockResolvedValueOnce(before)
+          .mockResolvedValueOnce({ ...before, status: TicketStatus.InProgress });
+        prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+        prisma.ticketHistory.createMany.mockResolvedValue({});
+
+        await service.updateStatus(
+          'ticket-1',
+          { status: TicketStatus.InProgress },
+          staffUser,
+        );
+
+        expect(slaService.resumeFromPause).toHaveBeenCalledWith(prisma, 'ticket-1');
+        expect(slaService.pauseForHold).not.toHaveBeenCalled();
+        expect(slaService.recordResolutionOutcome).not.toHaveBeenCalled();
+      });
+
+      it('resumes the SLA clock BEFORE recording the resolution outcome when resolving straight out of OnHold', async () => {
+        const before = buildTicket({ status: TicketStatus.OnHold, resolvedAt: null });
+        prisma.ticket.findFirst
+          .mockResolvedValueOnce(before)
+          .mockResolvedValueOnce({ ...before, status: TicketStatus.Resolved, resolvedAt: new Date() });
+        prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+        prisma.ticketHistory.createMany.mockResolvedValue({});
+
+        await service.updateStatus(
+          'ticket-1',
+          { status: TicketStatus.Resolved },
+          staffUser,
+        );
+
+        expect(slaService.resumeFromPause).toHaveBeenCalledWith(prisma, 'ticket-1');
+        expect(slaService.recordResolutionOutcome).toHaveBeenCalledWith(prisma, 'ticket-1');
+        // Ordering is load-bearing (ADR-020): resolving out of a still-paused
+        // clock must shift the due date via resume BEFORE the breach check
+        // in recordResolutionOutcome runs, or an on-time resolution could be
+        // misreported as a breach.
+        expect(
+          slaService.resumeFromPause.mock.invocationCallOrder[0],
+        ).toBeLessThan(slaService.recordResolutionOutcome.mock.invocationCallOrder[0]);
+      });
+
+      it('records the resolution outcome when resolving from a running (non-OnHold) status, without touching pause hooks', async () => {
+        const before = buildTicket({ status: TicketStatus.InProgress, resolvedAt: null });
+        prisma.ticket.findFirst
+          .mockResolvedValueOnce(before)
+          .mockResolvedValueOnce({ ...before, status: TicketStatus.Resolved, resolvedAt: new Date() });
+        prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+        prisma.ticketHistory.createMany.mockResolvedValue({});
+
+        await service.updateStatus(
+          'ticket-1',
+          { status: TicketStatus.Resolved },
+          staffUser,
+        );
+
+        expect(slaService.recordResolutionOutcome).toHaveBeenCalledWith(prisma, 'ticket-1');
+        expect(slaService.pauseForHold).not.toHaveBeenCalled();
+        expect(slaService.resumeFromPause).not.toHaveBeenCalled();
+      });
+
+      it('records the resolution outcome when closing directly from an unresolved status', async () => {
+        const before = buildTicket({ status: TicketStatus.New, resolvedAt: null, closedAt: null });
+        prisma.ticket.findFirst
+          .mockResolvedValueOnce(before)
+          .mockResolvedValueOnce({ ...before, status: TicketStatus.Closed });
+        prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+        prisma.ticketHistory.createMany.mockResolvedValue({});
+
+        await service.updateStatus(
+          'ticket-1',
+          { status: TicketStatus.Closed },
+          staffUser,
+        );
+
+        expect(slaService.recordResolutionOutcome).toHaveBeenCalledWith(prisma, 'ticket-1');
+      });
+
+      it('does not call any SLA hook for a plain transition that neither touches OnHold nor resolves the ticket', async () => {
+        const before = buildTicket({ status: TicketStatus.New });
+        prisma.ticket.findFirst
+          .mockResolvedValueOnce(before)
+          .mockResolvedValueOnce({ ...before, status: TicketStatus.Open });
+        prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+        prisma.ticketHistory.createMany.mockResolvedValue({});
+
+        await service.updateStatus('ticket-1', { status: TicketStatus.Open }, staffUser);
+
+        expect(slaService.pauseForHold).not.toHaveBeenCalled();
+        expect(slaService.resumeFromPause).not.toHaveBeenCalled();
+        expect(slaService.recordResolutionOutcome).not.toHaveBeenCalled();
+      });
+
+      it('does not call any SLA hook when the status CAS is lost', async () => {
+        prisma.ticket.findFirst.mockResolvedValue(
+          buildTicket({ status: TicketStatus.OnHold }),
+        );
+        prisma.ticket.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(
+          service.updateStatus('ticket-1', { status: TicketStatus.Resolved }, staffUser),
+        ).rejects.toBeInstanceOf(ConflictException);
+
+        expect(slaService.resumeFromPause).not.toHaveBeenCalled();
+        expect(slaService.recordResolutionOutcome).not.toHaveBeenCalled();
+      });
+    });
+
     it('rejects a 409 when it loses the status-transition race (CAS miss)', async () => {
       prisma.ticket.findFirst.mockResolvedValue(
         buildTicket({ status: TicketStatus.Open }),
@@ -589,6 +763,10 @@ describe('TicketsService', () => {
           newValue: '1',
         });
         expect(result.reopenedCount).toBe(1);
+        // D4 pause-credit mechanism: reopen reuses the identical resume
+        // statement, crediting the resolved-to-reopened interval as paused
+        // time (ADR-020).
+        expect(slaService.resumeFromPause).toHaveBeenCalledWith(prisma, 'ticket-1');
       });
 
       it('rejects any other transition attempted by the ticket requester', async () => {
@@ -638,12 +816,12 @@ describe('TicketsService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('updates priority and writes a history row', async () => {
+    it('updates priority, applies the SLA target delta, and writes a history row', async () => {
       const before = buildTicket({ priority: TicketPriority.Medium });
       prisma.ticket.findFirst
         .mockResolvedValueOnce(before)
         .mockResolvedValueOnce({ ...before, priority: TicketPriority.Critical });
-      prisma.ticket.update.mockResolvedValue({});
+      prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
       prisma.ticketHistory.create.mockResolvedValue({});
 
       await service.updatePriority(
@@ -652,6 +830,19 @@ describe('TicketsService', () => {
         staffUser,
       );
 
+      expect(prisma.ticket.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'ticket-1',
+          priority: TicketPriority.Medium,
+          deletedAt: null,
+        },
+        data: { priority: TicketPriority.Critical },
+      });
+      expect(slaService.handlePriorityChange).toHaveBeenCalledWith(
+        prisma,
+        'ticket-1',
+        TicketPriority.Critical,
+      );
       expect(prisma.ticketHistory.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           fieldName: 'priority',
@@ -659,6 +850,24 @@ describe('TicketsService', () => {
           newValue: TicketPriority.Critical,
         }),
       });
+    });
+
+    it('returns 409 and never applies the SLA delta when it loses the priority-change race (CAS miss)', async () => {
+      prisma.ticket.findFirst.mockResolvedValue(
+        buildTicket({ priority: TicketPriority.Medium }),
+      );
+      prisma.ticket.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.updatePriority(
+          'ticket-1',
+          { priority: TicketPriority.Critical },
+          staffUser,
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(slaService.handlePriorityChange).not.toHaveBeenCalled();
+      expect(prisma.ticketHistory.create).not.toHaveBeenCalled();
     });
   });
 
@@ -684,7 +893,7 @@ describe('TicketsService', () => {
       expect(prisma.ticketComment.create).not.toHaveBeenCalled();
     });
 
-    it('allows staff to create an Internal note', async () => {
+    it('allows staff to create an Internal note, and never records it as a first response (D3)', async () => {
       prisma.ticket.findFirst.mockResolvedValue(buildTicket());
       prisma.ticketComment.create.mockResolvedValue({
         id: 'comment-1',
@@ -702,6 +911,7 @@ describe('TicketsService', () => {
       );
 
       expect(result.visibility).toBe(CommentVisibility.Internal);
+      expect(slaService.recordFirstResponse).not.toHaveBeenCalled();
     });
 
     it('defaults visibility to Public', async () => {
@@ -722,6 +932,76 @@ describe('TicketsService', () => {
           data: expect.objectContaining({ visibility: CommentVisibility.Public }),
         }),
       );
+    });
+
+    it('records the first qualifying response for a staff Public reply on someone else\'s ticket (ADR-020 D3)', async () => {
+      const respondedAt = new Date('2026-02-01T00:00:00Z');
+      prisma.ticket.findFirst.mockResolvedValue(
+        buildTicket({ requesterId: 'employee-1' }),
+      );
+      prisma.ticketComment.create.mockResolvedValue({
+        id: 'comment-1',
+        body: 'we are on it',
+        visibility: CommentVisibility.Public,
+        createdAt: respondedAt,
+        updatedAt: respondedAt,
+        author: buildUserRecord({ id: 'agent-1', role: Role.SupportAgent }),
+      });
+
+      await service.createComment(
+        'ticket-1',
+        { body: 'we are on it', visibility: CommentVisibility.Public },
+        staffUser,
+      );
+
+      expect(slaService.recordFirstResponse).toHaveBeenCalledWith(
+        prisma,
+        'ticket-1',
+        respondedAt,
+      );
+    });
+
+    it('does not record a first response for an Employee\'s own Public comment', async () => {
+      prisma.ticket.findFirst.mockResolvedValue(buildTicket());
+      prisma.ticketComment.create.mockResolvedValue({
+        id: 'comment-1',
+        body: 'hi',
+        visibility: CommentVisibility.Public,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        author: buildUserRecord(),
+      });
+
+      await service.createComment('ticket-1', { body: 'hi' }, authUser());
+
+      expect(slaService.recordFirstResponse).not.toHaveBeenCalled();
+    });
+
+    it('does not record a first response when a staff member replies on their own filed ticket', async () => {
+      const staffAsRequester = authUser({
+        id: 'agent-1',
+        email: 'agent@opsnow.local',
+        role: Role.SupportAgent,
+      });
+      prisma.ticket.findFirst.mockResolvedValue(
+        buildTicket({ requesterId: 'agent-1' }),
+      );
+      prisma.ticketComment.create.mockResolvedValue({
+        id: 'comment-1',
+        body: 'note to self',
+        visibility: CommentVisibility.Public,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        author: buildUserRecord({ id: 'agent-1', role: Role.SupportAgent }),
+      });
+
+      await service.createComment(
+        'ticket-1',
+        { body: 'note to self', visibility: CommentVisibility.Public },
+        staffAsRequester,
+      );
+
+      expect(slaService.recordFirstResponse).not.toHaveBeenCalled();
     });
   });
 

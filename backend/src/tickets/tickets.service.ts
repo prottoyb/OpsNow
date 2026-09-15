@@ -9,12 +9,14 @@ import {
 import {
   CommentVisibility,
   Prisma,
-  Role,
   TicketPriority,
   TicketStatus,
 } from '@prisma/client';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
+import { ticketVisibilityWhere as buildTicketVisibilityWhere } from '../common/ticket-visibility';
 import { PrismaService } from '../prisma/prisma.service';
+import { SlaService } from '../sla/sla.service';
+import { TicketSlaResponseDto } from '../sla/dto/ticket-sla-response.dto';
 import {
   TicketCategoriesService,
   toTicketCategoryResponse,
@@ -51,13 +53,17 @@ const ticketInclude = {
   requester: true,
   assignee: true,
   category: true,
+  sla: true,
 } as const;
 
 type TicketWithRelations = Prisma.TicketGetPayload<{
   include: typeof ticketInclude;
 }>;
 
-function toTicketResponse(ticket: TicketWithRelations): TicketResponseDto {
+function toTicketResponse(
+  ticket: TicketWithRelations,
+  sla: TicketSlaResponseDto | null,
+): TicketResponseDto {
   return {
     id: ticket.id,
     ticketNumber: ticket.ticketNumber,
@@ -73,6 +79,7 @@ function toTicketResponse(ticket: TicketWithRelations): TicketResponseDto {
     requester: toUserSummary(ticket.requester),
     assignee: ticket.assignee ? toUserSummary(ticket.assignee) : null,
     category: ticket.category ? toTicketCategoryResponse(ticket.category) : null,
+    sla,
   };
 }
 
@@ -113,6 +120,7 @@ export class TicketsService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly ticketCategoriesService: TicketCategoriesService,
+    private readonly slaService: SlaService,
   ) {}
 
   async create(
@@ -143,6 +151,16 @@ export class TicketsService {
           newValue: TicketStatus.New,
         },
       });
+
+      // Priority-based policy selection, snapshotted onto a new TicketSla
+      // row; clock start is the ticket's own DB-assigned createdAt. A
+      // missing active policy never blocks creation (ADR-020).
+      await this.slaService.attachOnCreate(
+        tx,
+        ticket.id,
+        ticket.priority,
+        ticket.createdAt,
+      );
 
       return ticket;
     });
@@ -178,7 +196,7 @@ export class TicketsService {
       this.prisma.ticket.count({ where }),
     ]);
 
-    return { data: tickets.map(toTicketResponse), total };
+    return { data: tickets.map((t) => this.mapTicket(t)), total };
   }
 
   async findOne(
@@ -186,7 +204,7 @@ export class TicketsService {
     user: AuthenticatedUser,
   ): Promise<TicketResponseDto> {
     const ticket = await this.getVisibleTicketOrThrow(id, user);
-    return toTicketResponse(ticket);
+    return this.mapTicket(ticket);
   }
 
   async update(
@@ -250,7 +268,7 @@ export class TicketsService {
     }
 
     if (historyRows.length === 0) {
-      return toTicketResponse(ticket);
+      return this.mapTicket(ticket);
     }
 
     await this.runTransaction(async (tx) => {
@@ -292,7 +310,7 @@ export class TicketsService {
       // No-op: nothing to validate or write. Checked before the assignee
       // lookup below so re-submitting the same assignment never fails on
       // a target that has since become inactive/changed role.
-      return toTicketResponse(ticket);
+      return this.mapTicket(ticket);
     }
 
     if (dto.assigneeId) {
@@ -361,14 +379,29 @@ export class TicketsService {
     const ticket = await this.getVisibleTicketOrThrow(id, user);
 
     if (ticket.priority === dto.priority) {
-      return toTicketResponse(ticket);
+      return this.mapTicket(ticket);
     }
 
     await this.runTransaction(async (tx) => {
-      await tx.ticket.update({
-        where: { id: ticket.id },
+      // Conditional update gates the write on the priority still being
+      // what we last read — matches assign()'s CAS verbatim (ADR-020
+      // concurrency invariant 4). Without it, two concurrent priority
+      // changes could both succeed and BOTH SLA target deltas would land.
+      const updated = await tx.ticket.updateMany({
+        where: {
+          id: ticket.id,
+          priority: ticket.priority,
+          ...this.ticketVisibilityWhere(user),
+        },
         data: { priority: dto.priority },
       });
+      if (updated.count !== 1) {
+        throw new ConflictException(CONFLICT_MESSAGE);
+      }
+
+      // SLA hook runs strictly after the CAS succeeds (ADR-020 invariant 3).
+      await this.slaService.handlePriorityChange(tx, ticket.id, dto.priority);
+
       await tx.ticketHistory.create({
         data: this.historyRow(
           ticket.id,
@@ -390,15 +423,15 @@ export class TicketsService {
     dto: CreateTicketCommentDto,
     user: AuthenticatedUser,
   ): Promise<TicketCommentResponseDto> {
-    await this.getVisibleTicketOrThrow(id, user);
+    const ticket = await this.getVisibleTicketOrThrow(id, user);
 
     const visibility = dto.visibility ?? CommentVisibility.Public;
     if (visibility === CommentVisibility.Internal && !isStaffRole(user.role)) {
       throw new ForbiddenException('Only staff can create an internal note');
     }
 
-    const comment = await this.runTransaction((tx) =>
-      tx.ticketComment.create({
+    const comment = await this.runTransaction(async (tx) => {
+      const created = await tx.ticketComment.create({
         data: {
           ticketId: id,
           authorId: user.id,
@@ -406,8 +439,25 @@ export class TicketsService {
           visibility,
         },
         include: { author: true },
-      }),
-    );
+      });
+
+      // First-response qualification (ADR-020's D3): Public visibility,
+      // staff-authored, and the author is not the ticket's own requester —
+      // a staff user who filed their own ticket can never satisfy their
+      // own response SLA, and Internal notes never qualify. The hook
+      // itself is exactly-once by construction (guarded on
+      // response_at IS NULL), so a race between two qualifying replies is
+      // safe without any extra locking here.
+      if (
+        visibility === CommentVisibility.Public &&
+        isStaffRole(user.role) &&
+        user.id !== ticket.requesterId
+      ) {
+        await this.slaService.recordFirstResponse(tx, id, created.createdAt);
+      }
+
+      return created;
+    });
 
     return toTicketCommentResponse(comment);
   }
@@ -470,10 +520,21 @@ export class TicketsService {
   }
 
   /**
-   * The single seam every status change funnels through. Phase 7 (SLA)
-   * will hook here (OnHold pausing the SLA clock, reopen/close affecting
-   * breach tracking) rather than needing to touch every call site that
-   * changes status. Phase 6 must not touch TicketSla — it doesn't.
+   * The single seam every status change funnels through. SLA hooks
+   * (ADR-020) run here, strictly after the CAS below succeeds:
+   * - Entering OnHold pauses both clocks (pauseForHold).
+   * - Leaving OnHold (to ANY destination) resumes and credits the pause
+   *   (resumeFromPause) — this MUST run before the resolution-outcome hook
+   *   below, or a resolution reached straight out of OnHold would be
+   *   compared against a still-unshifted resolutionDueAt and record a
+   *   breach the team didn't cause.
+   * - Reopening (the only path, Resolved -> Open) reuses the IDENTICAL
+   *   resumeFromPause call as the D4 pause-credit mechanism: the anchor
+   *   was set to resolvedAt by recordResolutionOutcome when the ticket
+   *   resolved, so "resume" and "reopen credit" are the same computation.
+   * - Resolving (resolvedAt going null -> set, for both ->Resolved and a
+   *   direct ->Closed) records the resolution outcome and sets the D4
+   *   pause anchor for a possible future reopen.
    */
   private async applyStatusTransition(
     ticket: TicketWithRelations,
@@ -545,6 +606,24 @@ export class TicketsService {
         throw new ConflictException(CONFLICT_MESSAGE);
       }
 
+      // SLA hooks run strictly after the CAS succeeds (ADR-020 invariant
+      // 3), in the order documented above this method.
+      if (currentStatus === TicketStatus.OnHold) {
+        await this.slaService.resumeFromPause(tx, ticket.id);
+      }
+      if (newStatus === TicketStatus.OnHold) {
+        await this.slaService.pauseForHold(tx, ticket.id);
+      }
+      if (reopening) {
+        await this.slaService.resumeFromPause(tx, ticket.id);
+      }
+      if (data.resolvedAt) {
+        // Only ever truthy here when resolvedAt is going null -> set (see
+        // the assignment logic above) — never on the reopening branch,
+        // which explicitly sets it back to null.
+        await this.slaService.recordResolutionOutcome(tx, ticket.id);
+      }
+
       const historyRows: Prisma.TicketHistoryCreateManyInput[] = [
         this.historyRow(ticket.id, user.id, 'status', currentStatus, newStatus),
       ];
@@ -569,11 +648,17 @@ export class TicketsService {
     return this.findOne(ticket.id, user);
   }
 
+  /** Wraps the ticket + its SLA relation into the API response shape,
+   * deriving SLA breach/at-risk state at read time (ADR-020). */
+  private mapTicket(ticket: TicketWithRelations): TicketResponseDto {
+    return toTicketResponse(
+      ticket,
+      this.slaService.toTicketSlaResponse(ticket.sla, ticket),
+    );
+  }
+
   private ticketVisibilityWhere(user: AuthenticatedUser): Prisma.TicketWhereInput {
-    return {
-      deletedAt: null,
-      ...(user.role === Role.Employee ? { requesterId: user.id } : {}),
-    };
+    return buildTicketVisibilityWhere(user);
   }
 
   private assertStaff(user: AuthenticatedUser, message: string): void {
