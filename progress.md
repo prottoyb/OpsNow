@@ -10,23 +10,23 @@ Project status: In Progress
 
 
 
-Current phase: Phase 6b — Ticket Management Frontend UI
+Current phase: Phase 7 — SLA Management (not started)
 
 
 
-Current task: Scaffold the frontend application
+Current task: none — Phase 6b is complete
 
 
 
-Last completed task: Phase 6a — Ticket Management Backend API (ticket
+Last completed task: Phase 6b — Ticket Management Frontend UI (Vite/React/
 
-CRUD, assignment, status/priority management, categories, comments,
+TypeScript/Tailwind application, login, ticket list/create/detail pages,
 
-internal notes, history — implemented, reviewed and verified)
+role-aware UI, Playwright workflow test — implemented, reviewed and verified)
 
 
 
-Next task: Scaffold the frontend application
+Next task: Begin Phase 7 — SLA Management
 
 
 
@@ -1197,6 +1197,312 @@ application (Vite/React/TypeScript/Tailwind per ADR-002/016 — not yet
 started anywhere in the repo) and build the ticket list/creation/detail
 
 pages against the Phase 6a API.
+
+
+
+\---
+
+
+
+\### 2026-09-16 — Phase 6b Ticket Management Frontend UI Implemented
+
+
+
+Completed:
+
+
+
+\- Planned first: engineering-lead produced a full Phase 6b plan, an
+
+independent architect review challenged it (verifying the Vite-proxy
+
+reasoning, correcting the cross-tab refresh rationale, and finding that the
+
+`SafeUser` payload has no `isActive` flag), and the project owner approved
+
+the revised plan decision by decision (D1–D9) before any code was written.
+
+\- Scaffolded `frontend/` as a standalone Vite/React 19/TypeScript app with
+
+Tailwind v4, React Router, TanStack Query and a native `fetch` client — no
+
+state-management library, no form library, no component library, no axios
+
+(ADR-002/008/016/017).
+
+\- Pages: login, ticket list (URL-driven filters + limit/offset pagination),
+
+ticket creation, ticket detail (edit, status, priority, assignment,
+
+comments, staff-only history).
+
+\- A Vite dev/preview proxy makes the API same-origin. This is the only
+
+configuration in which authentication works at all: the backend enables no
+
+CORS, `/auth/refresh` and `/auth/logout` reject a cross-origin `Origin`
+
+header, and the refresh cookie is `SameSite=Strict`. `changeOrigin`, any
+
+`rewrite`, and the separate `preview.proxy` key are each documented in
+
+`vite.config.ts` as traps that silently break auth.
+
+\- The access token lives in memory only; the refresh cookie stays httpOnly
+
+and is never read by JavaScript (ADR-005). A page reload recovers the
+
+session through a bootstrap refresh.
+
+\- Refresh-on-401 is single-flight AND serialized across tabs via
+
+`navigator.locks`, feature-detected with a fallback to plain in-tab single
+
+flight. This is not decoration: re-presenting an already-rotated refresh
+
+token makes `AuthService.refresh()` revoke the user's entire token family.
+
+Two genuinely simultaneous refreshes are absorbed by the backend's
+
+conditional update and merely 401; the dangerous case is a *serialized but
+
+stale* presentation, which a second tab produces naturally.
+
+\- Role-aware UI is presentation only and every gated action retains a
+
+working 403 path (ADR-006/018). Internal notes are never rendered for an
+
+Employee, and the query cache is cleared on every identity change so they
+
+cannot survive a user switch in the same browser.
+
+\- Status transitions mirror the backend matrix as a presentation-only
+
+constant pinned by an exact-contents test, so backend drift fails loudly
+
+instead of silently offering an action the server refuses. `Closed` remains
+
+terminal for every role (ADR-019).
+
+\- Guard tests fail the build on `dangerouslySetInnerHTML`/`innerHTML`/
+
+`eval`/`Function()`/`srcdoc`/`on*` attributes/string timers, on MSW reaching
+
+a production module, and on any use of web storage.
+
+\- **No Phase 6a backend contract was changed.** The only backend additions
+
+are `test/support/cleanup-e2e-tickets.ts` and the npm script that runs it.
+
+
+
+Playwright data isolation (the owner rejected the original plan here, and
+
+was right to):
+
+
+
+\- The suite never seeds, resets or mutates data it does not own.
+
+`global-setup.ts` verifies its preconditions — API healthy, the four seeded
+
+accounts can sign in, at least one active category exists — and aborts with
+
+instructions if not, telling the developer to run the seed themselves and
+
+warning that it wipes data.
+
+\- The category is resolved by name from the live response at runtime; no
+
+seeded UUID is hardcoded.
+
+\- Every ticket the run creates is tagged `[E2E][<runId>]`, assertions are
+
+scoped to that ticket, and there are no global or unfiltered `total`
+
+assertions.
+
+\- Teardown deletes only `[E2E]`-prefixed tickets, relying on the declared
+
+`onDelete: Cascade` relations, and is best-effort so it cannot mask a test
+
+result. Matching the fixed prefix rather than one run's id means a crashed
+
+run self-heals on the next one. The script now refuses to run against any
+
+non-local database — the guard sits after the Prisma client is constructed,
+
+because that is what loads `backend/.env` (`DATABASE_URL` is unset before
+
+it, so the obvious placement would abort every legitimate local run).
+
+
+
+Review findings (independent QA/Security and Senior Review, run in parallel
+
+against the real code and a live browser):
+
+
+
+\- **No CRITICAL and no HIGH findings from either reviewer.**
+
+\- QA/Security verified all eight required security properties as holding,
+
+most of them empirically: internal notes stayed invisible to an Employee
+
+across a same-browser user switch and a mid-session expiry; `localStorage`,
+
+`sessionStorage`, `document.cookie` and IndexedDB were all empty after
+
+login; six tabs reloaded simultaneously produced 12 successful refreshes
+
+and zero forced logouts; injected `<img onerror>`/`<script>` payloads
+
+rendered as inert text; an injected 500 containing a stack trace and a
+
+connection string surfaced only "Something went wrong".
+
+\- 9 MEDIUM findings between the two reviewers (one — the unannounced live
+
+region — found independently by both). All 9 were fixed, not deferred:
+
+comment drafts destroyed on submit, drafts destroyed by tab switching, a
+
+dead-end edit form after a 403, a categories outage blocking ticket
+
+creation entirely, categories nested below the first level silently
+
+vanishing from the picker, a half-used query-key factory, an e2e assertion
+
+that could pass vacuously, an unguarded cleanup `deleteMany`, and the
+
+live-region defect.
+
+\- LOW/OPTIONAL items fixed as well: URL `categoryId`/`offset` validation,
+
+XSS-guard hardening (`window.eval` was a real bypass), redirect
+
+shape-checking, per-ticket page remounting, humanised status labels, a
+
+tautological lock test replaced with three real ones, filter/picker
+
+duplication, dead exports, misreported network errors, and a timeout that
+
+covered headers but not the body.
+
+\- Deliberately deferred with justification: history entries showing raw
+
+UUIDs for assignee/category changes (staff-only, cosmetic, would need
+
+frozen backend work), and the 20-second request-timeout path remaining
+
+untested because jsdom's `AbortController` is incompatible with undici's
+
+`fetch`. QA/Security confirmed the latter is an ordinary coverage gap, not
+
+a Mandatory Gate #4 test exception — no bug was fixed, so no exception is
+
+claimed or recorded.
+
+
+
+Key decisions:
+
+
+
+\- No new ADR. Every choice here is already covered by ADR-002/005/006/008/
+
+016/017/018/019 or is a tactical, reversible implementation detail; an ADR
+
+for "we used a Vite dev proxy" would be ADR inflation.
+
+\- `vitest` was upgraded 3.2.7 → 4.1.11 to clear a moderate advisory
+
+(GHSA-82fw-gwwq-j7x9 in `@vitest/mocker`). No security exception was needed
+
+because a non-vulnerable version exists.
+
+\- `shell: true` is kept in the e2e teardown's `spawn`. Since Node's
+
+CVE-2024-27980 fix a `.cmd` shim cannot be spawned without it (verified:
+
+EINVAL on Node 24). It is safe here because the command and arguments are
+
+fixed literals and `cwd` is a spawn option, so nothing external is
+
+interpolated.
+
+
+
+Verification results:
+
+
+
+\- `npx tsc --noEmit`, `npm run lint`, `npm run build`: all clean.
+
+\- `npm test` (frontend): 9 files, **119 tests passing** (110 before the
+
+review fixes; 9 added).
+
+\- `npx playwright test`: 1/1 passing, teardown reported the cleanup and
+
+left no `[E2E]` rows.
+
+\- `cd backend && npm test`: **99/99 passing, unchanged.**
+
+\- `cd backend && npm run test:e2e`: **67/67 passing, unchanged** against the
+
+real local `opsnow_dev` Postgres — confirming no Phase 6a contract moved.
+
+\- `npm audit` (frontend): 0 vulnerabilities.
+
+\- `git diff c134b69 -- backend/` after the fix pass: one file, the cleanup
+
+script. Nothing in `backend/src` or `backend/prisma` at any point.
+
+\- Cleanup guard exercised both ways: refuses a remote `DATABASE_URL`
+
+("refusing to delete from a non-local database"), works against localhost.
+
+\- Data isolation proved independently of the suite: created an
+
+`[E2E]`-tagged ticket WITH a comment, ran the cleanup, confirmed exactly one
+
+ticket deleted via cascade while all 5 seeded tickets and 7 users survived.
+
+Seeded counts confirmed unchanged after every run.
+
+
+
+Known gaps, unchanged from earlier phases:
+
+
+
+\- No CI pipeline anywhere in the project (Phase 15), so the Merge Readiness
+
+Gate's "CI passes" item is met by locally-run checks only. This is a
+
+documented, tracked, pre-existing gap and Phase 6b did not attempt to fix
+
+it. The backend also still has no ESLint configuration.
+
+\- Rate limiting on `/auth/login` and `/auth/register` remains deferred from
+
+Phase 4 and must be closed before Phase 16.
+
+
+
+Git status: committed as `c134b69` (implementation) and `a0ebf7e` (review
+
+fixes), plus the documentation commit that follows.
+
+
+
+Next:
+
+
+
+\- Begin Phase 7 — SLA Management.
 
 
 

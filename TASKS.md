@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 6b — Ticket Management Frontend UI (Phase 6a — Ticket Management Backend API complete)
+Current Phase: Phase 7 — SLA Management (Phases 6a and 6b — Ticket Management backend API and frontend UI — complete)
 
 
 
@@ -324,19 +324,77 @@ reviewed effort rather than bundled into the backend ticket-API work.
 
 
 
-\- \[ ] Scaffold the frontend application (Vite/React/TypeScript/Tailwind
+\- \[x] Scaffold the frontend application (Vite/React/TypeScript/Tailwind
 
 per ADR-002/016 — not yet done anywhere in the repo)
 
-\- \[ ] Build ticket list page
+\- \[x] Build ticket list page
 
-\- \[ ] Build ticket creation page
+\- \[x] Build ticket creation page
 
-\- \[ ] Build ticket detail page
+\- \[x] Build ticket detail page
 
-\- \[ ] Connect frontend to backend
+\- \[x] Connect frontend to backend
 
-\- \[ ] Test complete ticket workflow (UI workflow test)
+\- \[x] Test complete ticket workflow (UI workflow test)
+
+Note: a login page was also built, as a necessary enabler rather than extra
+
+scope — ADR-018 makes every ticket route default-deny, so no ticket page is
+
+reachable without authenticating. Registration, password reset and
+
+account-management UI are deliberately NOT included; `POST /auth/register`
+
+exists on the backend and can be surfaced whenever a phase calls for it.
+
+Note: assignment is limited to "Assign to me" and "Unassign", and the list's
+
+assignee filter is two-state (Anyone / Assigned to me). Neither is a design
+
+preference — `GET /api/v1/users` is Administrator-only, has no role filter
+
+and returns no `isActive` flag, so no staff directory can be built, and
+
+`ListTicketsQueryDto.assigneeId` is a plain UUID, so "unassigned" is not
+
+expressible. See the deferred items below.
+
+Note: a ticket's category can be changed but not cleared, because
+
+`UpdateTicketDto.categoryId` has no null allowance and the global
+
+ValidationPipe runs `forbidNonWhitelisted`, so `categoryId: null` is a 400.
+
+The UI therefore never offers a "no category" option once one is set.
+
+\---
+
+\## Deferred from Phase 6b (tracked, not dropped)
+
+\- \[ ] Staff-visible user listing so Support Agents and Team Leads can
+
+assign a ticket to someone other than themselves. Would be a new endpoint
+
+returning `UserSummary` (never `SafeUser`, which exposes email) with role
+
+and `isActive` filters. Deliberately deferred by the project owner rather
+
+than changing the Phase 6a contract mid-phase.
+
+\- \[ ] Allow a ticket's category to be cleared (`UpdateTicketDto.categoryId`
+
+accepting null via `@ValidateIf`, as `AssignTicketDto.assigneeId` already
+
+does).
+
+\- \[ ] `GET /api/v1/tickets` answers 500, not 400, for an absurd but
+
+integer-typed `offset` (e.g. `offset=99999999999999999999`). A Phase 6a
+
+validation gap found during Phase 6b review; the frontend clamps the value
+
+so it cannot originate one, but the backend should reject it cleanly.
 
 
 

@@ -176,17 +176,109 @@ usage limits and interruptions.
 
 
 
-The Phase 1 architecture (application, frontend, backend, database,
+Phases 0–6b are complete: project foundation, approved architecture
 
-authentication, authorization, API conventions, error handling and
+(ADR-001 through ADR-019 in `DECISIONS.md`), the Prisma/PostgreSQL database
 
-testing strategy) has been defined, reviewed and approved.
+layer, the NestJS backend foundation, authentication, authorization/RBAC,
+
+the ticket management REST API, and the ticket management frontend UI.
 
 
 
-Application implementation has not started yet. Development is currently
+Development is currently entering Phase 7 — SLA Management.
 
-entering Phase 2 — Database.
+
+
+\## Running Locally
+
+
+
+Prerequisites: Node.js 22+, a local PostgreSQL instance, and an
+
+`opsnow_dev` database. Copy `backend/.env.example` to `backend/.env` and
+
+fill in real local values.
+
+
+
+Backend (http://localhost:3000, API under `/api/v1`, Swagger at
+
+`/api/docs`):
+
+
+
+```
+
+cd backend
+
+npm install
+
+npx prisma migrate deploy
+
+npm run prisma:seed      # WARNING: wipes and rebuilds all data
+
+npm run start:dev
+
+```
+
+
+
+Frontend (http://localhost:5173):
+
+
+
+```
+
+cd frontend
+
+npm install
+
+npm run dev
+
+```
+
+
+
+The frontend talks to the API through a Vite proxy, and must — the backend
+
+enables no CORS, rejects a cross-origin refresh/logout, and issues a
+
+`SameSite=Strict` refresh cookie, so the API has to appear on the app's own
+
+origin. Run the frontend through Vite rather than opening `dist/` directly.
+
+
+
+\## Testing
+
+
+
+```
+
+cd backend  && npm test && npm run test:e2e   # Jest + Supertest
+
+cd frontend && npm test                        # Vitest + Testing Library
+
+cd frontend && npx playwright test             # end-to-end
+
+```
+
+
+
+The backend e2e and Playwright suites run against the real local database.
+
+They create only data they tag, assert only on that data, and clean up only
+
+what they created — neither resets the database, so local development data
+
+survives a test run.
+
+
+
+`[E2E]` is a reserved ticket-subject prefix: the Playwright teardown deletes
+
+every ticket whose subject starts with it. Do not use it for real tickets.
 
 
 
