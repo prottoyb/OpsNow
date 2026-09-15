@@ -30,5 +30,11 @@ export function logout(): Promise<void> {
  * the user's name (see `backend/src/auth/auth.controller.ts`).
  */
 export function fetchCurrentUser(): Promise<AuthenticatedUser> {
+  // `skipAuthRefresh` is correct only because the sole caller is the
+  // bootstrap, which has just refreshed: a 401 here means that brand-new token
+  // was rejected, so refreshing again would be a pointless second round trip.
+  // /auth/me is otherwise an ordinary bearer-protected resource, so a future
+  // mid-session caller should DROP this flag and let the normal
+  // refresh-and-retry path recover instead of failing outright.
   return apiFetch<AuthenticatedUser>('/auth/me', { skipAuthRefresh: true });
 }

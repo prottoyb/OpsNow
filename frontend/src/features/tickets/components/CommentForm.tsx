@@ -11,7 +11,18 @@ export interface CommentFormProps {
   canPostInternal: boolean;
   submitting: boolean;
   serverMessages: string[];
-  onSubmit: (body: string, visibility: CommentVisibility) => void;
+  /**
+   * `onSubmitted` is invoked by the caller only once the comment has actually
+   * been accepted by the server; the draft is cleared then, never on submit.
+   * Posting is fire-and-forget from this component's point of view, so
+   * clearing eagerly would discard up to 5,000 characters of the user's
+   * writing on any failure.
+   */
+  onSubmit: (
+    body: string,
+    visibility: CommentVisibility,
+    onSubmitted: () => void,
+  ) => void;
 }
 
 export function CommentForm({
@@ -38,9 +49,10 @@ export function CommentForm({
       return;
     }
     setError(undefined);
-    onSubmit(trimmed, visibility);
-    setBody('');
-    setVisibility('Public');
+    onSubmit(trimmed, visibility, () => {
+      setBody('');
+      setVisibility('Public');
+    });
   }
 
   return (

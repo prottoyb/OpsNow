@@ -2,8 +2,8 @@ import { Button } from '../../../components/ui/Button';
 import { Select } from '../../../components/ui/Select';
 import type { TicketCategory } from '../../../types/api';
 import { TICKET_PRIORITIES, TICKET_STATUSES } from '../../../types/api';
-import { buildCategoryTree } from '../categoryTree';
 import { statusLabel } from '../transitions';
+import { CategorySelect } from './CategorySelect';
 import type { TicketListFilters } from '../useTicketListParams';
 
 export interface TicketFiltersProps {
@@ -23,8 +23,6 @@ export function TicketFilters({
   onChange,
   onClear,
 }: TicketFiltersProps) {
-  const { groups, standalone } = buildCategoryTree(categories);
-
   return (
     <section
       aria-labelledby="ticket-filters-heading"
@@ -94,30 +92,18 @@ export function TicketFilters({
           >
             Category
           </label>
-          <Select
+          {/* Same grouped picker as the ticket forms — including the rule
+              that a parent category stays selectable — rather than a second
+              copy of it. */}
+          <CategorySelect
             id="filter-category"
             value={filters.categoryId ?? ''}
-            onChange={(event) =>
-              onChange({ categoryId: event.target.value || undefined })
+            categories={categories}
+            noneLabel="Any category"
+            onChange={(categoryId) =>
+              onChange({ categoryId: categoryId || undefined })
             }
-          >
-            <option value="">Any category</option>
-            {standalone.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-            {groups.map(({ parent, children }) => (
-              <optgroup key={parent.id} label={parent.name}>
-                <option value={parent.id}>{parent.name}</option>
-                {children.map((child) => (
-                  <option key={child.id} value={child.id}>
-                    {child.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </Select>
+          />
         </div>
 
         {/*

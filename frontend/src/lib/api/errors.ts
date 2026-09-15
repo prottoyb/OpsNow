@@ -14,6 +14,12 @@ export interface ApiErrorBody {
 
 /** `status: 0` means the request never reached the server (network/abort). */
 export const NETWORK_ERROR_STATUS = 0;
+/**
+ * A throw that is not an ApiError at all (a bug in our own code, not a
+ * transport failure). Distinct from NETWORK_ERROR_STATUS so the two cannot be
+ * confused by `isNetworkError`.
+ */
+export const UNKNOWN_ERROR_STATUS = -1;
 
 const GENERIC_MESSAGE = 'Something went wrong. Please try again.';
 const NETWORK_MESSAGE =
@@ -39,10 +45,6 @@ export class ApiError extends Error {
 
   get isValidationError(): boolean {
     return this.status === 400;
-  }
-
-  get isUnauthorized(): boolean {
-    return this.status === 401;
   }
 
   get isForbidden(): boolean {
@@ -98,10 +100,17 @@ function normalizeMessages(body: unknown): string[] {
   return [GENERIC_MESSAGE];
 }
 
-/** Narrows anything thrown by a query/mutation to a displayable ApiError. */
+/**
+ * Narrows anything thrown by a query/mutation to a displayable ApiError.
+ *
+ * An unrecognised throw is NOT reported as a network failure: telling a user
+ * to check their connection because of a client-side bug sends them to debug
+ * the wrong thing. It gets its own sentinel status so `isNetworkError` stays
+ * true only for an actual transport failure.
+ */
 export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) {
     return error;
   }
-  return new ApiError(NETWORK_ERROR_STATUS, [NETWORK_MESSAGE], error);
+  return new ApiError(UNKNOWN_ERROR_STATUS, [GENERIC_MESSAGE], error);
 }

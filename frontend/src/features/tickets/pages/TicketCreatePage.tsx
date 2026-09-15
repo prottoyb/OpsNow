@@ -41,15 +41,25 @@ export function TicketCreatePage() {
 
       {categoriesQuery.isPending ? <Spinner label="Loading categories" /> : null}
 
+      {/*
+        A category is optional on `CreateTicketDto`, so a failed category
+        fetch must not take raising a ticket offline — it degrades to a
+        non-blocking notice above a form that still works without a category.
+        The form waits for `isPending` to clear only so the dropdown does not
+        render empty and then repopulate on every load.
+      */}
       {categoriesQuery.isError ? (
         <ErrorState
           title="Could not load categories"
-          messages={toApiError(categoriesQuery.error).messages}
+          messages={[
+            ...toApiError(categoriesQuery.error).messages,
+            'You can still raise the ticket without choosing a category.',
+          ]}
           onRetry={() => void categoriesQuery.refetch()}
         />
       ) : null}
 
-      {categoriesQuery.isSuccess ? (
+      {!categoriesQuery.isPending ? (
         <TicketForm
           mode="create"
           initialValues={{
@@ -58,7 +68,7 @@ export function TicketCreatePage() {
             categoryId: '',
             priority: 'Medium',
           }}
-          categories={categoriesQuery.data}
+          categories={categoriesQuery.data ?? []}
           submitting={createTicket.isPending}
           serverMessages={serverMessages}
           submitLabel="Create ticket"

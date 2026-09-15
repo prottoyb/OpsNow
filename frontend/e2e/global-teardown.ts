@@ -22,6 +22,11 @@ export default async function globalTeardown(): Promise<void> {
     const child = spawn(npm, ['run', 'test:e2e:cleanup'], {
       cwd: backendDir,
       stdio: 'inherit',
+      // Required on Windows, not incidental: since Node's CVE-2024-27980 fix,
+      // spawning a .cmd shim without a shell fails outright with EINVAL
+      // (verified on Node 24). It is safe here because nothing external is
+      // interpolated — the command and arguments are fixed literals and `cwd`
+      // is passed as a spawn option rather than built into a command string.
       shell: process.platform === 'win32',
     });
 

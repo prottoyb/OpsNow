@@ -45,9 +45,13 @@ export function ErrorState({
 }
 
 /**
- * A non-blocking inline notice for a recoverable problem (403/409) where the
- * page itself is still usable. `aria-live="assertive"` because it is the
- * direct result of an action the user just took.
+ * A non-blocking inline notice for a recoverable problem (403/409) or a
+ * success confirmation, where the page itself remains usable.
+ *
+ * This deliberately carries no `aria-live` of its own: it is mounted and
+ * unmounted as notices come and go, and a live region only announces changes
+ * that happen while it is already in the DOM. The caller owns a permanently
+ * rendered live region and swaps this component inside it.
  */
 export function InlineNotice({
   tone = 'warning',
@@ -61,11 +65,6 @@ export function InlineNotice({
       ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
       : 'border-amber-300 bg-amber-50 text-amber-900';
   return (
-    <p
-      aria-live="assertive"
-      className={`rounded-md border p-3 text-sm ${classes}`}
-    >
-      {children}
-    </p>
+    <p className={`rounded-md border p-3 text-sm ${classes}`}>{children}</p>
   );
 }

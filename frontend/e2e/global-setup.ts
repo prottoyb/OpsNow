@@ -102,7 +102,6 @@ export default async function globalSetup(): Promise<void> {
   //    ticket the suite creates is prefixed with the run tag so teardown can
   //    find exactly what this run made — and nothing else.
   const runId = randomUUID().slice(0, 8);
-  process.env[ENV_KEYS.tag] = E2E_TAG;
   process.env[ENV_KEYS.run] = `${E2E_TAG}[${runId}]`;
   process.env[ENV_KEYS.category] = usable.name;
 

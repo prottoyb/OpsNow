@@ -5,7 +5,7 @@ import { ErrorState, InlineNotice } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
 import { FullPageSpinner, Spinner } from '../../../components/ui/Spinner';
 import { Tabs } from '../../../components/ui/Tabs';
-import { ApiError, toApiError } from '../../../lib/api/errors';
+import { toApiError } from '../../../lib/api/errors';
 import { formatDateTime, fullName, toDateTimeAttribute } from '../../../lib/format';
 import type {
   CommentVisibility,
@@ -23,6 +23,7 @@ import { PriorityControl } from '../components/PriorityControl';
 import { StatusControl } from '../components/StatusControl';
 import { TicketForm } from '../components/TicketForm';
 import type { TicketFormValues } from '../components/TicketForm';
+import { statusLabel } from '../transitions';
 import {
   TicketPriorityBadge,
   TicketStatusBadge,
@@ -47,9 +48,6 @@ interface Notice {
 
 const CONFLICT_TEXT =
   'Someone else changed this ticket while you were working on it. The latest version has been reloaded — please review it and try again.';
-
-const FORBIDDEN_FALLBACK =
-  'You are not allowed to do that. The ticket may have moved on since you opened it; it has been reloaded.';
 
 export function TicketDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
@@ -83,20 +81,30 @@ export function TicketDetailPage() {
    * one this page was rendered from", so both show an inline explanation AND
    * refetch — leaving the stale view on screen would invite the user to retry
    * the same doomed action.
+   *
+   * Both also close the edit form. The refetch can flip `canEditDetails` to
+   * false (e.g. the requester's ticket has left `New`), and a form left open
+   * over a ticket the server will no longer accept edits to is a dead end: its
+   * Save button re-submits the same doomed request indefinitely, while the
+   * explanation of *why* editing stopped never renders.
    */
+  function closeEditForm() {
+    setEditing(false);
+    setEditMessages([]);
+  }
+
   function handleMutationError(error: unknown, setMessages?: (m: string[]) => void) {
     const apiError = toApiError(error);
 
     if (apiError.isConflict) {
       setNotice({ tone: 'warning', text: CONFLICT_TEXT });
+      closeEditForm();
       refetchTicket();
       return;
     }
     if (apiError.isForbidden) {
-      setNotice({
-        tone: 'warning',
-        text: apiError.messages[0] ?? FORBIDDEN_FALLBACK,
-      });
+      setNotice({ tone: 'warning', text: apiError.messages[0] });
+      closeEditForm();
       refetchTicket();
       return;
     }
@@ -153,7 +161,8 @@ export function TicketDetailPage() {
       onSuccess: (updated) =>
         setNotice({
           tone: 'success',
-          text: `Status changed to ${updated.status}.`,
+          // statusLabel, not the raw enum: "In progress", not "InProgress".
+          text: `Status changed to ${statusLabel(updated.status)}.`,
         }),
       onError: (error) => handleMutationError(error),
     });
@@ -179,13 +188,20 @@ export function TicketDetailPage() {
     });
   }
 
-  function handleCommentSubmit(body: string, visibility: CommentVisibility) {
+  function handleCommentSubmit(
+    body: string,
+    visibility: CommentVisibility,
+    onSubmitted: () => void,
+  ) {
     setCommentMessages([]);
     createComment.mutate(
       { body, visibility },
       {
-        onSuccess: () =>
-          setNotice({ tone: 'success', text: 'Comment posted.' }),
+        onSuccess: () => {
+          // Only now is it safe to clear the composer.
+          onSubmitted();
+          setNotice({ tone: 'success', text: 'Comment posted.' });
+        },
         onError: (error) => handleMutationError(error, setCommentMessages),
       },
     );
@@ -254,15 +270,28 @@ export function TicketDetailPage() {
         ) : null}
       </div>
 
-      {notice ? (
-        <InlineNotice tone={notice.tone}>{notice.text}</InlineNotice>
-      ) : null}
+      {/*
+        The live region is rendered unconditionally and the notice swapped
+        inside it. A region inserted into the DOM already containing its text
+        is not reliably announced — assistive technology has to be observing
+        the node before the content changes.
+      */}
+      <div aria-live="polite" aria-atomic="true">
+        {notice ? (
+          <InlineNotice tone={notice.tone}>{notice.text}</InlineNotice>
+        ) : null}
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
           <article className="rounded-md border border-slate-200 bg-white p-4">
             <h2 className="text-base font-semibold text-slate-900">Details</h2>
-            {editing ? (
+            {/*
+              Gated on `canEditDetails` as well as `editing`: a refetch after a
+              403 can withdraw edit permission, and the form must not survive
+              that.
+            */}
+            {editing && canEditDetails ? (
               <div className="mt-3">
                 <TicketForm
                   mode="edit"
@@ -393,7 +422,7 @@ function TicketMetadata({ ticket }: { ticket: Ticket }) {
 }
 
 function renderLoadError(error: unknown, retry: () => void) {
-  const apiError = error instanceof ApiError ? error : toApiError(error);
+  const apiError = toApiError(error);
 
   /*
    * 404 copy must never hint that the ticket might exist but belong to

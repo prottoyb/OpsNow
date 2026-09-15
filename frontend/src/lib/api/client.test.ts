@@ -7,6 +7,7 @@ import {
   getAccessToken,
   setAccessToken,
   setSessionExpiredHandler,
+  withCrossTabLock,
 } from './client';
 import { ApiError } from './errors';
 
@@ -356,5 +357,66 @@ describe('apiFetch — cross-tab refresh coordination', () => {
     // Exactly one attempt: a failure inside the lock must not be mistaken
     // for the Lock Manager being unusable.
     expect(mockState.refreshCount).toBe(1);
+  });
+});
+
+/**
+ * Tested directly rather than through `apiFetch`, because `performRefresh`
+ * catches everything it calls — so via that route the "work threw" branch is
+ * unreachable and a test asserting on it would pass even with the guard
+ * removed. The distinction matters: a Lock Manager that failed before running
+ * the callback must be retried without the lock, while work that threw inside
+ * the lock must NOT be retried, or the refresh would run twice and trip the
+ * token-reuse detection this whole mechanism exists to avoid.
+ */
+describe('withCrossTabLock', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'locks');
+  });
+
+  it('runs the work unlocked when the Lock Manager is unavailable', async () => {
+    expect(navigator.locks).toBeUndefined();
+    await expect(withCrossTabLock(async () => 'ran')).resolves.toBe('ran');
+  });
+
+  it('propagates a failure from inside the lock without re-running it', async () => {
+    let runs = 0;
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        request: async (_name: string, callback: () => Promise<unknown>) =>
+          callback(),
+      },
+    });
+
+    await expect(
+      withCrossTabLock(async () => {
+        runs += 1;
+        throw new Error('work failed');
+      }),
+    ).rejects.toThrow('work failed');
+
+    expect(runs).toBe(1);
+  });
+
+  it('falls back to running unlocked when the Lock Manager rejects asynchronously', async () => {
+    let runs = 0;
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: {
+        // Rejects WITHOUT invoking the callback, the shape a real Web Locks
+        // failure takes (a rejected promise, not a synchronous throw).
+        request: () =>
+          Promise.reject(new DOMException('lock unavailable', 'NotSupportedError')),
+      },
+    });
+
+    const result = await withCrossTabLock(async () => {
+      runs += 1;
+      return 'ran unlocked';
+    });
+
+    expect(result).toBe('ran unlocked');
+    expect(runs).toBe(1);
   });
 });

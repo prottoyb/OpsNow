@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import {
   keepPreviousData,
   useMutation,
@@ -26,7 +27,8 @@ import * as api from './tickets.api';
  * identity change, so this is belt and braces on a confidentiality boundary.
  */
 export const ticketKeys = {
-  root: (userId: string) => ['tickets', userId] as const,
+  /** Every list for this user, whatever its filters — the invalidation target. */
+  lists: (userId: string) => ['tickets', userId, 'list'] as const,
   list: (userId: string, query: ListTicketsQuery) =>
     ['tickets', userId, 'list', query] as const,
   detail: (userId: string, ticketId: string) =>
@@ -110,7 +112,7 @@ function invalidateTicket(
   });
   // Any ticket change can move it in or out of the active list filter.
   void queryClient.invalidateQueries({
-    queryKey: ['tickets', userId, 'list'],
+    queryKey: ticketKeys.lists(userId),
   });
 }
 
@@ -121,7 +123,7 @@ export function useCreateTicket() {
     mutationFn: (input: CreateTicketInput) => api.createTicket(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ['tickets', userId, 'list'],
+        queryKey: ticketKeys.lists(userId),
       });
     },
   });
@@ -184,5 +186,8 @@ export function useCreateTicketComment(ticketId: string) {
 export function useRefetchTicket(ticketId: string) {
   const queryClient = useQueryClient();
   const userId = useUserId();
-  return () => invalidateTicket(queryClient, userId, ticketId);
+  return useCallback(
+    () => invalidateTicket(queryClient, userId, ticketId),
+    [queryClient, userId, ticketId],
+  );
 }

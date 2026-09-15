@@ -145,6 +145,44 @@ describe('logout', () => {
     expect(getAccessToken()).toBeNull();
   });
 
+  it('clears the cache on sign-in, so data from a previous user cannot survive', async () => {
+    /*
+      The confidentiality invariant of this phase, pinned at the unit level.
+
+      Sign-out already clears the cache (above), but sign-in clears it too, and
+      that is the half that matters if anything ever leaves data behind: a
+      support agent's cached comments include internal notes, and the next
+      person to sign in on the same browser may be an Employee who must never
+      see them. Query keys are namespaced by user id as well, so this is
+      defence in depth — which is exactly why it needs its own test rather
+      than relying on the namespacing to make it unobservable.
+    */
+    resetMockState({ currentUser: agentUser, tickets: [makeTicket()] });
+    const user = userEvent.setup();
+
+    const { queryClient } = renderApp({ route: '/tickets' });
+    await screen.findByRole('heading', { name: 'Tickets' });
+    await waitFor(() =>
+      expect(queryClient.getQueryCache().getAll().length).toBeGreaterThan(0),
+    );
+
+    // Seed a marker entry that survives only if the cache is never cleared.
+    queryClient.setQueryData(['leak-canary'], 'internal note from the agent');
+    expect(queryClient.getQueryData(['leak-canary'])).toBeDefined();
+
+    await user.click(screen.getByRole('button', { name: /sign out/i }));
+    await screen.findByRole('heading', { name: /sign in to opsnow/i });
+
+    // Now sign in as a DIFFERENT user.
+    mockState.currentUser = employeeUser;
+    await user.type(screen.getByLabelText(/email/i), employeeUser.email);
+    await user.type(screen.getByLabelText(/password/i), 'DevPassword123!');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await screen.findByRole('heading', { name: 'Tickets' });
+    expect(queryClient.getQueryData(['leak-canary'])).toBeUndefined();
+  });
+
   it('clears local session state even when the logout request fails', async () => {
     resetMockState({ currentUser: agentUser });
     server.use(

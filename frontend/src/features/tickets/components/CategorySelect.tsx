@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Select } from '../../../components/ui/Select';
 import type { TicketCategory } from '../../../types/api';
 import { buildCategoryTree } from '../categoryTree';
@@ -28,7 +29,12 @@ export function CategorySelect({
   disabled = false,
   noneLabel,
 }: CategorySelectProps) {
-  const { groups, standalone } = buildCategoryTree(categories);
+  // Memoized: this component is rendered inside forms that re-render on every
+  // keystroke, and rebuilding the tree each time is pure waste.
+  const { groups, standalone } = useMemo(
+    () => buildCategoryTree(categories),
+    [categories],
+  );
 
   return (
     <Select

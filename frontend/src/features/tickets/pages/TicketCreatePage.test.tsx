@@ -163,8 +163,8 @@ describe('ticket creation — form', () => {
     ).toBeInTheDocument();
   });
 
-  it('surfaces a category loading failure instead of an empty picker', async () => {
-    resetMockState({ currentUser: employeeUser });
+  it('still allows raising a ticket when categories fail to load', async () => {
+    resetMockState({ currentUser: employeeUser, tickets: [] });
     server.use(
       http.get(`${BASE}/ticket-categories`, () =>
         HttpResponse.json({ statusCode: 500, message: 'db down' }, { status: 500 }),
@@ -176,6 +176,18 @@ describe('ticket creation — form', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /could not load categories/i,
     );
-    expect(screen.queryByLabelText(/subject/i)).not.toBeInTheDocument();
+
+    // A category is optional, so losing the picker must not take the app's
+    // primary function offline: the form is still there and still submits.
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText(/subject/i), 'Still works');
+    await user.type(
+      screen.getByLabelText(/description/i),
+      'Raised while categories were unavailable.',
+    );
+    await user.click(screen.getByRole('button', { name: /create ticket/i }));
+
+    await waitFor(() => expect(mockState.tickets).toHaveLength(1));
+    expect(mockState.tickets[0].subject).toBe('Still works');
   });
 });

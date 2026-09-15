@@ -67,9 +67,6 @@ export interface LoginResponse {
   user: AuthenticatedUser & { firstName: string; lastName: string };
 }
 
-export interface RefreshResponse {
-  accessToken: string;
-}
 
 /**
  * `UserSummaryResponseDto` — id/firstName/lastName/role. There is
@@ -181,4 +178,3 @@ export const FIELD_LIMITS = {
 } as const;
 
 export const PAGE_SIZE = 20;
-export const MAX_PAGE_SIZE = 100;

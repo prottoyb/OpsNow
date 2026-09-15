@@ -172,13 +172,34 @@ describe('ticket list — filters and URL state', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('ignores an unrecognised filter value in the URL', async () => {
+  it('ignores an unrecognised status value in the URL', async () => {
     resetMockState({ currentUser: agentUser, tickets: [makeTicket()] });
 
     renderApp({ route: '/tickets?status=NotAStatus' });
     await waitForList();
 
     expect(screen.getByLabelText('Status')).toHaveValue('');
+    expect(screen.getByRole('table')).toBeInTheDocument();
+  });
+
+  it('ignores a malformed category id in the URL rather than failing the page', async () => {
+    resetMockState({ currentUser: agentUser, tickets: [makeTicket()] });
+
+    // A bookmarked or hand-edited URL must not turn into a full-page failure
+    // showing the backend's raw "categoryId must be a UUID".
+    renderApp({ route: '/tickets?category=not-a-uuid' });
+    await waitForList();
+
+    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('ignores an absurd offset rather than forwarding it to the API', async () => {
+    resetMockState({ currentUser: agentUser, tickets: [makeTicket()] });
+
+    renderApp({ route: '/tickets?offset=99999999999999999999' });
+    await waitForList();
+
     expect(screen.getByRole('table')).toBeInTheDocument();
   });
 });

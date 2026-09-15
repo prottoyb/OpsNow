@@ -95,7 +95,13 @@ export function Tabs({ tabs, activeId, onChange, label }: TabsProps) {
           tabIndex={0}
           hidden={tab.id !== activeId}
         >
-          {tab.id === activeId ? tab.panel : null}
+          {/*
+            Rendered unconditionally and hidden with `hidden`, which already
+            removes the panel from both layout and the accessibility tree.
+            Unmounting the inactive panel would additionally destroy its state
+            — switching to History mid-sentence would discard a comment draft.
+          */}
+          {tab.panel}
         </div>
       ))}
     </div>

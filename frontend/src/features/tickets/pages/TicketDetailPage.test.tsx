@@ -377,6 +377,84 @@ describe('ticket detail — failure states', () => {
     await waitFor(() => expect(ticketReads).toBeGreaterThan(readsBefore));
   });
 
+  it('closes the edit form when the server refuses the edit', async () => {
+    /*
+      Regression: the form used to stay open after a 403. The refetch that
+      follows can withdraw edit permission (the requester's ticket has left
+      New), and a form left open over a ticket the server will no longer
+      accept edits to is a dead end — Save just 403s again, indefinitely,
+      while the explanation of why editing stopped never gets to render.
+    */
+    seed(employeeUser, { status: 'New' });
+    let ticketStatus: Ticket['status'] = 'New';
+    server.use(
+      http.get(`${BASE}/tickets/:id`, () =>
+        HttpResponse.json(makeTicket({ id: IDS.ticketA, status: ticketStatus })),
+      ),
+      http.patch(`${BASE}/tickets/:id`, () => {
+        // The agent picked it up between the page loading and Save landing.
+        ticketStatus = 'InProgress';
+        return HttpResponse.json(
+          {
+            statusCode: 403,
+            message: 'This ticket can no longer be edited by its requester',
+          },
+          { status: 403 },
+        );
+      }),
+    );
+    const user = userEvent.setup();
+
+    await renderDetail();
+    await user.click(screen.getByRole('button', { name: 'Edit details' }));
+
+    const subject = screen.getByLabelText(/subject/i);
+    await user.clear(subject);
+    await user.type(subject, 'Updated subject');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      await screen.findByText(
+        'This ticket can no longer be edited by its requester',
+      ),
+    ).toBeInTheDocument();
+
+    // The form is gone and cannot be resubmitted...
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Save changes' }),
+      ).not.toBeInTheDocument(),
+    );
+    // ...and the reason editing is no longer offered is now visible.
+    expect(
+      await screen.findByText(/can no longer be edited because work has started/i),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the comment draft when posting fails', async () => {
+    // A comment can be 5,000 characters. Clearing the box on submit rather
+    // than on success throws all of it away the moment anything goes wrong.
+    seed(agentUser, { status: 'Open' });
+    server.use(
+      http.post(`${BASE}/tickets/:id/comments`, () =>
+        HttpResponse.json(
+          { statusCode: 500, message: 'boom' },
+          { status: 500 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+
+    await renderDetail();
+    const draft = 'A carefully written comment that must not be lost.';
+    const box = await screen.findByLabelText(/add a comment/i);
+    await user.type(box, draft);
+    await user.click(screen.getByRole('button', { name: 'Post comment' }));
+
+    await screen.findByText(/something went wrong/i);
+    expect(screen.getByLabelText(/add a comment/i)).toHaveValue(draft);
+  });
+
   it('explains a 409 conflict and reloads the ticket', async () => {
     seed(agentUser, { status: 'New' });
     server.use(

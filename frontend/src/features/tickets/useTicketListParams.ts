@@ -42,6 +42,37 @@ function readEnum<T extends string>(
     : undefined;
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Shape-checked for the same reason the enums are: the URL is user-editable
+ * and bookmarkable. Forwarding `?category=nonsense` would turn a stale link
+ * into a full-page failure showing the raw validator message, instead of
+ * simply ignoring a value the UI cannot honour.
+ */
+function readUuid(raw: string | null): string | undefined {
+  return raw && UUID_PATTERN.test(raw) ? raw : undefined;
+}
+
+/**
+ * An offset large enough to be unusable is treated as page one. `Number`
+ * accepts values far beyond `Number.MAX_SAFE_INTEGER` and `Number.isInteger`
+ * still reports true for them, so an absurd `?offset=` would otherwise reach
+ * the API. Offsets are also snapped to a page boundary, since every control
+ * on the page moves in whole pages and a hand-edited offset would otherwise
+ * render a half-page window.
+ */
+const MAX_OFFSET = 1_000_000;
+
+function readOffset(raw: string | null, pageSize: number): number {
+  const parsed = Number(raw ?? '0');
+  if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > MAX_OFFSET) {
+    return 0;
+  }
+  return Math.floor(parsed / pageSize) * pageSize;
+}
+
 /**
  * All filter and pagination state lives in the URL, so a filtered list is
  * shareable, bookmarkable and survives back/forward — and there is no second
@@ -51,16 +82,12 @@ export function useTicketListParams(currentUserId: string) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const filters = useMemo<TicketListFilters>(() => {
-    const rawOffset = Number(searchParams.get(PARAM.offset) ?? '0');
     return {
       status: readEnum(searchParams.get(PARAM.status), TICKET_STATUSES),
       priority: readEnum(searchParams.get(PARAM.priority), TICKET_PRIORITIES),
-      categoryId: searchParams.get(PARAM.category) ?? undefined,
+      categoryId: readUuid(searchParams.get(PARAM.category)),
       assignee: searchParams.get(PARAM.assignee) === 'me' ? 'me' : 'anyone',
-      offset:
-        Number.isInteger(rawOffset) && rawOffset >= 0
-          ? rawOffset
-          : 0,
+      offset: readOffset(searchParams.get(PARAM.offset), PAGE_SIZE),
     };
   }, [searchParams]);
 

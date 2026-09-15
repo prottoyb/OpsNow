@@ -21,14 +21,13 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (status === 'unauthenticated') {
     // The intended destination is preserved so signing in lands where the
-    // user was actually going.
-    return (
-      <Navigate
-        to="/login"
-        replace
-        state={{ from: `${location.pathname}${location.search}` }}
-      />
-    );
+    // user was actually going — but only when it is unambiguously a path on
+    // this app. A protocol-relative value like `//example.com/x` is a valid
+    // pathname that react-router refuses to navigate to, which would strand
+    // the user on a broken page immediately after a successful sign-in.
+    const target = `${location.pathname}${location.search}`;
+    const from = /^\/(?!\/)/.test(target) ? target : undefined;
+    return <Navigate to="/login" replace state={from ? { from } : undefined} />;
   }
 
   return <>{children}</>;

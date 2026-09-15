@@ -45,6 +45,36 @@ describe('buildCategoryTree', () => {
     expect(standalone.map((c) => c.name)).toEqual(['Laptop']);
   });
 
+  it('emits every category in a deeply nested tree', () => {
+    // Regression: descendants below the first level used to be bucketed under
+    // a parent that was never rendered, so they vanished from the picker
+    // entirely. The schema puts no depth limit on the category self-relation
+    // and the backend accepts ANY active category id, so a category this
+    // function fails to emit is a valid choice the user simply cannot make.
+    const cat = (id: string, name: string, parentId: string | null) => ({
+      id,
+      name,
+      parentId,
+      isActive: true,
+    });
+
+    const { groups, standalone } = buildCategoryTree([
+      cat('a0000000-0000-4000-8000-000000000001', 'Hardware', null),
+      cat('a0000000-0000-4000-8000-000000000002', 'Laptop', 'a0000000-0000-4000-8000-000000000001'),
+      cat('a0000000-0000-4000-8000-000000000003', 'Keyboard', 'a0000000-0000-4000-8000-000000000002'),
+      cat('a0000000-0000-4000-8000-000000000004', 'Numpad', 'a0000000-0000-4000-8000-000000000003'),
+    ]);
+
+    const emitted = [
+      ...groups.flatMap((g) => [g.parent.name, ...g.children.map((c) => c.name)]),
+      ...standalone.map((c) => c.name),
+    ];
+
+    expect(emitted).toHaveLength(4);
+    expect(new Set(emitted).size).toBe(4);
+    expect(emitted.sort()).toEqual(['Hardware', 'Keyboard', 'Laptop', 'Numpad']);
+  });
+
   it('returns an empty tree for an empty list', () => {
     expect(buildCategoryTree([])).toEqual({ groups: [], standalone: [] });
   });

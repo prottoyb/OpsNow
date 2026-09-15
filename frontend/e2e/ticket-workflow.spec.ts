@@ -99,7 +99,7 @@ test('employee raises a ticket, agent triages it privately, employee reopens', a
     await expect(agent.getByText('Ticket assigned to you.')).toBeVisible();
 
     await agent.getByRole('button', { name: 'Move to In progress' }).click();
-    await expect(agent.getByText(/status changed to inprogress/i)).toBeVisible();
+    await expect(agent.getByText(/status changed to in progress/i)).toBeVisible();
 
     const internalNote =
       'Internal: out of warranty, raising a procurement request.';
@@ -118,6 +118,17 @@ test('employee raises a ticket, agent triages it privately, employee reopens', a
     await employee.goto(`/tickets/${ticketId}`);
     await expect(
       employee.getByRole('heading', { name: new RegExp(escapeRegExp(subject)) }),
+    ).toBeVisible();
+    /*
+      Wait for a POSITIVE signal that the comment list itself has loaded before
+      asserting the note is absent. The composer renders outside the query's
+      loading branch, so keying off it would let both `toHaveCount(0)`
+      assertions pass at t=0 — they would still pass if the leak were real but
+      merely slow. The only comment on this ticket is the agent's internal
+      note, so for this employee the loaded list must render its empty state.
+    */
+    await expect(
+      employee.getByText('No comments on this ticket yet.'),
     ).toBeVisible();
     await expect(employee.getByLabel('Add a comment')).toBeVisible();
     await expect(employee.getByText(internalNote)).toHaveCount(0);

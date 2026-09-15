@@ -55,7 +55,6 @@ export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined>;
-  signal?: AbortSignal;
   /**
    * Suppresses the refresh-and-retry behaviour. Set for the auth endpoints
    * themselves: a 401 from `/auth/refresh` *is* the failure, and retrying
@@ -90,14 +89,19 @@ function buildUrl(path: string, query?: ApiRequestOptions['query']): string {
   return url;
 }
 
+/** A response already drained to its parsed body, so no caller holds a stream. */
+interface RawResponse {
+  status: number;
+  ok: boolean;
+  body: unknown;
+}
+
 async function sendRequest(
   path: string,
   options: ApiRequestOptions,
-): Promise<Response> {
+): Promise<RawResponse> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const onCallerAbort = () => controller.abort();
-  options.signal?.addEventListener('abort', onCallerAbort);
 
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) {
@@ -108,7 +112,7 @@ async function sendRequest(
   }
 
   try {
-    return await fetch(buildUrl(path, options.query), {
+    const response = await fetch(buildUrl(path, options.query), {
       method: options.method ?? 'GET',
       headers,
       // Sends the httpOnly refresh cookie. Same-origin in practice, but
@@ -117,11 +121,15 @@ async function sendRequest(
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: controller.signal,
     });
+    // Read inside the same try, so the timeout covers the body as well as the
+    // headers. `fetch` resolves as soon as headers arrive; a server that then
+    // stalls mid-body would otherwise hang here forever.
+    const body = await readBody(response);
+    return { status: response.status, ok: response.ok, body };
   } catch (error) {
     throw ApiError.network(error);
   } finally {
     clearTimeout(timeout);
-    options.signal?.removeEventListener('abort', onCallerAbort);
   }
 }
 
@@ -129,22 +137,27 @@ async function readBody(response: Response): Promise<unknown> {
   if (response.status === 204) {
     return undefined;
   }
+  // A failure to read the stream at all (abort, connection dropped mid-body)
+  // is deliberately allowed to propagate: the caller turns it into a network
+  // error, which is what it is. Only unparseable content is tolerated.
+  const text = await response.text();
+  if (text === '') {
+    return undefined;
+  }
   try {
-    const text = await response.text();
-    return text === '' ? undefined : (JSON.parse(text) as unknown);
+    return JSON.parse(text) as unknown;
   } catch {
-    // A non-JSON body (proxy error page, truncated response) must not crash
-    // the caller; ApiError falls back to a generic message.
+    // A non-JSON body (proxy error page, HTML error) must not crash the
+    // caller; ApiError falls back to a generic message.
     return undefined;
   }
 }
 
-async function toResult<T>(response: Response): Promise<T> {
-  const body = await readBody(response);
+function toResult<T>(response: RawResponse): T {
   if (!response.ok) {
-    throw ApiError.fromResponse(response.status, body);
+    throw ApiError.fromResponse(response.status, response.body);
   }
-  return body as T;
+  return response.body as T;
 }
 
 /* ------------------------------------------------------------------ */
@@ -163,7 +176,7 @@ async function performRefresh(): Promise<string | null> {
     if (!result.ok) {
       return null;
     }
-    const body = (await readBody(result)) as { accessToken?: string } | undefined;
+    const body = result.body as { accessToken?: string } | undefined;
     if (!body?.accessToken) {
       return null;
     }
@@ -192,7 +205,7 @@ async function performRefresh(): Promise<string | null> {
  * unavailable the plain in-tab single flight is used instead — authentication
  * still works end to end; only cross-tab coordination is lost.
  */
-async function withCrossTabLock<T>(run: () => Promise<T>): Promise<T> {
+export async function withCrossTabLock<T>(run: () => Promise<T>): Promise<T> {
   const locks =
     typeof navigator !== 'undefined'
       ? (navigator as Navigator & { locks?: LockManager }).locks
@@ -266,7 +279,7 @@ export async function apiFetch<T>(
   const token = await refreshAccessToken();
   if (!token) {
     notifySessionExpired();
-    throw ApiError.fromResponse(401, await readBody(response));
+    throw ApiError.fromResponse(401, response.body);
   }
 
   // Exactly one retry. A second 401 means the freshly-minted token was
