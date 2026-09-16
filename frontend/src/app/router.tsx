@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { LoginPage } from '../features/auth/LoginPage';
+import { useIsStaff } from '../features/auth/useAuth';
+import { SlaDashboardPage } from '../features/sla/pages/SlaDashboardPage';
 import { TicketCreatePage } from '../features/tickets/pages/TicketCreatePage';
 import { TicketDetailPage } from '../features/tickets/pages/TicketDetailPage';
 import { TicketListPage } from '../features/tickets/pages/TicketListPage';
@@ -18,6 +20,18 @@ function TicketDetailRoute() {
   return <TicketDetailPage key={id} />;
 }
 
+/**
+ * The SLA dashboard is staff-only. A non-staff user gets the app's ordinary
+ * "page not found" rather than a page that mounts and then shows a 403: the
+ * dashboard's queries never run for them, so there is nothing to 403 on, and
+ * confirming that a page exists but is off-limits tells them more than they
+ * need to know. The real gate is the backend's `@Roles()` guard — this only
+ * decides what is offered.
+ */
+function SlaDashboardRoute() {
+  return useIsStaff() ? <SlaDashboardPage /> : <NotFoundPage />;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -33,6 +47,7 @@ export function AppRoutes() {
         <Route path="/tickets" element={<TicketListPage />} />
         <Route path="/tickets/new" element={<TicketCreatePage />} />
         <Route path="/tickets/:id" element={<TicketDetailRoute />} />
+        <Route path="/sla" element={<SlaDashboardRoute />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

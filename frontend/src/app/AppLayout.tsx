@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
-import { useAuth } from '../features/auth/useAuth';
+import { useAuth, useIsStaff } from '../features/auth/useAuth';
+
+const NAV_LINK_CLASSES =
+  'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
 
 const ROLE_LABELS: Record<string, string> = {
   Employee: 'Employee',
@@ -12,6 +15,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function AppLayout() {
   const { user, signOut } = useAuth();
+  const isStaff = useIsStaff();
   const [signingOut, setSigningOut] = useState(false);
 
   async function handleSignOut() {
@@ -62,7 +66,7 @@ export function AppLayout() {
                   <NavLink
                     to="/tickets/new"
                     className={({ isActive }) =>
-                      `rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 ${
+                      `${NAV_LINK_CLASSES} ${
                         isActive
                           ? 'font-semibold text-slate-900 underline'
                           : 'text-slate-600 hover:text-slate-900'
@@ -72,6 +76,24 @@ export function AppLayout() {
                     New ticket
                   </NavLink>
                 </li>
+                {/* The SLA dashboard is staff-only; the route itself renders
+                    "page not found" for anyone else. */}
+                {isStaff ? (
+                  <li>
+                    <NavLink
+                      to="/sla"
+                      className={({ isActive }) =>
+                        `${NAV_LINK_CLASSES} ${
+                          isActive
+                            ? 'font-semibold text-slate-900 underline'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`
+                      }
+                    >
+                      SLA
+                    </NavLink>
+                  </li>
+                ) : null}
               </ul>
             </nav>
           </div>

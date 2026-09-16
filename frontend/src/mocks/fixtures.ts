@@ -1,10 +1,13 @@
 import type {
   AuthenticatedUser,
   Role,
+  SlaMetrics,
+  SlaPolicy,
   Ticket,
   TicketCategory,
   TicketComment,
   TicketHistoryEntry,
+  TicketSla,
   UserSummary,
 } from '../types/api';
 
@@ -19,6 +22,9 @@ export const IDS = {
   categoryLaptop: 'c2222222-2222-4222-8222-222222222222',
   categorySoftware: 'c3333333-3333-4333-8333-333333333333',
   categoryNetwork: 'c4444444-4444-4444-8444-444444444444',
+  policyCritical: 'b1111111-1111-4111-8111-111111111111',
+  policyHigh: 'b2222222-2222-4222-8222-222222222222',
+  policyMedium: 'b3333333-3333-4333-8333-333333333333',
 } as const;
 
 export const employeeUser: AuthenticatedUser = {
@@ -67,6 +73,75 @@ export const categories: TicketCategory[] = [
   { id: IDS.categorySoftware, name: 'Software', parentId: null, isActive: true },
 ];
 
+/** Minutes from "now" expressed as the ISO string the wire would carry. */
+function minutesFromNow(minutes: number): string {
+  return new Date(Date.now() + minutes * 60_000).toISOString();
+}
+
+/**
+ * A healthy, running SLA by default — both clocks live, nothing paused,
+ * nothing breached. Every other case is produced by overriding, so each test
+ * states exactly the SLA situation it is about.
+ *
+ * The due dates are relative to "now" so the default fixture is internally
+ * consistent with its own `minutesRemaining`. Tests that deliberately want
+ * an inconsistent pair (a `Breached` state with a FUTURE due date, say, to
+ * prove the UI never re-derives state from a date) override them explicitly.
+ */
+export function makeTicketSla(overrides: Partial<TicketSla> = {}): TicketSla {
+  return {
+    responseTargetMinutes: 60,
+    resolutionTargetMinutes: 480,
+    responseDueAt: minutesFromNow(45),
+    responseAt: null,
+    responseState: 'Running',
+    responseMinutesRemaining: 45,
+    resolutionDueAt: minutesFromNow(300),
+    resolutionState: 'Running',
+    resolutionMinutesRemaining: 300,
+    isPaused: false,
+    totalPausedMinutes: 0,
+    ...overrides,
+  };
+}
+
+export const slaPolicies: SlaPolicy[] = [
+  {
+    id: IDS.policyCritical,
+    name: 'Critical priority',
+    priority: 'Critical',
+    responseTimeMinutes: 15,
+    resolutionTimeMinutes: 240,
+    isActive: true,
+  },
+  {
+    id: IDS.policyHigh,
+    name: 'High priority',
+    priority: 'High',
+    responseTimeMinutes: 60,
+    resolutionTimeMinutes: 480,
+    isActive: true,
+  },
+  {
+    id: IDS.policyMedium,
+    name: 'Retired medium priority',
+    priority: 'Medium',
+    responseTimeMinutes: 240,
+    resolutionTimeMinutes: 1440,
+    isActive: false,
+  },
+];
+
+export const slaMetrics: SlaMetrics = {
+  openWithSla: 12,
+  resolutionBreachedInFlight: 3,
+  resolutionBreachedCompleted: 5,
+  respondedOnTime: 21,
+  respondedLate: 4,
+  responseOverdueOutstanding: 2,
+  neverResponded: 1,
+};
+
 export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
   return {
     id: IDS.ticketA,
@@ -83,6 +158,7 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     requester: employeeSummary,
     assignee: null,
     category: categories[0],
+    sla: makeTicketSla(),
     ...overrides,
   };
 }

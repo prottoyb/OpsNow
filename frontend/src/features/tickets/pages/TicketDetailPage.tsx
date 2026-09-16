@@ -15,6 +15,7 @@ import type {
   UpdateTicketInput,
 } from '../../../types/api';
 import { useAuth, useIsStaff } from '../../auth/useAuth';
+import { TicketSlaPanel } from '../../sla/components/TicketSlaPanel';
 import { AssignmentControl } from '../components/AssignmentControl';
 import { CommentForm } from '../components/CommentForm';
 import { CommentList } from '../components/CommentList';
@@ -379,6 +380,10 @@ export function TicketDetailPage() {
               </div>
             </section>
           ) : null}
+
+          {/* Identical for every role: the SLA payload is the same shape for
+              an Employee and for staff on a ticket they can already see. */}
+          <TicketSlaPanel ticket={ticket} />
 
           <TicketMetadata ticket={ticket} />
         </aside>

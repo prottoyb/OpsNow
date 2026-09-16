@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { formatDateTime, fullName, toDateTimeAttribute } from '../../../lib/format';
 import type { Ticket } from '../../../types/api';
+import { TicketSlaIndicator } from '../../sla/components/TicketSlaIndicator';
 import { TicketPriorityBadge, TicketStatusBadge } from './TicketStatusBadge';
 
 const LINK_CLASSES =
@@ -36,6 +37,9 @@ export function TicketTable({ tickets }: { tickets: readonly Ticket[] }) {
                 Priority
               </th>
               <th scope="col" className="px-3 py-2 font-semibold">
+                SLA
+              </th>
+              <th scope="col" className="px-3 py-2 font-semibold">
                 Assignee
               </th>
               <th scope="col" className="px-3 py-2 font-semibold">
@@ -68,6 +72,9 @@ export function TicketTable({ tickets }: { tickets: readonly Ticket[] }) {
                 <td className="px-3 py-2">
                   <TicketPriorityBadge priority={ticket.priority} />
                 </td>
+                <td className="px-3 py-2">
+                  <TicketSlaIndicator ticket={ticket} />
+                </td>
                 <td className="px-3 py-2 text-slate-700">
                   {assigneeLabel(ticket)}
                 </td>
@@ -95,6 +102,7 @@ export function TicketTable({ tickets }: { tickets: readonly Ticket[] }) {
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <TicketStatusBadge status={ticket.status} />
               <TicketPriorityBadge priority={ticket.priority} />
+              <TicketSlaIndicator ticket={ticket} />
             </div>
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 text-xs text-slate-600">
               <dt className="font-medium">Assignee</dt>

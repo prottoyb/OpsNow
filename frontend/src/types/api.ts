@@ -50,6 +50,36 @@ export const COMMENT_VISIBILITIES = ['Public', 'Internal'] as const;
 export type CommentVisibility = (typeof COMMENT_VISIBILITIES)[number];
 
 /**
+ * Mirrors `SlaResponseState` in `backend/src/sla/sla.constants.ts`.
+ *
+ * These strings are the ONLY authority on whether a clock has met, breached,
+ * or is at risk. The frontend never re-derives any of them from a due date
+ * and the browser clock — see DECISIONS.md ADR-021.
+ */
+export const SLA_RESPONSE_STATES = [
+  'Met',
+  'Breached',
+  'Running',
+  'AtRisk',
+  'Paused',
+  'NoResponse',
+] as const;
+export type SlaResponseState = (typeof SLA_RESPONSE_STATES)[number];
+
+/**
+ * Mirrors `SlaResolutionState`. There is deliberately no resolution
+ * equivalent of `NoResponse` — a ticket is only ever resolved or not.
+ */
+export const SLA_RESOLUTION_STATES = [
+  'Met',
+  'Breached',
+  'AtRisk',
+  'Running',
+  'Paused',
+] as const;
+export type SlaResolutionState = (typeof SLA_RESOLUTION_STATES)[number];
+
+/**
  * `GET /auth/me` returns only id/email/role — deliberately NOT the user's
  * name (see `backend/src/auth/auth.controller.ts`). `POST /auth/login` does
  * return the name, but the app shell shows email + role only, so the header
@@ -89,6 +119,67 @@ export interface TicketCategory {
   isActive: boolean;
 }
 
+/**
+ * `TicketSlaResponseDto`, embedded on every ticket (list and detail) as
+ * `sla`, and identical for every role for a ticket that role can already
+ * see. Null only when no SLA policy was active for the ticket's priority at
+ * creation time.
+ *
+ * Two fields carry non-obvious semantics that the UI must respect:
+ *
+ *   `responseMinutesRemaining` / `resolutionMinutesRemaining` are clamped at
+ *   0 and FROZEN while `isPaused` — the persisted due dates are not shifted
+ *   until the clock resumes, so `dueAt - now` is simply wrong during a
+ *   pause. These figures, not the due dates, are what the countdown ages.
+ *   On a completed (resolved/closed) clock they keep decaying against
+ *   wall-clock time and are meaningless; nothing renders them there.
+ *
+ *   `totalPausedMinutes` is display-only and is never an input to a
+ *   breach/remaining calculation (ADR-020).
+ */
+export interface TicketSla {
+  responseTargetMinutes: number;
+  resolutionTargetMinutes: number;
+  /** ISO-8601 string over the wire — see the file header. */
+  responseDueAt: string;
+  /** ISO-8601 string over the wire — see the file header. */
+  responseAt: string | null;
+  responseState: SlaResponseState;
+  responseMinutesRemaining: number;
+  /** ISO-8601 string over the wire — see the file header. */
+  resolutionDueAt: string;
+  resolutionState: SlaResolutionState;
+  resolutionMinutesRemaining: number;
+  /** True only while the ticket status is OnHold. */
+  isPaused: boolean;
+  totalPausedMinutes: number;
+}
+
+/** `GET /sla-policies` — staff only. Read-only; there is no policy CRUD. */
+export interface SlaPolicy {
+  id: string;
+  name: string;
+  priority: TicketPriority;
+  responseTimeMinutes: number;
+  resolutionTimeMinutes: number;
+  isActive: boolean;
+}
+
+/**
+ * `GET /sla/metrics` — staff only. Seven counts, and deliberately no
+ * at-risk aggregate: at-risk is a per-ticket fraction of that ticket's own
+ * target, which no single count query can express (ADR-020).
+ */
+export interface SlaMetrics {
+  openWithSla: number;
+  resolutionBreachedInFlight: number;
+  resolutionBreachedCompleted: number;
+  respondedOnTime: number;
+  respondedLate: number;
+  responseOverdueOutstanding: number;
+  neverResponded: number;
+}
+
 export interface Ticket {
   id: string;
   ticketNumber: number;
@@ -108,6 +199,8 @@ export interface Ticket {
   requester: UserSummary;
   assignee: UserSummary | null;
   category: TicketCategory | null;
+  /** Null when no SLA policy was active for this priority at creation. */
+  sla: TicketSla | null;
 }
 
 export interface TicketComment {

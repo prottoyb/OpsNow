@@ -1,6 +1,8 @@
 import { HttpResponse, http } from 'msw';
 import type {
   AuthenticatedUser,
+  SlaMetrics,
+  SlaPolicy,
   Ticket,
   TicketCategory,
   TicketComment,
@@ -12,6 +14,8 @@ import {
   categories as defaultCategories,
   employeeUser,
   makeTicket,
+  slaMetrics as defaultSlaMetrics,
+  slaPolicies as defaultSlaPolicies,
 } from './fixtures';
 
 /**
@@ -39,6 +43,8 @@ export interface MockState {
   comments: TicketComment[];
   history: TicketHistoryEntry[];
   categories: TicketCategory[];
+  slaPolicies: SlaPolicy[];
+  slaMetrics: SlaMetrics;
 }
 
 export const mockState: MockState = createInitialState();
@@ -53,6 +59,8 @@ function createInitialState(): MockState {
     comments: [],
     history: [],
     categories: [...defaultCategories],
+    slaPolicies: [...defaultSlaPolicies],
+    slaMetrics: { ...defaultSlaMetrics },
   };
 }
 
@@ -105,7 +113,15 @@ function findVisibleTicket(user: AuthenticatedUser, id: string): Ticket | null {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export const handlers = [
+/**
+ * Everything except the two staff-only SLA routes.
+ *
+ * Exported separately so a test can run the app with the SLA routes
+ * deliberately UNHANDLED: `src/test/setup.ts` starts MSW with
+ * `onUnhandledRequest: 'error'`, so a stray request from a non-staff user's
+ * app fails loudly instead of quietly succeeding against a mock.
+ */
+export const coreHandlers = [
   /* ---------------------------- auth ---------------------------- */
 
   http.post(`${BASE}/auth/login`, async ({ request }) => {
@@ -459,3 +475,49 @@ export const handlers = [
     });
   }),
 ];
+
+/* ------------------------------- sla ------------------------------- */
+
+export const slaHandlers = [
+  /*
+   * Both routes are staff-only on the backend (`@Roles(...STAFF_ROLES)` plus
+   * `SlaService.assertStaff`). The 403 is reproduced here so a test that
+   * deliberately calls them as an Employee sees the real answer — but the
+   * app is built never to ask: `useSlaPolicies`/`useSlaMetrics` are disabled
+   * for a non-staff user, and MSW's `onUnhandledRequest: 'error'` would fail
+   * the test if anything slipped through.
+   */
+
+  http.get(`${BASE}/sla-policies`, ({ request }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/sla-policies');
+    }
+    if (!isStaffRole(user.role)) {
+      return errorResponse(
+        403,
+        'Only staff can access SLA data',
+        '/api/v1/sla-policies',
+      );
+    }
+    // Bare array, not a {data,total} envelope.
+    return HttpResponse.json(mockState.slaPolicies);
+  }),
+
+  http.get(`${BASE}/sla/metrics`, ({ request }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/sla/metrics');
+    }
+    if (!isStaffRole(user.role)) {
+      return errorResponse(
+        403,
+        'Only staff can access SLA data',
+        '/api/v1/sla/metrics',
+      );
+    }
+    return HttpResponse.json(mockState.slaMetrics);
+  }),
+];
+
+export const handlers = [...coreHandlers, ...slaHandlers];
