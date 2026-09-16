@@ -10,23 +10,27 @@ Project status: In Progress
 
 
 
-Current phase: Phase 7 — SLA Management (not started)
+Current phase: Phase 7b — SLA Management Frontend UI (not started)
 
 
 
-Current task: none — Phase 6b is complete
+Current task: none — Phase 7a is complete
 
 
 
-Last completed task: Phase 6b — Ticket Management Frontend UI (Vite/React/
+Last completed task: Phase 7a — SLA Management Backend API (SLA policy
 
-TypeScript/Tailwind application, login, ticket list/create/detail pages,
+snapshotting, response/resolution clocks, pause/resume, first-response
 
-role-aware UI, Playwright workflow test — implemented, reviewed and verified)
+qualification, reopen pause-credit, priority-change deltas, staff-only
+
+policy/metrics endpoints — implemented, reviewed and verified; recovered
+
+from a mid-implementation power-cut interruption)
 
 
 
-Next task: Begin Phase 7 — SLA Management
+Next task: Begin Phase 7b — SLA Management Frontend UI
 
 
 
@@ -1502,7 +1506,197 @@ Next:
 
 
 
-\- Begin Phase 7 — SLA Management.
+\- Begin Phase 7a — SLA Management Backend API (see the entry below —
+
+this has since been completed).
+
+
+
+\---
+
+
+
+\### 2026-09-16 — Phase 7a SLA Management Backend API Implemented (recovered from a power-cut interruption)
+
+
+
+An unplanned power cut interrupted the implementation session mid-way
+
+through wiring `SlaService` into `TicketsService`: two clean, tested
+
+commits already existed (the pure SLA calculation/state-derivation layer,
+
+and `SlaService`'s DB-access hooks), but the wiring commit itself was
+
+uncommitted and left the build broken (a private `mapTicket` helper was
+
+called five times but never defined) and its test file stale (constructor
+
+signature mismatch). A recovery investigation (git worktree inspection,
+
+diff review, targeted `npm run typecheck`) confirmed both existing commits
+
+were sound and isolated the damage to exactly that one interrupted edit —
+
+nothing was reset, discarded, or reimplemented from scratch.
+
+
+
+Recovery and completion:
+
+
+
+\- Wrote ADR-020 (DECISIONS.md), documenting the SLA architecture the two
+
+recovered commits had already implemented but never recorded: policy
+
+snapshotting at ticket creation, the two-clock (response/resolution)
+
+model, due-date-shift pause semantics, the dual-purpose `onHoldStartedAt`
+
+anchor (OnHold pause vs. resolved-pending-reopen), first-response
+
+qualification (D3), the reopen pause-credit reuse (D4), priority-change
+
+deltas, and the same-statement read-then-write concurrency invariants.
+
+\- Completed the interrupted wiring: added the missing `mapTicket` helper,
+
+registered `SlaModule` on `TicketsModule`, extended `TicketResponseDto`
+
+with the SLA read-model shape, and updated `tickets.service.spec.ts` for
+
+the new `SlaService` dependency with hook-ordering assertions for every
+
+call site (create, first response, OnHold pause/resume, resolution,
+
+reopen, priority change).
+
+\- Added the two staff-only read endpoints: `GET /api/v1/sla-policies` and
+
+`GET /api/v1/sla/metrics` (typed Prisma `count()` aggregates, scoped
+
+through the same `ticketVisibilityWhere` as ADR-019), plus
+
+`test/sla.e2e-spec.ts` against the real Postgres dev database.
+
+
+
+Independent review (per the engineering constitution's Mandatory Gate #2
+
+— separate QA/Security and Senior Review agents, neither involved in the
+
+implementation) found one HIGH and several MEDIUM issues before this
+
+phase was considered done:
+
+
+
+\- **HIGH (fixed):** a first response recorded while a ticket was paused
+
+compared the reply's timestamp against the still-unshifted due date,
+
+which could permanently mis-record a breach for a genuinely on-time
+
+response. Fixed by deciding breach from whether the pause itself started
+
+after the due date had already passed, not from the reply's own timing.
+
+\- **MEDIUM (fixed):** the reopen pause-credit anchor was written from the
+
+application clock (`resolvedAt`) rather than the database clock, risking
+
+clock-skew corruption of credited pause time on a reopen; the reopen path
+
+also left a stale `resolutionBreached = true` flag uncleared, which the
+
+new metrics aggregate would have double-counted. Both fixed in
+
+`SlaService`.
+
+\- **MEDIUM (fixed):** a priority change on an already-resolved ticket
+
+could still shift SLA due dates on a completed clock; `handlePriorityChange`
+
+now skips the entire delta (warn-and-skip, matching the existing
+
+missing-policy pattern) once the ticket has resolved at least once.
+
+\- **MEDIUM (fixed):** several new e2e tests asserted post-conditions that
+
+could not actually fail if the mechanism they claimed to cover were
+
+removed (a due-date shift never checked, a concurrency race assertion
+
+that was genuinely flaky under real HTTP scheduling). Rewritten to assert
+
+real due-date arithmetic, a non-flaky invariant for the concurrency test
+
+(status ∈ {200, 409}, ≥1 success, history-row count matches success
+
+count, final due dates match the commutative-delta invariant exactly),
+
+and behavioral (before/after) metrics deltas instead of type-only checks.
+
+
+
+All fixes are recorded in ADR-020 itself (Risks section) rather than
+
+silently rewritten in, so the ADR remains an honest record of what the
+
+design got right the first time versus what independent review caught.
+
+
+
+Verification after fixes: `npm run typecheck` clean; unit tests 170/170;
+
+e2e tests 91/91 (all against the real local `opsnow_dev` Postgres,
+
+including new regression tests for every fix above); `npm run build`
+
+clean; `npm audit` — 0 vulnerabilities; seed data (5 tickets, 4 SLA
+
+policies, 7 users) confirmed unchanged after every test run.
+
+
+
+No migration was created — `SlaPolicy`/`TicketSla` were already part of
+
+the Phase 2 schema. Phase 7b (frontend) was not started; no frontend file
+
+was touched. Work stayed on the recovered git worktree branch
+
+(`worktree-agent-a57e68f9c940eddb3`); the two pre-interruption commits
+
+were preserved untouched, and new commits were added on top rather than
+
+amending or rebasing. Not yet merged into `main`.
+
+
+
+Known gaps, unchanged or newly noted:
+
+
+
+\- No CI pipeline and no backend ESLint configuration (pre-existing, see
+
+the Phase 6b entry above).
+
+\- The pause/reopen anchor's DB-clock-only invariant and the
+
+resume-before-resolve hook ordering are both enforced only by code
+
+discipline plus a regression test, not a schema-level constraint —
+
+flagged as an accepted, revisitable risk in ADR-020.
+
+
+
+Next:
+
+
+
+\- Begin Phase 7b — SLA Management Frontend UI.
 
 
 

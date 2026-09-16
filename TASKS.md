@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 7 — SLA Management (Phases 6a and 6b — Ticket Management backend API and frontend UI — complete)
+Current Phase: Phase 7b — SLA Management (Frontend UI) (Phase 7a — SLA Management backend API — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete)
 
 
 
@@ -402,29 +402,77 @@ so it cannot originate one, but the backend should reject it cleanly.
 
 
 
-\# Phase 7 — SLA Management
+\# Phase 7a — SLA Management (Backend API)
 
 
 
-\- \[ ] Create SLA policies
+\- \[x] Create SLA policies
 
-\- \[ ] Define priority-based SLA rules
+\- \[x] Define priority-based SLA rules
 
-\- \[ ] Implement response SLA calculation
+\- \[x] Implement response SLA calculation
 
-\- \[ ] Implement resolution SLA calculation
+\- \[x] Implement resolution SLA calculation
 
-\- \[ ] Implement SLA countdown
+\- \[x] Implement SLA countdown
 
-\- \[ ] Implement SLA breach detection
+\- \[x] Implement SLA breach detection
 
-\- \[ ] Implement SLA at-risk status
+\- \[x] Implement SLA at-risk status
 
-\- \[ ] Add SLA information to tickets
+\- \[x] Add SLA information to tickets
 
-\- \[ ] Build SLA dashboard metrics
+\- \[x] Build SLA dashboard metrics
 
-\- \[ ] Add SLA tests
+\- \[x] Add SLA tests
+
+
+
+See DECISIONS.md ADR-020 for the full design (policy snapshotting,
+
+pause/resume due-date shifting, first-response qualification, the
+
+reopen pause-credit mechanism, priority-change deltas, and the
+
+concurrency invariants). `SlaPolicy`/`TicketSla` were already part of
+
+the Phase 2 schema/migration — Phase 7a adds no new migration.
+
+
+
+Split into 7a (backend) / 7b (frontend) following the Phase 6a/6b
+
+precedent, since a backend-complete, frontend-not-started SLA feature
+
+is a real, independently verifiable milestone.
+
+
+
+\---
+
+
+
+\# Phase 7b — SLA Management (Frontend UI)
+
+
+
+\- \[ ] Show each ticket's SLA state (response/resolution due, remaining
+
+time, breach/at-risk/paused) on the ticket detail page
+
+\- \[ ] Surface SLA state (e.g. an at-risk/breached indicator) in the
+
+ticket list
+
+\- \[ ] Build a staff-only SLA dashboard view consuming
+
+`GET /api/v1/sla/metrics` and `GET /api/v1/sla-policies`
+
+\- \[ ] Add frontend tests for the above
+
+
+
+Not started. No frontend files were touched by Phase 7a.
 
 
 
