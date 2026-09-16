@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 7b — SLA Management (Frontend UI) (Phase 7a — SLA Management backend API — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete)
+Current Phase: Phase 8 — Asset Management (Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete)
 
 
 
@@ -456,23 +456,39 @@ is a real, independently verifiable milestone.
 
 
 
-\- \[ ] Show each ticket's SLA state (response/resolution due, remaining
+\- \[x] Show each ticket's SLA state (response/resolution due, remaining
 
 time, breach/at-risk/paused) on the ticket detail page
 
-\- \[ ] Surface SLA state (e.g. an at-risk/breached indicator) in the
+\- \[x] Surface SLA state (e.g. an at-risk/breached indicator) in the
 
 ticket list
 
-\- \[ ] Build a staff-only SLA dashboard view consuming
+\- \[x] Build a staff-only SLA dashboard view consuming
 
 `GET /api/v1/sla/metrics` and `GET /api/v1/sla-policies`
 
-\- \[ ] Add frontend tests for the above
+\- \[x] Add frontend tests for the above
 
 
 
-Not started. No frontend files were touched by Phase 7a.
+See DECISIONS.md ADR-021 for the frontend rendering model (backend SLA
+
+state strings are authoritative and never re-derived client-side; the
+
+countdown ages the backend’s own `minutesRemaining` from a locally
+
+captured receipt instant; paused and finished clocks do not tick; one
+
+shared visibility-aware timer drives every countdown; nothing refetches
+
+when a countdown reaches zero).
+
+
+
+No backend file was changed — Phase 7b consumes the Phase 7a contract
+
+as-is, and adds no new endpoint. No new dependency was added.
 
 
 

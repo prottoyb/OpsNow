@@ -10,27 +10,27 @@ Project status: In Progress
 
 
 
-Current phase: Phase 7b — SLA Management Frontend UI (not started)
+Current phase: Phase 8 — Asset Management (not started)
 
 
 
-Current task: none — Phase 7a is complete
+Current task: none — Phase 7b is complete
 
 
 
-Last completed task: Phase 7a — SLA Management Backend API (SLA policy
+Last completed task: Phase 7b — SLA Management Frontend UI (per-ticket
 
-snapshotting, response/resolution clocks, pause/resume, first-response
+SLA panel on the ticket detail page, a per-row SLA indicator in the ticket
 
-qualification, reopen pause-credit, priority-change deltas, staff-only
+list, and a staff-only SLA dashboard over the existing policy/metrics
 
-policy/metrics endpoints — implemented, reviewed and verified; recovered
+endpoints — implemented, tested and verified; no backend file changed and
 
-from a mid-implementation power-cut interruption)
+no dependency added)
 
 
 
-Next task: Begin Phase 7b — SLA Management Frontend UI
+Next task: Begin Phase 8 — Asset Management
 
 
 
@@ -1697,6 +1697,228 @@ Next:
 
 
 \- Begin Phase 7b — SLA Management Frontend UI.
+
+
+
+\---
+
+
+
+\### 2026-09-16 — Phase 7b SLA Management Frontend UI Implemented
+
+
+
+Phase 7a's SLA data is now visible and usable in the application. No
+
+backend file was changed: Phase 7b consumes the Phase 7a contract exactly
+
+as it stands, adds no endpoint, and adds no dependency of any kind.
+
+
+
+What was built:
+
+
+
+\- A new `frontend/src/features/sla/` feature: a pure presentation module
+
+(`slaDisplay.ts`) that turns a backend SLA state into a badge, tone,
+
+wording and countdown mode; a shared ticker (`slaTicker.ts`); the
+
+receipt-instant anchor (`useSlaAnchor.ts`); the countdown, detail panel
+
+and list indicator components; the staff-only query hooks and API
+
+wrappers; and the SLA dashboard page.
+
+
+
+\- Ticket detail page: an SLA panel in the existing sidebar showing both
+
+clocks, each with its own badge, due date, target, completion instant
+
+where it has one, and an explanatory line. Every state is handled,
+
+including paused, paused-but-already-past-due, resolved/closed,
+
+no-response, reopened, and no SLA at all.
+
+
+
+\- Ticket list: one SLA badge per row — desktop table column and mobile
+
+card — showing the more severe of the two clocks and always naming which
+
+clock it refers to ("Response breached", "Resolution at risk"), never a
+
+generic "SLA" label.
+
+
+
+\- Staff-only SLA dashboard at `/sla`, consuming only the two existing
+
+endpoints. The seven metric counts render as a definition list (no
+
+charts) and the policies as a real table. The two sections load and fail
+
+independently. The absence of an at-risk aggregate is stated plainly
+
+rather than fabricated. A non-staff user gets no nav link, falls through
+
+to the ordinary "page not found" on a deep link, and never issues either
+
+request.
+
+
+
+Rendering model (ADR-021):
+
+
+
+\- The backend's `responseState`/`resolutionState` strings are
+
+authoritative. Nothing in the frontend derives met/breached/at-risk from
+
+a due date and the browser clock.
+
+
+
+\- The countdown ages the backend's own `minutesRemaining` from an instant
+
+captured locally the first time that exact payload is seen, keyed on the
+
+payload's object identity — never from `dueAt - Date.now()`, and
+
+deliberately never from TanStack Query's `dataUpdatedAt`, which is `0`
+
+while `useTicketList` renders placeholder data and would age every row on
+
+the page by decades.
+
+
+
+\- Paused clocks show a frozen figure; finished clocks show no figure at
+
+all. Neither subscribes to the ticker, so not ticking is structural.
+
+
+
+\- One shared, visibility-aware 30-second interval drives every countdown
+
+on the page, and a countdown reaching zero triggers no network request of
+
+any kind.
+
+
+
+Verification (all run in this worktree):
+
+
+
+\- Frontend: `npm run typecheck` clean; `npm run lint` clean;
+
+`npm run build` clean; `npm run test` — 16 files, 199 tests passed
+
+(119 pre-existing, 80 new); `npm audit` — 0 vulnerabilities.
+
+
+
+\- Playwright: `npm run test:e2e` — 2 passed (the pre-existing ticket
+
+workflow plus a new SLA spec covering an Employee flow and a staff flow),
+
+against the real backend and the real local `opsnow_dev` database. The
+
+dashboard assertions are structural only; no global metric count is
+
+asserted, because the developer's database is not state this suite owns.
+
+
+
+\- Backend regression (nothing was expected to change, and nothing did):
+
+`npm test` — 13 suites, 170 tests passed; `npm run test:e2e` — 6 suites,
+
+91 tests passed against the real Postgres dev database; `npm audit` — 0
+
+vulnerabilities.
+
+
+
+\- Seed data confirmed unchanged before and after every run: 5 tickets,
+
+4 SLA policies, 7 users, 5 ticket SLA rows, 3 comments. The Phase 6b
+
+tagged-subject data isolation was preserved exactly; nothing seeds,
+
+resets or wipes the development database.
+
+
+
+\- Rendered in a real Chromium against the running dev stack for an
+
+Employee and for a support agent, at desktop and phone widths, and the
+
+screenshots inspected: the detail panel, the list column and card badge,
+
+and the dashboard all render correctly. One seeded ticket happened to be
+
+sitting in the reachable `Paused` + zero-remaining state, which rendered
+
+with its own "Resolution paused — already past due" wording as designed.
+
+
+
+Two regression tests were confirmed to actually bite by temporarily
+
+breaking the code they guard: removing the local anchor made the
+
+placeholder-data countdown test fail, and removing `enabled` from the SLA
+
+query hooks made the "an Employee never requests staff-only SLA data"
+
+test fail. Both were restored immediately.
+
+
+
+Known gaps, unchanged or newly noted:
+
+
+
+\- No CI pipeline and no backend ESLint configuration (pre-existing, see
+
+the Phase 6b entry above).
+
+
+
+\- There is no repository-wide guard test forbidding a string argument to
+
+`setTimeout`/`setInterval`. The SLA ticker passes a function reference,
+
+and the existing `src/test/guards.test.ts` already forbids `eval` and
+
+`new Function`, but the string-argument form is not covered. Deliberately
+
+left out of this phase's scope; suggested as a future hygiene follow-up.
+
+
+
+\- The frontend's SLA state unions in `src/types/api.ts` mirror
+
+`backend/src/sla/sla.constants.ts` by hand. An exhaustive switch catches
+
+a state the frontend does not handle, but nothing mechanically keeps the
+
+two declarations in step (recorded in ADR-021's Risks).
+
+
+
+Next:
+
+
+
+\- Begin Phase 8 — Asset Management.
 
 
 

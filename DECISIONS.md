@@ -1576,3 +1576,325 @@ not a rewrite that erases that these were caught by review rather than
 
 anticipated from the start.
 
+
+
+\---
+
+
+
+\## ADR-021 — Frontend SLA Rendering Model
+
+
+
+Status: Accepted
+
+
+
+Context:
+
+
+
+Phase 7a gave every ticket an `sla` payload (ADR-020): two clocks, each
+
+carrying a backend-derived state string, a due date, and a
+
+clamped-and-pause-frozen `minutesRemaining`. Phase 7b renders that
+
+payload — an SLA panel on the ticket detail page, one indicator per
+
+ticket-list row, and a staff-only dashboard over the existing
+
+`GET /sla-policies` and `GET /sla/metrics`.
+
+
+
+This ADR covers presentation only. It does not change, restate or
+
+re-decide any part of ADR-020's backend model.
+
+
+
+Problem:
+
+
+
+Four rendering questions have answers that are not obvious from the code
+
+and that a future contributor would reasonably decide differently:
+
+(1) where met/breached/at-risk meaning comes from once the payload is in
+
+the browser; (2) what a countdown between refetches is actually measured
+
+against; (3) which clocks may tick at all, and how many timers that
+
+costs; (4) what should happen when a local countdown reaches zero.
+
+
+
+Options considered:
+
+
+
+For (1): deriving state in the browser by comparing the due date against
+
+`Date.now()` — the due date is already on the wire, so this needs
+
+nothing new — versus treating the backend's `responseState` and
+
+`resolutionState` strings as authoritative and never recomputing them.
+
+
+
+For (2): recomputing remaining time as `dueAt - Date.now()`; ageing the
+
+backend's own `minutesRemaining` from TanStack Query's `dataUpdatedAt`;
+
+or ageing it from an instant captured locally when the payload was first
+
+received.
+
+
+
+For (3): one `setInterval` per rendered countdown, which is simple and
+
+local, versus a single module-level timer that every countdown
+
+subscribes to; and separately, whether paused and finished clocks should
+
+tick at all.
+
+
+
+For (4): refetching the ticket, or invalidating its query, when a local
+
+countdown hits zero, versus leaving staleness entirely to TanStack
+
+Query's existing lifecycle.
+
+
+
+Decision:
+
+
+
+1\. Backend state is authoritative. `responseState` and `resolutionState`
+
+decide every badge, tone and piece of wording. The frontend never
+
+derives met/breached/at-risk from a due date and the browser clock.
+
+`features/sla/slaDisplay.ts` is the single place a state string becomes
+
+a view, and it reads no clock at all.
+
+
+
+2\. The countdown ages `minutesRemaining`, anchored locally. The
+
+displayed figure is `minutesRemaining - (now - anchor) / 60000`, where
+
+`anchor` is the instant this browser first saw this exact SLA payload
+
+(`useSlaAnchor`, keyed on the payload's object identity, which TanStack
+
+Query's structural sharing holds stable until the numbers actually
+
+change). Remaining time is never computed from `dueAt - Date.now()`, and
+
+elapsed time is floored at zero so a backwards system-clock jump cannot
+
+inflate a countdown.
+
+
+
+Specifically NOT `dataUpdatedAt`: `useTicketList` renders with
+
+`placeholderData: keepPreviousData`, and during a filter or page change
+
+the result carries the NEW query's `dataUpdatedAt`, which is `0` — the
+
+epoch. Every visible row would age by decades and read "Due now". A
+
+regression test covers this.
+
+
+
+3\. Only live clocks tick. A paused clock displays its frozen
+
+`minutesRemaining` — while paused the due dates have not been shifted
+
+yet, so nothing else would be correct — and a finished clock (met,
+
+breached, or resolved-without-response) displays no remaining figure at
+
+all, because `minutesRemaining` keeps decaying against wall-clock time
+
+there and means nothing. Neither subscribes to the ticker, so "does not
+
+tick" is structural rather than incidental.
+
+
+
+4\. One shared, visibility-aware timer. `features/sla/slaTicker.ts` holds
+
+a single module-level 30-second interval behind `useSyncExternalStore`:
+
+it starts on the first subscriber, stops on the last, stops while
+
+`document.hidden`, and publishes once immediately on return to
+
+visibility. Twenty list rows cost one timer, and every countdown on the
+
+page moves together.
+
+
+
+5\. A countdown reaching zero triggers nothing. No refetch, no
+
+invalidation, no request of any kind. Staleness is handled entirely by
+
+TanStack Query's `staleTime` / refetch-on-mount / refetch-on-focus
+
+lifecycle, exactly as it is for every other field on a ticket.
+
+
+
+6\. Local arithmetic may only ever shrink a figure to "Due now". It never
+
+renders a negative number, and never produces the words "overdue" or
+
+"breached" — those come only from a backend state string.
+
+
+
+Rationale:
+
+
+
+Deriving state client-side would make a ticket's SLA status depend on
+
+the viewer's system clock: two people could disagree about whether the
+
+same ticket had breached, and a skewed laptop could contradict the
+
+metrics the same backend computes for the dashboard. Worse, several of
+
+ADR-020's states cannot be derived client-side at all — `Met` versus a
+
+late-but-recorded `Breached` depends on a persisted flag, and
+
+`NoResponse` depends on the ticket having resolved without a qualifying
+
+reply — so a client-side rule would have to be partial, and a partial
+
+rule is more dangerous than none. `{ AtRisk, minutesRemaining: 0 }` is
+
+reachable for roughly the last thirty seconds before a breach, so even
+
+locally "zero remaining" is not a synonym for "breached".
+
+
+
+Ageing `minutesRemaining` rather than recomputing from `dueAt` keeps
+
+everything in one clock domain: the figure the server sent is the
+
+starting point and only the browser's own elapsed time is added, so no
+
+server instant is ever compared against a browser instant. A locally
+
+captured anchor costs network latency — tens of milliseconds against a
+
+figure displayed to the nearest minute — whereas `dataUpdatedAt` costs
+
+correctness, as above.
+
+
+
+One timer instead of one per row keeps a twenty-row list at a single
+
+wake-up, and stopping while the tab is hidden means a backgrounded tab
+
+does no work at all. Refetch-on-zero was considered and rejected: it
+
+would fire once per row on a list, and given a payload that is already
+
+at zero but not breached (the `{ AtRisk, 0 }` window above, or a paused
+
+clock frozen at zero) it could re-arm on the refetched payload and loop.
+
+
+
+Consequences:
+
+
+
+`slaDisplay.ts` is the only place a backend SLA state becomes
+
+user-facing wording, so any future surface must go through it or it will
+
+invent a second vocabulary for the same states. A countdown can sit up
+
+to about thirty seconds behind real time between ticks, and up to a
+
+refetch interval behind the server's own view; this is accepted because
+
+the badge — which is never locally derived — carries the
+
+decision-grade information and the countdown is only an aid. Because
+
+nothing refetches on zero, a ticket left open on screen eventually shows
+
+"Due now" beside a badge that still says what the backend last said,
+
+which is correct rather than merely stale-looking. The ticking figure is
+
+`aria-hidden` and carries no accessible meaning: a number that rewrites
+
+itself every thirty seconds is noise for a screen-reader user, so the
+
+badge text and the absolute `<time>` beside it carry the meaning
+
+instead. The dashboard states plainly that no at-risk total exists
+
+rather than fabricating one, because at risk is a per-ticket fraction of
+
+that ticket's own target and the backend deliberately computes no such
+
+aggregate (ADR-020).
+
+
+
+Risks:
+
+
+
+The anchor's stability depends on TanStack Query continuing to preserve
+
+object identity for unchanged data through structural sharing. If that
+
+ever changed, every refetch would re-anchor — harmless in itself, since
+
+the anchor would simply move to the newer and equally correct figure —
+
+but the reasoning recorded in `useSlaAnchor` would no longer describe
+
+what happens. The `dataUpdatedAt` hazard is prevented by a regression
+
+test, not by anything mechanical: a future contributor could reintroduce
+
+it by "simplifying" the anchor away, and only that test would catch it.
+
+Frontend and backend share the SLA state vocabulary by convention:
+
+`slaDisplay.ts`'s exhaustive switches make a state the frontend does not
+
+handle a TypeScript error, which is the practical guard, but the union
+
+in `frontend/src/types/api.ts` is a hand-maintained mirror of
+
+`backend/src/sla/sla.constants.ts` and nothing mechanically keeps the
+
+two in step.
+

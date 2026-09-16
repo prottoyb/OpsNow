@@ -176,17 +176,23 @@ usage limits and interruptions.
 
 
 
-Phases 0–6b are complete: project foundation, approved architecture
+Phases 0–7b are complete: project foundation, approved architecture
 
-(ADR-001 through ADR-019 in `DECISIONS.md`), the Prisma/PostgreSQL database
+(ADR-001 through ADR-021 in `DECISIONS.md`), the Prisma/PostgreSQL database
 
 layer, the NestJS backend foundation, authentication, authorization/RBAC,
 
-the ticket management REST API, and the ticket management frontend UI.
+the ticket management REST API and frontend UI, and SLA management — the
+
+backend SLA engine and staff-only policy/metrics endpoints (Phase 7a) plus
+
+the SLA frontend: per-ticket SLA state on the ticket detail page, an SLA
+
+indicator in the ticket list, and a staff-only SLA dashboard (Phase 7b).
 
 
 
-Development is currently entering Phase 7 — SLA Management.
+Development is currently entering Phase 8 — Asset Management.
 
 
 
