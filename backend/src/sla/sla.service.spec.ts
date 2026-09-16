@@ -122,6 +122,21 @@ describe('SlaService', () => {
       expect(values).toContain('ticket-1');
       expect(values).toContain(respondedAt);
     });
+
+    it('decides breach from the pause anchor (not the unshifted due date) while paused — H1 fix', async () => {
+      tx.$executeRaw.mockResolvedValue(1);
+      const respondedAt = new Date('2026-01-01T00:10:00.000Z');
+
+      await service.recordFirstResponse(tx as never, 'ticket-1', respondedAt);
+
+      const [strings] = tx.$executeRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+      const sql = strings.join('?');
+      // The CASE must branch on the row's own on_hold_started_at, never
+      // unconditionally comparing respondedAt to response_due_at — that
+      // was the H1 bug (a paused ticket's due date is not yet shifted).
+      expect(sql).toContain('WHEN on_hold_started_at IS NOT NULL THEN on_hold_started_at > response_due_at');
+      expect(sql).toContain('ELSE ');
+    });
   });
 
   describe('pauseForHold / resumeFromPause', () => {
@@ -148,6 +163,15 @@ describe('SlaService', () => {
       expect(sql).toContain('response_due_at');
       expect(sql).toContain('resolution_due_at');
     });
+
+    it('resumeFromPause also clears a stale resolution_breached flag — M1 fix', async () => {
+      tx.$executeRaw.mockResolvedValue(1);
+      await service.resumeFromPause(tx as never, 'ticket-1');
+
+      const [strings] = tx.$executeRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+      const sql = strings.join('?');
+      expect(sql).toContain('resolution_breached = false');
+    });
   });
 
   describe('handlePriorityChange', () => {
@@ -159,7 +183,7 @@ describe('SlaService', () => {
       });
       tx.$executeRaw.mockResolvedValue(1);
 
-      await service.handlePriorityChange(tx as never, 'ticket-1', TicketPriority.Critical);
+      await service.handlePriorityChange(tx as never, 'ticket-1', TicketPriority.Critical, null);
 
       expect(tx.slaPolicy.findFirst).toHaveBeenCalledWith({
         where: { priority: TicketPriority.Critical, isActive: true },
@@ -172,9 +196,26 @@ describe('SlaService', () => {
       const warnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation(() => undefined);
 
       await expect(
-        service.handlePriorityChange(tx as never, 'ticket-1', TicketPriority.Low),
+        service.handlePriorityChange(tx as never, 'ticket-1', TicketPriority.Low, null),
       ).resolves.toBeUndefined();
 
+      expect(tx.$executeRaw).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
+    it('skips the SLA delta entirely, without even looking up a policy, once the ticket has already resolved — M7 fix', async () => {
+      const warnSpy = jest.spyOn(service['logger'], 'warn').mockImplementation(() => undefined);
+
+      await expect(
+        service.handlePriorityChange(
+          tx as never,
+          'ticket-1',
+          TicketPriority.Critical,
+          new Date('2026-01-01T00:15:00.000Z'),
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(tx.slaPolicy.findFirst).not.toHaveBeenCalled();
       expect(tx.$executeRaw).not.toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalled();
     });
@@ -191,6 +232,19 @@ describe('SlaService', () => {
       expect(sql).toContain('s.on_hold_started_at IS NULL');
       expect(sql).toContain('t.resolved_at');
       expect(sql).toContain('FROM tickets t');
+    });
+
+    it('anchors on_hold_started_at with the DB clock (now()), never the app-clock t.resolved_at — M2 fix', async () => {
+      tx.$executeRaw.mockResolvedValue(1);
+      await service.recordResolutionOutcome(tx as never, 'ticket-1');
+
+      const [strings] = tx.$executeRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+      const sql = strings.join('?');
+      expect(sql).toMatch(/on_hold_started_at\s*=\s*now\(\)/);
+      expect(sql).not.toMatch(/on_hold_started_at\s*=\s*t\.resolved_at/);
+      // The breach decision itself still uses the real, app-recorded
+      // resolution instant — only the pause-credit ANCHOR moves to now().
+      expect(sql).toContain('resolution_breached = (t.resolved_at > s.resolution_due_at)');
     });
   });
 

@@ -173,6 +173,86 @@ describe('SLA (e2e)', () => {
         expect(typeof response.body[field]).toBe('number');
       }
     });
+
+    async function getMetrics() {
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/sla/metrics')
+        .set('Authorization', `Bearer ${adminToken}`);
+      return response.body as Record<string, number>;
+    }
+
+    it('increments openWithSla for a newly-created open ticket, and respondedOnTime once a staff reply lands (behavioral, not just typed)', async () => {
+      const before = await getMetrics();
+
+      const created = await createTicket(employee1Token, { priority: 'Low' });
+      const id = created.body.id;
+      const afterCreate = await getMetrics();
+      expect(afterCreate.openWithSla).toBe(before.openWithSla + 1);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/tickets/${id}/comments`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ body: 'on it' })
+        .expect(201);
+      const afterReply = await getMetrics();
+      expect(afterReply.respondedOnTime).toBe(afterCreate.respondedOnTime + 1);
+      expect(afterReply.respondedLate).toBe(afterCreate.respondedLate);
+    });
+
+    it('increments neverResponded when a ticket resolves without ever getting a qualifying reply, and moves it out of openWithSla', async () => {
+      const created = await createTicket(employee1Token, { priority: 'Low' });
+      const id = created.body.id;
+      const afterCreate = await getMetrics();
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/tickets/${id}/status`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ status: 'Resolved' })
+        .expect(200);
+
+      const afterResolve = await getMetrics();
+      expect(afterResolve.neverResponded).toBe(afterCreate.neverResponded + 1);
+      expect(afterResolve.openWithSla).toBe(afterCreate.openWithSla - 1);
+    });
+
+    it('does not double-count a reopened ticket in resolutionBreachedCompleted once its resolution is undone (M1 regression, observed through the aggregate)', async () => {
+      const created = await createTicket(employee1Token, { priority: 'Low' });
+      const id = created.body.id;
+      const before = await getMetrics();
+
+      // Force a genuine breach deterministically (rather than waiting out
+      // a real 24h Low-priority target): backdate the resolution due date
+      // into the past so resolving "now" is unambiguously late.
+      await prisma.ticketSla.updateMany({
+        where: { ticketId: id },
+        data: { resolutionDueAt: new Date(Date.now() - 60_000) },
+      });
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/tickets/${id}/status`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ status: 'Resolved' })
+        .expect(200);
+      const afterResolve = await getMetrics();
+      expect(afterResolve.resolutionBreachedCompleted).toBe(
+        before.resolutionBreachedCompleted + 1,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/tickets/${id}/status`)
+        .set('Authorization', `Bearer ${employee1Token}`)
+        .send({ status: 'Open' })
+        .expect(200);
+      const afterReopen = await getMetrics();
+
+      // The M1 assertion: reopening must remove this ticket from the
+      // "completed and breached" aggregate — it is no longer completed at
+      // all. Before the fix, resolution_breached stayed stale-true and
+      // this count never dropped back down.
+      expect(afterReopen.resolutionBreachedCompleted).toBe(
+        before.resolutionBreachedCompleted,
+      );
+    });
   });
 
   describe('SLA snapshot on ticket creation', () => {
@@ -283,9 +363,10 @@ describe('SLA (e2e)', () => {
   });
 
   describe('pause / resume across OnHold (ADR-020)', () => {
-    it('pauses both clocks on OnHold and resumes with credited paused time on leaving it', async () => {
+    it('pauses both clocks on OnHold, and shifts both due dates forward by the elapsed hold on resume', async () => {
       const created = await createTicket(employee1Token);
       const id = created.body.id;
+      const beforeHold = created.body.sla;
 
       await request(app.getHttpServer())
         .patch(`/api/v1/tickets/${id}/status`)
@@ -297,6 +378,9 @@ describe('SLA (e2e)', () => {
       expect(onHold.body.sla.isPaused).toBe(true);
       expect(onHold.body.sla.responseState).toBe('Paused');
       expect(onHold.body.sla.resolutionState).toBe('Paused');
+      // Frozen, not shifted, while still paused.
+      expect(onHold.body.sla.responseDueAt).toBe(beforeHold.responseDueAt);
+      expect(onHold.body.sla.resolutionDueAt).toBe(beforeHold.resolutionDueAt);
 
       await new Promise((resolve) => setTimeout(resolve, 1100));
 
@@ -309,7 +393,79 @@ describe('SLA (e2e)', () => {
       const resumed = await getTicket(employee1Token, id);
       expect(resumed.body.sla.isPaused).toBe(false);
       expect(resumed.body.sla.responseState).not.toBe('Paused');
-      expect(resumed.body.sla.totalPausedMinutes).toBeGreaterThanOrEqual(0);
+      // The real, sensitive assertion: resume must have actually shifted
+      // both due dates forward, not just flipped isPaused off (M5 fix —
+      // the previous version of this test could not fail if the shift
+      // were silently removed).
+      expect(new Date(resumed.body.sla.responseDueAt).getTime()).toBeGreaterThan(
+        new Date(beforeHold.responseDueAt).getTime(),
+      );
+      expect(new Date(resumed.body.sla.resolutionDueAt).getTime()).toBeGreaterThan(
+        new Date(beforeHold.resolutionDueAt).getTime(),
+      );
+    });
+  });
+
+  describe('first response recorded while paused (ADR-020 H1 fix)', () => {
+    async function backdateSla(
+      ticketId: string,
+      overrides: { responseDueAt: Date; onHoldStartedAt: Date },
+    ) {
+      await prisma.ticketSla.updateMany({
+        where: { ticketId },
+        data: overrides,
+      });
+    }
+
+    it('does NOT mark a reply breached when the hold started BEFORE the (now-passed) due date', async () => {
+      const created = await createTicket(employee1Token, { priority: 'Critical' });
+      const id = created.body.id;
+      await request(app.getHttpServer())
+        .patch(`/api/v1/tickets/${id}/status`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ status: 'OnHold' })
+        .expect(200);
+
+      const now = Date.now();
+      await backdateSla(id, {
+        responseDueAt: new Date(now - 2 * 60_000), // due 2 min ago
+        onHoldStartedAt: new Date(now - 10 * 60_000), // paused 10 min ago — BEFORE it went overdue
+      });
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/tickets/${id}/comments`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ body: 'replying while on hold' })
+        .expect(201);
+
+      const after = await getTicket(employee1Token, id);
+      expect(after.body.sla.responseAt).not.toBeNull();
+      expect(after.body.sla.responseState).toBe('Met');
+    });
+
+    it('DOES mark a reply breached when the ticket was already overdue BEFORE it was paused', async () => {
+      const created = await createTicket(employee1Token, { priority: 'Critical' });
+      const id = created.body.id;
+      await request(app.getHttpServer())
+        .patch(`/api/v1/tickets/${id}/status`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ status: 'OnHold' })
+        .expect(200);
+
+      const now = Date.now();
+      await backdateSla(id, {
+        responseDueAt: new Date(now - 10 * 60_000), // due 10 min ago
+        onHoldStartedAt: new Date(now - 1 * 60_000), // paused only 1 min ago — AFTER it went overdue
+      });
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/tickets/${id}/comments`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ body: 'replying too late' })
+        .expect(201);
+
+      const after = await getTicket(employee1Token, id);
+      expect(after.body.sla.responseState).toBe('Breached');
     });
   });
 
@@ -328,9 +484,10 @@ describe('SLA (e2e)', () => {
       expect(resolved.body.sla.resolutionState).toBe('Met');
     });
 
-    it('credits the resolved-to-reopened interval as paused time on reopen, and resumes the clock', async () => {
+    it('credits the resolved-to-reopened interval as paused time on reopen, resumes the clock, and clears the stale resolution-breached flag (M1 fix)', async () => {
       const created = await createTicket(employee1Token);
       const id = created.body.id;
+      const beforeResolve = created.body.sla;
 
       await request(app.getHttpServer())
         .patch(`/api/v1/tickets/${id}/status`)
@@ -354,11 +511,28 @@ describe('SLA (e2e)', () => {
       expect(reopened.body.sla.totalPausedMinutes).toBeGreaterThanOrEqual(
         pausedBeforeReopen,
       );
+      // The real, sensitive assertion for the reopen credit itself (M5
+      // fix): the resolution due date must have moved forward from what
+      // it was before the resolve/reopen cycle.
+      expect(new Date(reopened.body.sla.resolutionDueAt).getTime()).toBeGreaterThan(
+        new Date(beforeResolve.resolutionDueAt).getTime(),
+      );
+
+      // M1 fix: resolution_breached must not remain stale-`true` from the
+      // undone resolution — getMetrics' resolutionBreachedCompleted
+      // aggregate reads this column directly and would double-count an
+      // unresolved ticket otherwise. Checked directly against the DB
+      // since the per-ticket read model already derives state from
+      // resolvedAt (masking a stale flag) — this is exactly the gap a
+      // future aggregate consumer could fall into.
+      const row = await prisma.ticketSla.findUniqueOrThrow({ where: { ticketId: id } });
+      expect(row.resolutionBreached).toBe(false);
     });
 
-    it('resuming out of OnHold straight into Resolved does not record a spurious breach', async () => {
+    it('resuming out of OnHold straight into Resolved shifts the due date BEFORE recording the outcome, so it does not record a spurious breach (M3 fix)', async () => {
       const created = await createTicket(employee1Token, { priority: 'Low' });
       const id = created.body.id;
+      const beforeHold = created.body.sla;
 
       await request(app.getHttpServer())
         .patch(`/api/v1/tickets/${id}/status`)
@@ -375,6 +549,15 @@ describe('SLA (e2e)', () => {
 
       expect(resolved.status).toBe(200);
       expect(resolved.body.sla.resolutionState).toBe('Met');
+      // The sensitive assertion (M3 fix): resolutionDueAt must have moved
+      // forward by the hold duration — proving resumeFromPause's shift
+      // actually ran before recordResolutionOutcome's breach check, not
+      // just that a huge (Low-priority, 24h) target papered over the
+      // ordering bug. Deleting the resumeFromPause call would leave this
+      // due date unchanged and fail this assertion.
+      expect(new Date(resolved.body.sla.resolutionDueAt).getTime()).toBeGreaterThan(
+        new Date(beforeHold.resolutionDueAt).getTime(),
+      );
     });
   });
 
@@ -400,10 +583,20 @@ describe('SLA (e2e)', () => {
       );
     });
 
-    it('never double-applies the SLA delta when two priority changes race (CAS invariant)', async () => {
+    it('never corrupts the SLA due-date arithmetic when two priority changes race, and every successful change gets exactly one history row (CAS invariant)', async () => {
       const created = await createTicket(employee1Token, { priority: 'Medium' });
       const id = created.body.id;
+      const original = created.body.sla;
 
+      // Two concurrent requests against the real HTTP server can legitimately
+      // resolve either as a true race (one 409s) or as two sequential CAS
+      // successes (Node/network scheduling interleaves the pre-transaction
+      // reads before either write commits) — both are correct outcomes of
+      // optimistic concurrency, so asserting one fixed status tuple here
+      // would be flaky by construction. What must ALWAYS hold, regardless
+      // of interleaving, is: no status other than 200/409, and the final
+      // state is arithmetically consistent with a clean sequence of deltas
+      // from the original snapshot (never a corrupted/doubled shift).
       const [first, second] = await Promise.all([
         request(app.getHttpServer())
           .patch(`/api/v1/tickets/${id}/priority`)
@@ -415,19 +608,75 @@ describe('SLA (e2e)', () => {
           .send({ priority: 'Low' }),
       ]);
 
-      const statuses = [first.status, second.status].sort();
-      expect(statuses).toEqual([200, 409]);
+      const statuses = [first.status, second.status];
+      expect(statuses.every((s) => s === 200 || s === 409)).toBe(true);
+      const successCount = statuses.filter((s) => s === 200).length;
+      expect(successCount).toBeGreaterThanOrEqual(1);
 
       const finalTicket = await getTicket(employee1Token, id);
       const finalPriority = finalTicket.body.priority as 'Critical' | 'Low';
-      const expectedTargets =
-        finalPriority === 'Critical'
-          ? { responseTargetMinutes: 15, resolutionTargetMinutes: 120 }
-          : { responseTargetMinutes: 120, resolutionTargetMinutes: 1440 };
-
-      // Exactly the winning priority's targets are applied — never a
-      // double-delta from both requests landing.
+      const targetsByPriority: Record<string, { responseTargetMinutes: number; resolutionTargetMinutes: number }> = {
+        Critical: { responseTargetMinutes: 15, resolutionTargetMinutes: 120 },
+        Low: { responseTargetMinutes: 120, resolutionTargetMinutes: 1440 },
+      };
+      const expectedTargets = targetsByPriority[finalPriority];
       expect(finalTicket.body.sla).toMatchObject(expectedTargets);
+
+      // Due-date arithmetic: whatever sequence of deltas actually applied,
+      // the commutative-delta invariant (ADR-020, proven in
+      // sla.calculations.spec.ts) means the final due date must equal the
+      // ORIGINAL due date shifted by exactly (finalTarget - originalTarget)
+      // — never more, never less, regardless of how many requests
+      // succeeded or in what order. This is the assertion a double-applied
+      // or lost delta would actually fail.
+      const responseDeltaMs =
+        (expectedTargets.responseTargetMinutes - original.responseTargetMinutes) * 60_000;
+      const resolutionDeltaMs =
+        (expectedTargets.resolutionTargetMinutes - original.resolutionTargetMinutes) * 60_000;
+      expect(new Date(finalTicket.body.sla.responseDueAt).getTime()).toBe(
+        new Date(original.responseDueAt).getTime() + responseDeltaMs,
+      );
+      expect(new Date(finalTicket.body.sla.resolutionDueAt).getTime()).toBe(
+        new Date(original.resolutionDueAt).getTime() + resolutionDeltaMs,
+      );
+
+      // The CAS's other real job (beyond the SLA row, which self-protects
+      // via same-statement current-value reads): TicketHistory must never
+      // record a lying oldValue from a request that actually lost the
+      // race — exactly one history row per ACTUAL successful change, never
+      // one for a 409.
+      const history = await request(app.getHttpServer())
+        .get(`/api/v1/tickets/${id}/history`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      const priorityHistoryRows = history.body.data.filter(
+        (h: { fieldName: string }) => h.fieldName === 'priority',
+      );
+      expect(priorityHistoryRows).toHaveLength(successCount);
+    });
+
+    it('does not shift due dates on an already-resolved ticket\'s completed clock (M7 fix)', async () => {
+      const created = await createTicket(employee1Token, { priority: 'Medium' });
+      const id = created.body.id;
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/tickets/${id}/status`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ status: 'Resolved' })
+        .expect(200);
+      const beforePriorityChange = await getTicket(employee1Token, id);
+
+      const response = await request(app.getHttpServer())
+        .patch(`/api/v1/tickets/${id}/priority`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ priority: 'Critical' });
+
+      // Phase 6a's priority-change behavior is unchanged: it still succeeds
+      // even on a Resolved ticket.
+      expect(response.status).toBe(200);
+      expect(response.body.priority).toBe('Critical');
+      // But the SLA snapshot is left completely untouched — no partial
+      // shift, no target/due-date mismatch.
+      expect(response.body.sla).toEqual(beforePriorityChange.body.sla);
     });
   });
 });

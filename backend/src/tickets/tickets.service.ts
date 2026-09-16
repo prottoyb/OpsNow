@@ -400,7 +400,15 @@ export class TicketsService {
       }
 
       // SLA hook runs strictly after the CAS succeeds (ADR-020 invariant 3).
-      await this.slaService.handlePriorityChange(tx, ticket.id, dto.priority);
+      // ticket.resolvedAt is the pre-transaction read; handlePriorityChange
+      // treats a non-null value as "already resolved at least once" and
+      // skips the SLA delta entirely (ADR-020).
+      await this.slaService.handlePriorityChange(
+        tx,
+        ticket.id,
+        dto.priority,
+        ticket.resolvedAt,
+      );
 
       await tx.ticketHistory.create({
         data: this.historyRow(

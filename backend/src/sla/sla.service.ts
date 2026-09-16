@@ -116,6 +116,19 @@ export class SlaService {
    * is actually being set — an incomplete clock's `responseBreached`
    * column is left at its default `false` and breach is derived on read
    * instead (D3, ADR-020).
+   *
+   * A reply CAN arrive while `on_hold_started_at` is set — the ticket is
+   * OnHold, or Resolved-pending-reopen (D4's dual use of the same anchor)
+   * — and `response_due_at` has NOT been shifted yet in that case (the
+   * shift only happens on resume). Comparing `respondedAt` against the
+   * still-unshifted due date would falsely burn down a paused clock,
+   * exactly what D3 exists to prevent. Instead, breach is decided by
+   * whether the pause/stop ITSELF started after the due date had already
+   * passed (`on_hold_started_at > response_due_at`) — equivalent to
+   * crediting the elapsed pause up to the moment of this reply, and
+   * consistent with `remainingMinutes`' pause-freeze semantics. Both
+   * sides are read from the row inside this same statement (never a
+   * value from outside it — concurrency invariant 2).
    */
   async recordFirstResponse(
     tx: Prisma.TransactionClient,
@@ -125,7 +138,10 @@ export class SlaService {
     await tx.$executeRaw`
       UPDATE ticket_sla
          SET response_at = ${respondedAt}::timestamptz,
-             response_breached = (${respondedAt}::timestamptz > response_due_at),
+             response_breached = CASE
+               WHEN on_hold_started_at IS NOT NULL THEN on_hold_started_at > response_due_at
+               ELSE ${respondedAt}::timestamptz > response_due_at
+             END,
              updated_at = now()
        WHERE ticket_id = ${ticketId}::uuid AND response_at IS NULL
     `;
@@ -168,6 +184,19 @@ export class SlaService {
    *
    * `total_paused_minutes` is accumulated here for DISPLAY ONLY — it is
    * never read back into an authoritative SLA calculation.
+   *
+   * Also clears `resolution_breached` back to its default `false`. This
+   * matters only for the reopen call site: `resolution_breached` can only
+   * be non-default-false here if the ticket was PREVIOUSLY resolved (D4
+   * set this exact anchor), reopened, and is now leaving a LATER OnHold —
+   * without this reset that stale `true` from the earlier, since-undone
+   * resolution would still be counted by `getMetrics`' `resolutionBreached:
+   * true` aggregate for a ticket that is no longer resolved at all. Safe
+   * to reset unconditionally on every resume: for the plain
+   * leaving-OnHold call site the column is always still at its default
+   * `false` (a ticket cannot reach OnHold — see ALLOWED_TRANSITIONS —
+   * directly from Resolved, only via a reopen, which already clears it
+   * here first).
    */
   async resumeFromPause(tx: Prisma.TransactionClient, ticketId: string): Promise<void> {
     await tx.$executeRaw`
@@ -176,6 +205,7 @@ export class SlaService {
              resolution_due_at = resolution_due_at + (now() - on_hold_started_at),
              total_paused_minutes = total_paused_minutes
                  + round(extract(epoch from (now() - on_hold_started_at)) / 60)::integer,
+             resolution_breached = false,
              on_hold_started_at = NULL,
              updated_at = now()
        WHERE ticket_id = ${ticketId}::uuid AND on_hold_started_at IS NOT NULL
@@ -218,12 +248,30 @@ export class SlaService {
    * gap must never block a priority change from succeeding. A no-op if the
    * ticket has no TicketSla row at all (e.g. it was created when no policy
    * was active): the guarded UPDATE simply matches zero rows.
+   *
+   * `ticketResolvedAt` (the ticket's OWN `resolvedAt` as already read by
+   * the caller) gates a second, equally deliberate no-op: once a ticket
+   * has resolved at least once (resolvedAt set — regardless of whether it
+   * has since reopened, which the caller reflects by passing `null`
+   * again), both clocks are conceptually complete or paused-pending-
+   * reopen, and their due dates must never be shifted further — matching
+   * D8's "a persisted breach flag, once set, is never reconsidered."
+   * Priority changes on a Resolved/Closed ticket remain a normal, allowed
+   * ticket operation (Phase 6a is unchanged); only the SLA side-effect is
+   * skipped, with a warning, exactly like the missing-policy case above.
    */
   async handlePriorityChange(
     tx: Prisma.TransactionClient,
     ticketId: string,
     newPriority: TicketPriority,
+    ticketResolvedAt: Date | null,
   ): Promise<void> {
+    if (ticketResolvedAt !== null) {
+      this.logger.warn(
+        `Ticket ${ticketId} has already resolved at least once; its SLA snapshot was left unchanged by this priority change.`,
+      );
+      return;
+    }
     const policy = await tx.slaPolicy.findFirst({
       where: { priority: newPriority, isActive: true },
     });
@@ -250,9 +298,21 @@ export class SlaService {
    * fabricated or read outside this statement (no `responseAt` fabrication
    * either, per D3).
    *
-   * Sets `on_hold_started_at = t.resolved_at`, re-purposing that column as
-   * a general "clock stopped at" anchor for a second, mutually exclusive
-   * reason beyond OnHold: "resolved, pending a possible reopen". The
+   * Sets `on_hold_started_at = now()` (the DATABASE clock, not
+   * `t.resolved_at`) — re-purposing the column as a general "clock
+   * stopped at" anchor for a second, mutually exclusive reason beyond
+   * OnHold: "resolved, pending a possible reopen". `t.resolved_at` is
+   * written by the caller from `new Date()` in application code (a
+   * pre-existing Phase 6a field, not a DB-computed default), so using it
+   * as this anchor would let a later reopen's `resumeFromPause` compute
+   * `now() - on_hold_started_at` across TWO different clock domains
+   * (app-clock anchor, DB-clock `now()`) — precisely what ADR-020
+   * requires this anchor to avoid. `now()` keeps the anchor itself
+   * DB-clock, at the cost of a sub-statement-latency (not app-round-trip)
+   * gap between the true resolution instant and this anchor — negligible,
+   * and confined to display-only `total_paused_minutes` plus the
+   * pause-credit delta, never to `resolutionBreached` (which is still
+   * decided from the real `t.resolved_at` below, once, right here). The
    * `s.on_hold_started_at IS NULL` guard makes this idempotent and is
    * always satisfied here because the caller's ordering (see
    * `resumeFromPause` above) already clears the anchor before this runs
@@ -264,7 +324,7 @@ export class SlaService {
     await tx.$executeRaw`
       UPDATE ticket_sla s
          SET resolution_breached = (t.resolved_at > s.resolution_due_at),
-             on_hold_started_at  = t.resolved_at,
+             on_hold_started_at  = now(),
              updated_at = now()
         FROM tickets t
        WHERE t.id = s.ticket_id AND s.ticket_id = ${ticketId}::uuid AND s.on_hold_started_at IS NULL

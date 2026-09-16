@@ -842,6 +842,7 @@ describe('TicketsService', () => {
         prisma,
         'ticket-1',
         TicketPriority.Critical,
+        null,
       );
       expect(prisma.ticketHistory.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -850,6 +851,29 @@ describe('TicketsService', () => {
           newValue: TicketPriority.Critical,
         }),
       });
+    });
+
+    it('passes the ticket\'s own resolvedAt through to the SLA hook (M7: skips the delta once already resolved)', async () => {
+      const resolvedAt = new Date('2026-02-01T00:00:00Z');
+      const before = buildTicket({ priority: TicketPriority.Medium, resolvedAt });
+      prisma.ticket.findFirst
+        .mockResolvedValueOnce(before)
+        .mockResolvedValueOnce({ ...before, priority: TicketPriority.Critical });
+      prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+      prisma.ticketHistory.create.mockResolvedValue({});
+
+      await service.updatePriority(
+        'ticket-1',
+        { priority: TicketPriority.Critical },
+        staffUser,
+      );
+
+      expect(slaService.handlePriorityChange).toHaveBeenCalledWith(
+        prisma,
+        'ticket-1',
+        TicketPriority.Critical,
+        resolvedAt,
+      );
     });
 
     it('returns 409 and never applies the SLA delta when it loses the priority-change race (CAS miss)', async () => {

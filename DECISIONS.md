@@ -1216,6 +1216,26 @@ set together, only once, from the qualifying comment's own `createdAt`
 
 — never fabricated, never backfilled from a separately read clock.
 
+A reply CAN arrive while `on_hold_started_at` is set (OnHold, or
+
+Resolved-pending-reopen per Decision 5 below) — `response_due_at` is
+
+NOT yet shifted in that case, since the shift only happens on resume.
+
+Breach is therefore decided by whether the PAUSE ITSELF started after
+
+the due date had already passed (`on_hold_started_at > response_due_at`),
+
+never by comparing the reply's timestamp against the still-unshifted
+
+due date — the latter would falsely burn down a paused clock, exactly
+
+what this decision exists to prevent, and was a defect caught by
+
+independent review before this ADR's first merge (see the note at the
+
+end of Risks).
+
 
 
 5. Reopen reuses the pause mechanism, not a new cycle.
@@ -1224,27 +1244,55 @@ set together, only once, from the qualifying comment's own `createdAt`
 
 ticket (either `->Resolved` or a direct `->Closed`) records the
 
-resolution outcome and sets `on_hold_started_at = resolved_at`,
+resolution outcome and sets `on_hold_started_at = now()` — the
 
-repurposing the same column pause uses as a general "clock stopped at"
+DATABASE clock, deliberately not the ticket's own `resolved_at` (which
 
-marker for a second, mutually exclusive reason — "resolved, pending a
+is written from application-code `new Date()` in Phase 6a, not a
 
-possible reopen." Reopening (`Resolved -> Open`, the only reopen path)
+DB-computed default) — repurposing the same column pause uses as a
 
-then runs the identical resume statement used for leaving `OnHold`: it
+general "clock stopped at" marker for a second, mutually exclusive
 
-credits `now() - resolved_at` onto both due dates as if the resolved
+reason: "resolved, pending a possible reopen." Reopening
 
-interval were a pause, and clears the anchor. The two purposes never
+(`Resolved -> Open`, the only reopen path) then runs the identical
 
-collide, because `status` is a single enum value and an `OnHold ->
+resume statement used for leaving `OnHold`: it credits
 
-Resolved` transition always clears the anchor via the resume path
+`now() - on_hold_started_at` onto both due dates as if the resolved
 
-before the resolution hook sets it again. `Closed` remains terminal
+interval were a pause, clears the anchor, AND resets `resolution_breached`
 
-(ADR-019); a `Closed` ticket's SLA clocks are never touched again.
+back to `false` — necessary because a ticket can carry a `true` value
+
+from an earlier resolve-then-reopen cycle into a later OnHold spell,
+
+and without the reset that stale flag would still be counted by
+
+`getMetrics`' `resolutionBreachedCompleted` aggregate for a ticket that
+
+is no longer resolved at all. `resolutionBreached` itself is still
+
+decided from the real, application-recorded `resolved_at` (the
+
+anchor's clock domain and the breach decision's timestamp domain are
+
+deliberately different: the anchor must stay DB-clock so a LATER
+
+resume's `now() - anchor` never mixes clock domains, while the breach
+
+decision is inherently about the actual application-recorded resolution
+
+instant). The two anchor purposes never collide, because `status` is a
+
+single enum value and an `OnHold -> Resolved` transition always clears
+
+the anchor via the resume path before the resolution hook sets it
+
+again. `Closed` remains terminal (ADR-019); a `Closed` ticket's SLA
+
+clocks are never touched again.
 
 
 
@@ -1256,15 +1304,29 @@ and applies the delta between the new and the row's currently stored
 
 target minutes to both due dates in one statement, updates the stored
 
-targets and `sla_policy_id`, and leaves the original clock start
+targets and `sla_policy_id`. If no active policy exists for the new
 
-(`createdAt`) and any already-persisted breach flag on a completed
+priority, the existing SLA snapshot is left unchanged (warning only,
 
-clock untouched. If no active policy exists for the new priority, the
+never blocking); a ticket with no `TicketSla` row at all is a no-op.
 
-existing SLA snapshot is left unchanged (warning only, never blocking);
+The SAME no-op-with-warning treatment applies once the ticket has
 
-a ticket with no `TicketSla` row at all is a no-op.
+already resolved at least once (the caller passes its own `resolvedAt`
+
+in): shifting either due date on a clock that has already completed
+
+(or is pending reopen) is meaningless and would desynchronize the
+
+due dates from the target minutes and the already-persisted breach
+
+flag, so the entire delta — not just the breach flag — is left alone.
+
+Phase 6a's own priority-change behavior (that staff may change a
+
+Resolved or Closed ticket's priority at all) is unaffected; only this
+
+SLA side-effect is skipped.
 
 
 
@@ -1458,5 +1520,59 @@ would at very high read volume; this is an acceptable and revisitable
 
 trade at the project's current and expected scale, not a permanent
 
-constraint.
+constraint. The invariant in Decision 5 that the pause/reopen anchor
+
+stays entirely within the database clock domain (never the
+
+application-clock `resolved_at`) is enforced only by code discipline in
+
+`SlaService`, the same way the resume-before-resolve ordering above is
+
+— there is no schema-level constraint preventing a future edit from
+
+reintroducing either mixed-clock-domain reads or reordered hook calls;
+
+a regression test exists for the ordering (`sla.e2e-spec.ts`), which is
+
+the practical backstop until/unless a stronger mechanical guard is
+
+judged worth the complexity.
+
+
+
+Independent QA/Security and Senior Review, run before this ADR's first
+
+merge, found and this ADR's text was corrected to reflect four defects
+
+that an earlier draft of this same design did not account for: (a)
+
+Decision 4's pause interaction with first-response breach detection
+
+(the original text compared a reply's timestamp against the
+
+still-unshifted due date, which could permanently mis-record a breach
+
+for a response given while genuinely paused); (b) Decision 5's reopen
+
+anchor originally used the application-clock `resolved_at` rather than
+
+`now()`, violating this ADR's own single-clock-domain requirement; (c)
+
+`resolution_breached` was not reset on resume/reopen, letting a stale
+
+`true` flag persist into the metrics aggregate for a ticket no longer
+
+resolved; and (d) Decision 6 originally left a completed clock's target
+
+minutes and due dates only partially guarded, rather than skipping the
+
+delta outright. All four were fixed in code, with regression tests
+
+(unit and e2e) added for each, before this design was accepted as
+
+final — recorded here so the ADR is an accurate history of the design,
+
+not a rewrite that erases that these were caught by review rather than
+
+anticipated from the start.
 
