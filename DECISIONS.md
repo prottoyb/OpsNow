@@ -1694,17 +1694,29 @@ a view, and it reads no clock at all.
 
 displayed figure is `minutesRemaining - (now - anchor) / 60000`, where
 
-`anchor` is the instant this browser first saw this exact SLA payload
+`anchor` is the instant a countdown first RENDERED with this exact SLA
 
-(`useSlaAnchor`, keyed on the payload's object identity, which TanStack
+payload (`useSlaAnchor`, keyed on the payload's object identity, which
 
-Query's structural sharing holds stable until the numbers actually
+TanStack Query's structural sharing holds stable until the numbers
 
-change). Remaining time is never computed from `dueAt - Date.now()`, and
+actually change). Anchoring at render rather than at receipt is a
 
-elapsed time is floored at zero so a backwards system-clock jump cannot
+deliberate simplification with a bounded cost, recorded under
 
-inflate a countdown.
+Consequences. Keying on identity rather than on value is also what makes
+
+that ref write idempotent under StrictMode's double render: the second
+
+render sees the same object and leaves the instant alone. Remaining time
+
+is never computed from `dueAt - Date.now()`, and elapsed time is floored
+
+at zero — which matters on the ordinary path and not merely for a
+
+backwards system-clock jump, because the shared ticker's last published
+
+tick can legitimately be older than a countdown that mounted after it.
 
 
 
@@ -1754,9 +1766,19 @@ page moves together.
 
 invalidation, no request of any kind. Staleness is handled entirely by
 
-TanStack Query's `staleTime` / refetch-on-mount / refetch-on-focus
+TanStack Query's existing lifecycle, exactly as it is for every other
 
-lifecycle, exactly as it is for every other field on a ticket.
+field on a ticket. Stated precisely, because it is easy to assume more
+
+than is there: `lib/api/queryClient.ts` sets `refetchOnWindowFocus:
+
+false` for every query in the project, so that lifecycle here is
+
+`staleTime` (10 seconds) plus refetch-on-mount, and nothing else. This
+
+decision does not rely on refetch-on-focus and must not be read as doing
+
+so.
 
 
 
@@ -1842,13 +1864,39 @@ refetch interval behind the server's own view; this is accepted because
 
 the badge — which is never locally derived — carries the
 
-decision-grade information and the countdown is only an aid. Because
+decision-grade information and the countdown is only an aid. A
 
-nothing refetches on zero, a ticket left open on screen eventually shows
+countdown's accuracy is bounded in three distinct ways, all accepted:
 
-"Due now" beside a badge that still says what the backend last said,
+up to about thirty seconds behind real time between ticks; up to the
 
-which is correct rather than merely stale-looking. The ticking figure is
+query's `staleTime` of ten seconds too generous when a component mounts
+
+against a cache entry that is populated but still fresh, because the
+
+anchor is taken at render rather than at receipt (Decision 2); and,
+
+because refetch-on-focus is disabled project-wide (Decision 5),
+
+arbitrarily far behind the server's own view in a tab left open in the
+
+background until something remounts the query. That last bound is the
+
+sharpest edge of this design: such a tab can show "Due now" beside a
+
+badge that still reads "on track". The badge is the backend's last word
+
+and is never locally derived, so this is stale rather than wrong — but
+
+it is a real limitation, and whether to close it (by enabling focus
+
+refetching for ticket queries, or by a visibility-driven invalidate) is
+
+deferred to the project owner in `TASKS.md`, because either option
+
+changes shared query configuration well beyond this phase's scope. The
+
+ticking figure is
 
 `aria-hidden` and carries no accessible meaning: a number that rewrites
 

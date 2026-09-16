@@ -81,9 +81,20 @@ const PAUSED_NOTE =
   'The clock is on hold. The remaining time is frozen at the moment the ticket went On hold, and the due date moves by the length of the hold when it resumes.';
 
 const PAUSED_PAST_DUE_NOTE =
-  'The target had already passed when this ticket went On hold, so there is no time left to resume with.';
+  'The target had passed, or was seconds from passing, when this ticket went On hold — so there is effectively no time left to resume with.';
 
-const AT_RISK_NOTE = 'Less than a fifth of the target time is left.';
+/*
+ * Deliberately does NOT restate the backend's at-risk fraction. The
+ * threshold lives in `AT_RISK_FRACTION` (backend/src/sla/sla.constants.ts)
+ * and is a share of each clock's own target, not a fixed number of minutes;
+ * naming a number here would silently become a lie the day that constant
+ * changes, with no test to catch it.
+ */
+const AT_RISK_NOTE =
+  "The time left has reached the at-risk threshold for this clock's target. The threshold is a share of the target, so it differs between priorities.";
+
+const UNKNOWN_STATE_NOTE =
+  'This ticket reported an SLA state this version of the app does not recognise. The dates below are still accurate; reload the page, and if it persists the app is out of date with the API.';
 
 function pausedView(
   kind: SlaClockKind,
@@ -94,10 +105,15 @@ function pausedView(
 ): SlaClockView {
   /*
    * `{ state: 'Paused', minutesRemaining: 0 }` is a real, reachable state: a
-   * ticket that was already past its due date when it was put on hold. It
-   * needs its own copy — showing "0m left before pause" would read as though
-   * the clock were merely about to expire, when in fact resuming it buys
-   * nothing at all.
+   * ticket at or past its due date when it was put on hold. It needs its own
+   * copy — showing "0m left before pause" would read as though the clock were
+   * merely about to expire, when in fact resuming it buys nothing worth
+   * counting.
+   *
+   * "Nothing worth counting" rather than "nothing at all": the backend both
+   * rounds and clamps `minutesRemaining`, so a zero here can also mean a
+   * clock paused with up to about half a minute genuinely left. The note
+   * below is worded so it stays true in that window too.
    */
   const pastDue = minutesRemaining <= 0;
   return {
@@ -116,16 +132,61 @@ function pausedView(
   };
 }
 
+/**
+ * The degraded view for a state string this build does not know about.
+ *
+ * The switches below are exhaustive over the state unions, so TypeScript
+ * guarantees every KNOWN state is handled. It cannot guarantee anything
+ * about the wire: a newer backend, a proxy, or a hand-crafted response can
+ * put an unrecognised string in `responseState`. Falling off the end of an
+ * exhaustive switch returns `undefined`, and `summariseSla` would then
+ * dereference `.severity` on it and throw — and with no error boundary
+ * anywhere in this app, that throw unmounts the whole React tree, so one bad
+ * cell would blank the entire ticket list.
+ *
+ * Degrading instead keeps the rest of the row and the page intact, states
+ * plainly that the state is unknown, and invents no due-date wording: the
+ * date is still shown, labelled neutrally, because it is the STATE that
+ * could not be interpreted, not the timestamp.
+ *
+ * `severity: 0` (the same rank as `Met`) so an uninterpretable clock can
+ * never outrank a real breach for the single badge a list row shows.
+ */
+function unknownStateView(
+  kind: SlaClockKind,
+  noun: string,
+  state: string,
+  dueAt: string,
+): SlaClockView {
+  return {
+    kind,
+    // Not a real member of the union, but it is what the wire said; keeping
+    // it makes the value visible to anyone debugging from a test failure.
+    state: state as SlaResponseState,
+    label: `${noun} state unavailable`,
+    tone: 'neutral',
+    mode: 'static',
+    minutesRemaining: 0,
+    dueAt,
+    dueLabel: 'Due date',
+    completedAt: null,
+    completedLabel: null,
+    note: UNKNOWN_STATE_NOTE,
+    severity: 0,
+  };
+}
+
 export function describeResponseClock(sla: TicketSla): SlaClockView {
+  const state = sla.responseState;
   const base = {
     kind: 'response' as const,
-    state: sla.responseState,
+    state,
     minutesRemaining: sla.responseMinutesRemaining,
     dueAt: sla.responseDueAt,
-    severity: SEVERITY[sla.responseState],
+    severity: SEVERITY[state],
   };
 
-  switch (sla.responseState) {
+  switch (state) {
     case 'Met':
       return {
         ...base,
@@ -182,7 +243,7 @@ export function describeResponseClock(sla: TicketSla): SlaClockView {
     case 'Paused':
       return pausedView(
         'response',
-        sla.responseState,
+        state,
         'Response',
         sla.responseMinutesRemaining,
         sla.responseDueAt,
@@ -211,6 +272,20 @@ export function describeResponseClock(sla: TicketSla): SlaClockView {
         completedLabel: null,
         note: '',
       };
+
+    default: {
+      // Compile-time exhaustiveness is preserved, not weakened: adding a
+      // member to `SlaResponseState` without handling it above makes this
+      // assignment a type error. The runtime path exists only for a string
+      // TypeScript never saw.
+      const unhandled: never = state;
+      return unknownStateView(
+        'response',
+        'Response',
+        String(unhandled),
+        sla.responseDueAt,
+      );
+    }
   }
 }
 
@@ -223,15 +298,16 @@ export function describeResolutionClock(
   sla: TicketSla,
   resolvedAt: string | null,
 ): SlaClockView {
+  const state = sla.resolutionState;
   const base = {
     kind: 'resolution' as const,
-    state: sla.resolutionState,
+    state,
     minutesRemaining: sla.resolutionMinutesRemaining,
     dueAt: sla.resolutionDueAt,
-    severity: SEVERITY[sla.resolutionState],
+    severity: SEVERITY[state],
   };
 
-  switch (sla.resolutionState) {
+  switch (state) {
     case 'Met':
       return {
         ...base,
@@ -270,7 +346,7 @@ export function describeResolutionClock(
     case 'Paused':
       return pausedView(
         'resolution',
-        sla.resolutionState,
+        state,
         'Resolution',
         sla.resolutionMinutesRemaining,
         sla.resolutionDueAt,
@@ -299,6 +375,17 @@ export function describeResolutionClock(
         completedLabel: null,
         note: '',
       };
+
+    default: {
+      // See the matching arm in `describeResponseClock`.
+      const unhandled: never = state;
+      return unknownStateView(
+        'resolution',
+        'Resolution',
+        String(unhandled),
+        sla.resolutionDueAt,
+      );
+    }
   }
 }
 
@@ -317,15 +404,25 @@ export function summariseSla(
 }
 
 /**
- * Ages the backend's `minutesRemaining` by the time elapsed since this exact
- * payload was received in THIS browser.
+ * Ages the backend's `minutesRemaining` by the time elapsed since a
+ * countdown first rendered with this exact payload in THIS browser (see
+ * `useSlaAnchor` for why that is the anchor, and what it costs).
  *
- * Anchoring on a locally captured receipt instant — rather than on a
- * server-supplied timestamp or on TanStack Query's `dataUpdatedAt` — is what
- * keeps the countdown immune to both client clock skew and to placeholder
- * data (a query rendering `keepPreviousData` reports `dataUpdatedAt: 0`, the
- * epoch, which would age every row by decades). Elapsed time is floored at
- * zero so a system clock that jumps backwards cannot inflate a countdown.
+ * Anchoring on a locally captured instant — rather than on a server-supplied
+ * timestamp or on TanStack Query's `dataUpdatedAt` — is what keeps the
+ * countdown immune to both client clock skew and to placeholder data (a
+ * query rendering `keepPreviousData` reports `dataUpdatedAt: 0`, the epoch,
+ * which would age every row by decades).
+ *
+ * The `Math.max(0, …)` is load-bearing on the ordinary path, not just for
+ * the exotic case of a system clock jumping backwards. `now` is the shared
+ * ticker's last published tick, which can legitimately be OLDER than this
+ * countdown's own anchor: a countdown that mounts midway between two ticks
+ * reads a tick up to the interval old, and the very first countdown after
+ * module load can read one older still, before `subscribe` re-anchors it.
+ * Without the clamp those cases would age the figure by a negative amount
+ * and paint MORE time than the server reported. With it, first paint is
+ * simply the server's own figure until the next tick.
  */
 export function ageMinutes(
   minutesRemaining: number,

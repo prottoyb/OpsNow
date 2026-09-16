@@ -236,5 +236,8 @@ describe('SLA dashboard — non-staff', () => {
     // Nothing rendered from staff-only data either.
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(screen.queryByText('Open tickets with an SLA')).not.toBeInTheDocument();
+    // And no eternal spinner: a disabled query stays `pending` forever, so
+    // keying the spinner off `isPending` would leave two of them here.
+    expect(screen.queryByText(/Loading SLA/)).not.toBeInTheDocument();
   });
 });

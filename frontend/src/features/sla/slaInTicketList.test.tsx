@@ -11,6 +11,7 @@ import {
 import { resetMockState } from '../../mocks/handlers';
 import { server } from '../../mocks/server';
 import { renderApp } from '../../test/renderApp';
+import type { SlaResolutionState, SlaResponseState } from '../../types/api';
 
 const BASE = '*/api/v1';
 
@@ -59,6 +60,78 @@ describe('SLA in the ticket list', () => {
     // Spelled out, and naming WHICH clock — never colour alone, never a
     // generic "SLA breached".
     expect(table().getByText('Resolution breached')).toBeInTheDocument();
+    expect(table().getByText('Response at risk')).toBeInTheDocument();
+    expect(table().getByText('9m left')).toBeInTheDocument();
+  });
+
+  /**
+   * "The more severe of the two clocks" is only meaningful if exactly one
+   * badge is rendered. Counting the badges' screen-reader prefix pins that
+   * down rather than leaving it implied by the component's structure.
+   */
+  it('renders exactly one SLA badge in the row, never one per clock', async () => {
+    resetMockState({
+      currentUser: agentUser,
+      tickets: [
+        makeTicket({
+          subject: 'Both clocks unhappy',
+          sla: makeTicketSla({
+            responseState: 'AtRisk',
+            responseMinutesRemaining: 5,
+            resolutionState: 'Breached',
+          }),
+        }),
+      ],
+    });
+
+    renderApp({ route: '/tickets' });
+    await waitForList();
+
+    const row = table().getByRole('link', { name: 'Both clocks unhappy' })
+      .closest('tr');
+    expect(row).not.toBeNull();
+    const slaCell = within(row as HTMLElement).getAllByRole('cell')[4];
+
+    expect(within(slaCell).getAllByText('SLA:')).toHaveLength(1);
+    // And it is the more severe clock, named.
+    expect(within(slaCell).getByText('Resolution breached')).toBeInTheDocument();
+    expect(within(slaCell).queryByText(/at risk/i)).not.toBeInTheDocument();
+  });
+
+  /**
+   * There is no error boundary in this app, so a throw while rendering one
+   * cell would blank the entire list. An unrecognised state must degrade to
+   * a neutral badge and leave every other row intact.
+   */
+  it('keeps the whole list rendering when a ticket reports an unknown SLA state', async () => {
+    resetMockState({
+      currentUser: agentUser,
+      tickets: [
+        makeTicket({
+          id: 'a0000001-1111-4111-8111-111111111111',
+          subject: 'From the future',
+          sla: makeTicketSla({
+            responseState: 'SomethingNew' as SlaResponseState,
+            resolutionState: 'SomethingNew' as SlaResolutionState,
+          }),
+        }),
+        makeTicket({
+          id: 'a0000002-1111-4111-8111-111111111111',
+          subject: 'Perfectly ordinary',
+          sla: makeTicketSla({
+            responseState: 'AtRisk',
+            responseMinutesRemaining: 9,
+          }),
+        }),
+      ],
+    });
+
+    renderApp({ route: '/tickets' });
+    await waitForList();
+
+    expect(table().getByText('Response state unavailable')).toBeInTheDocument();
+    // The neighbouring row is untouched — nothing unmounted.
+    expect(table().getByRole('link', { name: 'Perfectly ordinary' })).toBeInTheDocument();
     expect(table().getByText('Response at risk')).toBeInTheDocument();
     expect(table().getByText('9m left')).toBeInTheDocument();
   });

@@ -56,7 +56,14 @@ export function SlaDashboardPage() {
           Service level metrics
         </h2>
 
-        {metricsQuery.isPending ? <Spinner label="Loading SLA metrics" /> : null}
+        {/*
+          `isLoading`, not `isPending`: a DISABLED query stays `pending`
+          forever, so a non-staff render that somehow got past the route gate
+          would sit under a spinner that never resolves. `isLoading` is
+          `pending && fetching`, which is false for a query that was never
+          allowed to run.
+        */}
+        {metricsQuery.isLoading ? <Spinner label="Loading SLA metrics" /> : null}
 
         {metricsQuery.isError ? (
           <ErrorState
@@ -81,11 +88,16 @@ export function SlaDashboardPage() {
                 </div>
               ))}
             </dl>
+            {/*
+              Worded so it stays true whatever the backend's at-risk fraction
+              is set to — the threshold is deliberately not restated as a
+              number anywhere in the frontend.
+            */}
             <p className="mt-3 text-xs text-slate-600">
-              An at-risk total is not available. At risk means a ticket has
-              less than a fifth of its own target time left, which differs per
-              ticket, so it is reported on each ticket rather than counted
-              here.
+              An at-risk total is not available. At risk is a share of each
+              ticket&rsquo;s own target rather than a fixed cutoff, so the
+              threshold differs from ticket to ticket and no single count can
+              express it. It is reported on each ticket instead.
             </p>
           </>
         ) : null}
@@ -98,7 +110,8 @@ export function SlaDashboardPage() {
           editing a policy never changes a ticket that already exists.
         </p>
 
-        {policiesQuery.isPending ? (
+        {/* `isLoading` for the same reason as the metrics section above. */}
+        {policiesQuery.isLoading ? (
           <Spinner label="Loading SLA policies" />
         ) : null}
 

@@ -492,6 +492,54 @@ as-is, and adds no new endpoint. No new dependency was added.
 
 
 
+\## Deferred from Phase 7b (tracked, not dropped)
+
+
+
+\- \[ ] SLA countdown staleness in a long-lived background tab.
+
+`lib/api/queryClient.ts` sets `refetchOnWindowFocus: false` for every
+
+query in the project, so a tab left open is not refreshed on return and
+
+its SLA countdown can read "Due now" beside a badge that still says "on
+
+track" until something remounts the query (see ADR-021's Consequences).
+
+Options are enabling focus refetching for ticket queries specifically, or
+
+a visibility-driven invalidate. Deferred for the project owner's decision
+
+because either one changes shared query configuration affecting every
+
+ticket query, beyond Phase 7b's approved scope — not because it was
+
+overlooked.
+
+
+
+\- \[ ] Bind the at-risk threshold wording to the backend constant. The
+
+frontend's at-risk copy (`slaDisplay.ts`, `SlaDashboardPage.tsx`) is now
+
+worded so it stays true whatever `AT_RISK_FRACTION` is set to, but
+
+nothing mechanically ties the two together; a shared constant or a
+
+generated value would.
+
+
+
+\- \[ ] Add a repository-wide guard test in `frontend/src/test/guards.test.ts`
+
+forbidding a string argument to `setTimeout`/`setInterval`. The file
+
+already forbids `eval` and `new Function`; the string-timer form is the
+
+remaining member of that family. Hygiene, no known defect.
+
+
+
 \---
 
 

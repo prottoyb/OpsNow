@@ -2,13 +2,24 @@ import { useRef } from 'react';
 import type { TicketSla } from '../../types/api';
 
 /**
- * The instant this browser first saw THIS SLA payload, used as the countdown's
- * zero point.
+ * The countdown's zero point: the instant a countdown first RENDERED with
+ * this SLA payload.
+ *
+ * That is deliberately not the same as the instant the payload arrived. A
+ * component mounting against a cache entry that is already populated but
+ * still fresh anchors at mount, which can be up to the query's `staleTime`
+ * (10s, `lib/api/queryClient.ts`) after the data actually landed — so the
+ * figure can read that much more generous than the server's own view. This
+ * is bounded, small against a figure displayed to the nearest minute, and
+ * accepted; ADR-021 records it alongside the other accuracy bounds.
  *
  * Identity, not value, is the trigger. TanStack Query's structural sharing
  * hands back the very same object when a refetch produces identical data, so
  * the anchor holds still across re-renders and refetches and only moves when
- * the numbers actually change.
+ * the numbers actually change. Keying on identity is also what makes the
+ * write below idempotent under StrictMode's double render: the second render
+ * sees `anchor.current.sla === sla` and leaves the instant alone, so the
+ * anchor cannot be quietly reset by a re-render that changed nothing.
  *
  * Why not `query.dataUpdatedAt`? Because `useTicketList` renders placeholder
  * data (`keepPreviousData`) while a filter or page change is in flight, and

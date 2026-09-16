@@ -207,6 +207,27 @@ describe('ticket SLA panel — reopened ticket', () => {
   });
 });
 
+describe('ticket SLA panel — unrecognised state', () => {
+  it('degrades one clock neutrally and still renders the other', () => {
+    renderPanel({
+      responseState: 'SomethingNew' as TicketSla['responseState'],
+      resolutionState: 'AtRisk',
+      resolutionMinutesRemaining: 30,
+    });
+
+    expect(screen.getByText('Response state unavailable')).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not recognise/i),
+    ).toBeInTheDocument();
+    // The clock that WAS understood is unaffected and still counts down.
+    expect(screen.getByText('Resolution at risk')).toBeInTheDocument();
+    expect(screen.getByText('30m left')).toBeInTheDocument();
+    // Nothing invented about the unknown clock.
+    expect(screen.queryByText(/overdue/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Due date')).toBeInTheDocument();
+  });
+});
+
 describe('ticket SLA panel — no SLA', () => {
   it('says so in plain text, with no badge and no countdown', () => {
     const { container } = renderPanel(null);

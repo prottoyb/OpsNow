@@ -120,7 +120,9 @@ describe('shared SLA ticker', () => {
     expect(slaIntervalCount()).toBe(0);
   });
 
-  it('stops the interval once the last countdown unmounts', () => {
+  it('stops the interval and removes its listener once the last countdown unmounts', () => {
+    const removeListener = vi.spyOn(document, 'removeEventListener');
+
     const { unmount } = render(
       <TicketSlaIndicator ticket={runningTicket(120)} />,
     );
@@ -129,6 +131,38 @@ describe('shared SLA ticker', () => {
     unmount();
 
     expect(vi.getTimerCount()).toBe(0);
+    // The interval clear is not the whole cleanup: a leaked
+    // `visibilitychange` listener would keep re-arming the interval from a
+    // module with no subscribers left.
+    expect(removeListener).toHaveBeenCalledWith(
+      'visibilitychange',
+      expect.any(Function),
+    );
+
+    removeListener.mockRestore();
+  });
+
+  it('adds only one visibilitychange listener for many countdowns', () => {
+    const addListener = vi.spyOn(document, 'addEventListener');
+
+    const tickets = Array.from({ length: 5 }, (_, index) =>
+      runningTicket(120, {
+        id: `b${String(index).padStart(7, '0')}-1111-4111-8111-111111111111`,
+      }),
+    );
+    render(
+      <>
+        {tickets.map((ticket) => (
+          <TicketSlaIndicator key={ticket.id} ticket={ticket} />
+        ))}
+      </>,
+    );
+
+    expect(
+      addListener.mock.calls.filter((call) => call[0] === 'visibilitychange'),
+    ).toHaveLength(1);
+
+    addListener.mockRestore();
   });
 });
 

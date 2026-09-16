@@ -1818,9 +1818,9 @@ Verification (all run in this worktree):
 
 \- Frontend: `npm run typecheck` clean; `npm run lint` clean;
 
-`npm run build` clean; `npm run test` — 16 files, 199 tests passed
+`npm run build` clean; `npm run test` — 16 files, 207 tests passed
 
-(119 pre-existing, 80 new); `npm audit` — 0 vulnerabilities.
+(119 pre-existing, 88 new); `npm audit` — 0 vulnerabilities.
 
 
 
@@ -1882,6 +1882,106 @@ test fail. Both were restored immediately.
 
 
 
+Independent review (Mandatory Gate #2 — separate QA/Security and Senior
+
+Review agents, neither involved in the implementation) returned no
+
+CRITICAL and no HIGH findings. The MEDIUM and LOW findings were fixed in
+
+a follow-up commit on the same branch:
+
+
+
+\- **MEDIUM (fixed):** both clock-description switches were exhaustive
+
+over the state unions but had no `default`, so an unrecognised state
+
+string from the wire returned `undefined` and `summariseSla` threw on it.
+
+With no error boundary anywhere in the app that throw would unmount the
+
+whole React tree — one unknown state would blank the entire ticket list.
+
+Both now degrade to a neutral "state unavailable" view that invents no
+
+due-date wording and ranks lowest, so a real breach on the other clock
+
+still wins the list badge. Compile-time exhaustiveness is preserved via a
+
+`never` assignment in the new `default` arm, and was verified by
+
+temporarily deleting a case and confirming the build fails.
+
+
+
+\- **MEDIUM (fixed, documentation):** ADR-021 and the ticker's own comment
+
+justified the no-refetch-on-zero decision partly on TanStack Query's
+
+refetch-on-focus, which `lib/api/queryClient.ts` disables project-wide.
+
+Both now state the real lifecycle (`staleTime` plus refetch-on-mount
+
+only), and ADR-021's Consequences records the honest result: a tab left
+
+open in the background can show "Due now" beside a badge that still reads
+
+"on track" until the query remounts. The shared query configuration was
+
+deliberately NOT changed — that is a behaviour change affecting every
+
+ticket query, and it is tracked in TASKS.md as a decision for the project
+
+owner.
+
+
+
+\- **MEDIUM (fixed):** the at-risk explanatory copy restated the backend's
+
+`AT_RISK_FRACTION` as prose, and restated it slightly wrong ("less than a
+
+fifth" for a `<=` threshold). Both the panel note and the dashboard note
+
+are now worded so they stay true whatever that constant is set to.
+
+
+
+\- **LOW (fixed):** the dashboard keyed its spinners off `isPending`,
+
+which stays true forever for a disabled query; switched to `isLoading`.
+
+The paused-past-due note claimed absolutely that no time was left, which
+
+is false for the sub-minute window the backend rounds to zero; softened.
+
+The anchor's documentation said "first saw this payload" when it is
+
+really "first rendered with this payload" — a difference of up to
+
+`staleTime` — corrected in both the hook and ADR-021, along with a note
+
+that identity-keying is what makes the ref write idempotent under
+
+StrictMode. The zero-clamp comment now names the ordinary case it exists
+
+for (a tick published before the countdown mounted), not just a backwards
+
+system clock.
+
+
+
+\- **LOW (fixed, tests):** added assertions that the ticker removes its
+
+`visibilitychange` listener on last unsubscribe and registers only one
+
+listener for many countdowns; that a list row renders exactly one SLA
+
+badge rather than one per clock; and that an unknown state leaves
+
+neighbouring rows and the other clock rendering normally.
+
+
+
 Known gaps, unchanged or newly noted:
 
 
@@ -1900,7 +2000,25 @@ and the existing `src/test/guards.test.ts` already forbids `eval` and
 
 `new Function`, but the string-argument form is not covered. Deliberately
 
-left out of this phase's scope; suggested as a future hygiene follow-up.
+left out of this phase's scope; now tracked in TASKS.md's "Deferred from
+
+Phase 7b" list.
+
+
+
+\- An SLA countdown in a long-lived background tab is not refreshed on
+
+return, because `refetchOnWindowFocus` is disabled project-wide, so it
+
+can read "Due now" beside a badge that still says "on track" until the
+
+query remounts. Stale rather than wrong (the badge is the backend's last
+
+word), recorded in ADR-021's Consequences and tracked in TASKS.md as a
+
+decision for the project owner, since fixing it changes shared query
+
+configuration affecting every ticket query.
 
 
 

@@ -10,9 +10,19 @@ import { useSyncExternalStore } from 'react';
  * on a page move together.
  *
  * The ticker NEVER performs a network request, and nothing here reacts to a
- * countdown reaching zero — staleness is entirely TanStack Query's business
- * (its staleTime / refetch-on-mount / refetch-on-focus lifecycle), exactly
- * as it is for every other field on a ticket. See DECISIONS.md ADR-021.
+ * countdown reaching zero — staleness is entirely TanStack Query's business,
+ * exactly as it is for every other field on a ticket. See DECISIONS.md
+ * ADR-021.
+ *
+ * Be precise about what that lifecycle actually is here:
+ * `lib/api/queryClient.ts` sets `refetchOnWindowFocus: false` project-wide,
+ * so refreshing is bounded by `staleTime` plus refetch-on-mount only. A tab
+ * left open in the background is therefore NOT refreshed on return, and its
+ * countdown can sit at "Due now" beside a badge that still reads "on track"
+ * until something remounts the query. The badge remains the backend's last
+ * word, so this is stale rather than wrong — but it is a real consequence,
+ * recorded in ADR-021 and tracked in TASKS.md as a deferred decision, not
+ * something this ticker should paper over with a focus-driven refetch.
  */
 
 /** Slow enough to be cheap, fast enough that a minute figure is never

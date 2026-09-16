@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeTicketSla } from '../../mocks/fixtures';
+import type { SlaResolutionState, SlaResponseState } from '../../types/api';
 import {
   ageMinutes,
   describeResolutionClock,
@@ -222,6 +223,60 @@ describe('backend authority over locally derivable state', () => {
     expect(view.label).toBe('Response at risk');
     expect(view.tone).toBe('warning');
     expect(view.mode).toBe('ticking');
+  });
+});
+
+/**
+ * TypeScript guarantees every state in the union is handled. It guarantees
+ * nothing about the wire — a newer backend or a proxy can send a string this
+ * build has never heard of. Falling off the end of an exhaustive switch
+ * returns `undefined`, and `summariseSla` dereferencing `.severity` on that
+ * throws; with no error boundary in this app, that unmounts the whole tree.
+ */
+describe('an unrecognised state degrades instead of throwing', () => {
+  const bogusResponse = makeTicketSla({
+    responseState: 'SomethingNew' as SlaResponseState,
+  });
+  const bogusResolution = makeTicketSla({
+    resolutionState: 'SomethingNew' as SlaResolutionState,
+  });
+
+  it('describes an unknown response state neutrally', () => {
+    const view = describeResponseClock(bogusResponse);
+
+    expect(view.label).toBe('Response state unavailable');
+    expect(view.tone).toBe('neutral');
+    expect(view.mode).toBe('static');
+    expect(view.severity).toBe(0);
+    // No invented breach/overdue wording, and the date is still shown.
+    expect(view.dueLabel).toBe('Due date');
+    expect(view.dueAt).toBe(bogusResponse.responseDueAt);
+    expect(view.note).not.toMatch(/overdue|breach/i);
+  });
+
+  it('describes an unknown resolution state neutrally', () => {
+    const view = describeResolutionClock(bogusResolution, null);
+
+    expect(view.label).toBe('Resolution state unavailable');
+    expect(view.mode).toBe('static');
+    expect(view.severity).toBe(0);
+  });
+
+  it('does not throw from summariseSla, on either clock', () => {
+    expect(() => summariseSla(bogusResponse, null)).not.toThrow();
+    expect(() => summariseSla(bogusResolution, null)).not.toThrow();
+  });
+
+  it('never lets an uninterpretable clock outrank a real breach', () => {
+    const view = summariseSla(
+      makeTicketSla({
+        responseState: 'SomethingNew' as SlaResponseState,
+        resolutionState: 'Breached',
+      }),
+      null,
+    );
+
+    expect(view.label).toBe('Resolution breached');
   });
 });
 

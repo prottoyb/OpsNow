@@ -53,6 +53,10 @@ export function formatDurationMinutes(minutes: number): string {
   if (minutes <= 0) {
     return DUE_NOW_LABEL;
   }
+  // Reachable only for a direct caller passing a fractional duration (an SLA
+  // target, say). Every SLA countdown path rounds to whole minutes before
+  // calling this, so a live countdown goes straight from "1m" to "Due now"
+  // and never shows this string.
   if (minutes < 1) {
     return 'Less than a minute';
   }
