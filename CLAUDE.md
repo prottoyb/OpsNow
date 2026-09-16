@@ -316,19 +316,19 @@ Prefer small changes that can be verified independently.
 
 
 
-Phases 0–3 are complete: project foundation, approved architecture (ADR-001
+Phases 0–7b are complete: project foundation, approved architecture (ADR-001
 
-through ADR-017 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, and
+through ADR-021 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, the
 
-the NestJS backend foundation (application bootstrap, environment validation,
+NestJS backend foundation, authentication and RBAC, ticket management
 
-global validation/error handling, logging, `/api/v1` versioning, Swagger docs,
+(backend API and frontend UI), and SLA management (backend API and frontend
 
-a database-backed health check, and the backend testing foundation).
+UI).
 
 
 
-Phase 4 — Authentication is next. See `TASKS.md` for the current task list and
+Phase 8 — Asset Management is next. See `TASKS.md` for the current task list
 
-`progress.md` for the full development log.
+and `progress.md` for the full development log.
 
