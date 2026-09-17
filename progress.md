@@ -18,19 +18,19 @@ Current task: none — Phase 7b is complete
 
 
 
-Last completed task: Phase 7b — SLA Management Frontend UI (per-ticket
+Last completed task: Phase 8a — Asset Management Backend API (asset type
 
-SLA panel on the ticket detail page, a per-row SLA indicator in the ticket
+lookup, asset CRUD-minus-delete, a single assignment seam backed by the
 
-list, and a staff-only SLA dashboard over the existing policy/metrics
+AssetAssignment ledger, and ticket <-> asset linking — implemented,
 
-endpoints — implemented, tested and verified; no backend file changed and
+independently reviewed, tested and verified; no schema change, no
 
-no dependency added)
+migration, no new ADR and no dependency added)
 
 
 
-Next task: Begin Phase 8 — Asset Management
+Next task: Begin Phase 8b — Asset Management Frontend UI
 
 
 
@@ -2041,6 +2041,272 @@ Next:
 
 
 \---
+
+
+\### 2026-09-17 — Phase 8a Asset Management Backend API Implemented
+
+
+
+Phase 8a adds asset management to the backend. It was deliberately scoped
+
+as "another resource like Ticket": every model it needs (`Asset`,
+
+`AssetType`, `AssetAssignment`, `TicketAsset`, the `AssetStatus` enum)
+
+already existed in the Phase 2 schema, so this phase adds no migration,
+
+and it reuses the approved ticket patterns rather than inventing new
+
+ones, so it adds no ADR. That was the point of the scoping: a per-row
+
+visibility helper and a compare-and-swap write are cheaper, and easier to
+
+explain, than a policy engine.
+
+
+
+Implemented:
+
+
+
+\- `GET /api/v1/asset-types` — any authenticated user, active types only,
+
+unpaginated, mirroring `ticket-categories` as the read-only
+
+reference-table template.
+
+\- `POST/GET/PATCH /api/v1/assets` and `GET /api/v1/assets/:id` —
+
+staff-only writes, paginated `{data,total}` list with
+
+`status`/`assetTypeId`/`assigneeId`/free-text `q` filters. Row-scoped by
+
+`common/asset-visibility.ts`, a sibling of `common/ticket-visibility.ts`:
+
+an Employee sees only assets currently assigned to them, staff see all
+
+non-soft-deleted assets, and an out-of-scope or soft-deleted asset is a
+
+404 rather than a 403, per ADR-019's safe-not-found rule.
+
+\- `PATCH /api/v1/assets/:id/assignment` — the single seam every
+
+assignment change funnels through, so `status` and `currentAssigneeId`
+
+are only ever written together and the `AssetAssignment` ledger always
+
+mirrors them. It uses the same read-then-conditional-`updateMany`
+
+compare-and-swap as `TicketsService.assign`: a lost race is a 409, not a
+
+silent overwrite. Assigning an `InRepair`/`Retired`/`Lost` asset is
+
+rejected as validation (400) before the CAS, so the caller gets an
+
+explanation rather than a generic conflict. Any active user may hold
+
+equipment — deliberately not staff-only, since employees legitimately do.
+
+\- `GET /api/v1/assets/:id/assignments` — staff-only, paginated. The
+
+ledger IS the asset history; there is no separate audit model.
+
+\- `GET/POST/DELETE /api/v1/tickets/:id/assets[/:assetId]` on the existing
+
+`TicketsController`. The ticket lookup is routed through the existing
+
+ticket-visibility helper first, exactly like `findComments`/`findHistory`,
+
+so a ticket outside the caller's scope reveals nothing. Link and unlink
+
+are both idempotent.
+
+
+
+`PATCH /api/v1/assets/:id` may change status but never assignment, in
+
+both directions — it rejects `status: "Assigned"` outright, and rejects
+
+any status change while the asset is held. That is what stops `status`
+
+and `currentAssigneeId` drifting apart behind the ledger's back. The
+
+practical consequence for Phase 8b is that an edit form must omit
+
+`status` unless it is actually changing.
+
+
+
+Independent review (per the engineering constitution's Mandatory Gate #2
+
+— separate QA/Security and Senior Review agents, neither involved in the
+
+implementation) found one issue both reviewers reached independently,
+
+plus several smaller ones:
+
+
+
+\- **HIGH (fixed):** `GET /tickets/:id/assets` embedded the full asset
+
+record, so an Employee who could see a ticket could read the
+
+`serialNumber`, the staff-authored `notes`, and the identity of the
+
+colleague holding an asset that `GET /assets/:id` correctly 404s for
+
+them — the exact boundary `asset-visibility.ts` exists to enforce. Fixed
+
+by returning a narrow `AssetSummaryResponseDto` (id, assetTag, name,
+
+status, assetType) uniformly for every role, and by narrowing the link
+
+query so the holder relation is not even loaded. A uniform shape was
+
+chosen over a role-dependent projection deliberately: there is then no
+
+per-role branch to get wrong, and the "the caller is responsible for
+
+scoping" seam shrinks to ticket visibility alone. Covered by tests in
+
+both directions, as an Employee and as staff.
+
+\- **MEDIUM (fixed):** an explicit `null` on a non-nullable update field
+
+passed validation (`@IsOptional()` skips validators for `null`, not just
+
+for absence) and reached Postgres as a 500. Now a 400, with the four
+
+genuinely nullable fields documenting clearing as a real capability
+
+rather than an accident.
+
+\- **MEDIUM (fixed):** out-of-range and non-string dates, and NUL/control
+
+bytes in text fields, also reached the database and surfaced as 500s.
+
+Both are now 400s. The control-character guard deliberately still allows
+
+tab/newline/carriage return, since `notes` is multi-line free text.
+
+\- **MEDIUM (fixed):** assignment `notes` submitted with a no-op
+
+assignment were silently discarded behind a 200. That request is now
+
+rejected rather than answered with a lossy success.
+
+\- **MEDIUM (fixed):** the concurrency tests lacked failure power — the
+
+transaction could have been deleted, or `status` dropped from the CAS
+
+predicate, with every test still passing. The CAS-miss test now pins the
+
+full `where` clause, the visibility test compares against the helper's
+
+actual return value instead of a hardcoded literal, the transaction is
+
+asserted, and a new e2e fires two concurrent assignments and asserts
+
+exactly one winner with a single open ledger row matching the asset.
+
+\- **LOW (fixed):** both CAS `where` clauses were built by spreading the
+
+visibility clause last, which for a non-staff caller would have
+
+key-collided with — and silently disabled — the `currentAssigneeId`
+
+concurrency pin. Unreachable today because the staff check runs first,
+
+but now built as `AND` clauses so it cannot happen structurally. Also
+
+fixed: the lost link race reported the wrong resource in its error, an
+
+unreachable `P2025` branch, and unescaped LIKE wildcards in `q`.
+
+
+
+QA/Security separately confirmed by live probe that the compare-and-swap
+
+genuinely prevents double-assignment rather than merely passing its test:
+
+eight rounds of two concurrent assignments produced exactly one winner
+
+every time, with one open ledger row consistent with the asset. Under
+
+Read Committed the loser blocks on the winner's row lock and then
+
+re-evaluates the predicate against the new row version, so pinning both
+
+`currentAssigneeId` and `status` is what makes the outcome decisive — no
+
+stronger isolation level is required.
+
+
+
+Verification (run against the real local Postgres dev database):
+
+`npm run typecheck` clean; 295 unit tests across 17 suites passing; 149
+
+e2e tests across 7 suites passing; `npm audit` reporting 0
+
+vulnerabilities; and dev/seed row counts (users, tickets, assets, asset
+
+types, assignments, ticket links, comments) identical before and after
+
+the e2e run. The backend has no lint script configured, so no lint step
+
+was run and none was added.
+
+
+
+Deferred, tracked rather than dropped:
+
+
+
+\- The explicit-null and control-character validation gaps exist
+
+project-wide in the ticket DTOs too, which Phase 8a's DTOs inherited
+
+rather than invented. Fixing them there spans the settled ticket module,
+
+so it belongs in a follow-up covering both rather than in this phase.
+
+\- `assetInclude` fetches the whole `User` row (password hash included)
+
+for the assignee relation. Nothing leaks — `toUserSummary` strips it, and
+
+the specs assert so — but narrowing it requires changing
+
+`toUserSummary`'s signature and every ticket-module call site, so it is
+
+deferred to the same follow-up.
+
+\- `STAFF_ROLES`/`isStaffRole` are imported into the asset domain from the
+
+tickets module. No runtime cycle exists, and the reuse itself is correct;
+
+only the location is awkward. Moving them to `common/` is mechanical and
+
+was left out to keep this diff scoped.
+
+\- Re-creating an asset with the `assetTag` of a soft-deleted asset
+
+returns 409. Accepted deliberately: the route is staff-only and the tag
+
+genuinely is taken.
+
+
+
+Next:
+
+
+
+\- Begin Phase 8b — Asset Management Frontend UI.
+
+
+
+\---
+
 
 
 \## Resume Instructions

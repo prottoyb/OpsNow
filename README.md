@@ -190,9 +190,19 @@ the SLA frontend: per-ticket SLA state on the ticket detail page, an SLA
 
 indicator in the ticket list, and a staff-only SLA dashboard (Phase 7b).
 
+Asset management's backend REST API is also complete (Phase 8a): asset
+
+types, assets, assignment with a full assignment ledger, and ticket <->
+
+asset links. It has no user interface yet, so it is exercised through
+
+Swagger rather than through the running app.
 
 
-Development is currently entering Phase 8 — Asset Management.
+
+Development is currently entering Phase 8b — the Asset Management
+
+frontend UI.
 
 
 

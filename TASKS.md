@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 8 — Asset Management (Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete)
+Current Phase: Phase 8b — Asset Management (Frontend UI). Phase 8a — Asset Management backend API — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
 
 
 
@@ -544,23 +544,59 @@ remaining member of that family. Hygiene, no known defect.
 
 
 
-\# Phase 8 — Asset Management
+\# Phase 8a — Asset Management (Backend API)
 
 
 
-\- \[ ] Create asset types
+\- \[x] Create asset types
 
-\- \[ ] Create asset entity
+\- \[x] Create asset entity
 
-\- \[ ] Create asset service
+\- \[x] Create asset service
 
-\- \[ ] Create asset API
+\- \[x] Create asset API
 
-\- \[ ] Implement asset assignment
+\- \[x] Implement asset assignment
 
-\- \[ ] Implement asset history
+\- \[x] Implement asset history
 
-\- \[ ] Link assets to tickets
+\- \[x] Link assets to tickets
+
+\- \[x] Add asset tests (backend unit + e2e; frontend tests land in 8b)
+
+
+
+`Asset`, `AssetType`, `AssetAssignment` and `TicketAsset` were already
+
+part of the Phase 2 schema/migration — Phase 8a adds no new migration,
+
+and no new ADR: it reuses ADR-019's per-row visibility pattern (via
+
+`common/asset-visibility.ts`, a sibling of `common/ticket-visibility.ts`)
+
+and the same read-then-conditional-update concurrency pattern as ticket
+
+assignment, rather than introducing a policy engine or an audit table.
+
+The `AssetAssignment` ledger IS the asset history; there is no separate
+
+history model.
+
+
+
+Split into 8a (backend) / 8b (frontend) following the Phase 6a/6b and
+
+7a/7b precedent.
+
+
+
+\---
+
+
+
+\# Phase 8b — Asset Management (Frontend UI)
+
+
 
 \- \[ ] Build asset list page
 
@@ -568,7 +604,23 @@ remaining member of that family. Hygiene, no known defect.
 
 \- \[ ] Build asset assignment interface
 
-\- \[ ] Add asset tests
+\- \[ ] Show a ticket's linked assets
+
+\- \[ ] Add asset frontend tests
+
+
+
+Note for 8b: `PATCH /api/v1/assets/:id` rejects any request that carries
+
+`status` while the asset is assigned, and rejects `status: "Assigned"`
+
+outright — so an edit form must OMIT `status` unless it is actually
+
+changing it. `GET /api/v1/tickets/:id/assets` deliberately returns a
+
+narrow asset summary (id, assetTag, name, status, assetType) for every
+
+role; full detail comes from the row-scoped `GET /api/v1/assets/:id`.
 
 
 
