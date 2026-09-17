@@ -8,6 +8,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { trim } from '../../common/transforms/trim.transform';
+import { NoControlCharacters } from '../../common/validators/no-control-characters.validator';
 
 export class AssignAssetDto {
   @ApiProperty({
@@ -29,5 +30,6 @@ export class AssignAssetDto {
   @Transform(trim)
   @IsString()
   @MaxLength(5000)
+  @NoControlCharacters()
   notes?: string;
 }

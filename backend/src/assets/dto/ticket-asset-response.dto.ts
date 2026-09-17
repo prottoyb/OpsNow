@@ -1,8 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserSummaryResponseDto } from '../../common/dto/user-summary-response.dto';
-import { AssetResponseDto } from './asset-response.dto';
+import { AssetSummaryResponseDto } from './asset-summary-response.dto';
 
-/** A ticket <-> asset link, with the linked asset embedded. */
+/** A ticket <-> asset link, with a summary of the linked asset embedded.
+ * Deliberately a summary and not the full AssetResponseDto — see
+ * AssetSummaryResponseDto for why. */
 export class TicketAssetResponseDto {
   @ApiProperty()
   ticketId!: string;
@@ -17,6 +19,6 @@ export class TicketAssetResponseDto {
   })
   linkedBy!: UserSummaryResponseDto | null;
 
-  @ApiProperty({ type: AssetResponseDto })
-  asset!: AssetResponseDto;
+  @ApiProperty({ type: AssetSummaryResponseDto })
+  asset!: AssetSummaryResponseDto;
 }

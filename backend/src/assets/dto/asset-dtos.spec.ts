@@ -64,6 +64,108 @@ describe('CreateAssetDto', () => {
     expect(failedProperties(dto)).toEqual([]);
     expect(dto.purchaseDate).toBeInstanceOf(Date);
   });
+
+  it('accepts a plain calendar date unchanged', () => {
+    const dto = createDto({ purchaseDate: '2024-03-01' });
+    expect(failedProperties(dto)).toEqual([]);
+    expect((dto.purchaseDate as Date).toISOString()).toBe(
+      '2024-03-01T00:00:00.000Z',
+    );
+  });
+
+  it.each([
+    ['an out-of-range year', '275760-09-13'],
+    ['an in-format but absurd year', '9999-12-31'],
+    ['a pre-epoch year', '1899-01-01'],
+  ])('rejects %s rather than letting the driver 500', (_label, purchaseDate) => {
+    expect(failedProperties(createDto({ purchaseDate }))).toContain(
+      'purchaseDate',
+    );
+  });
+
+  it.each([
+    ['a JSON number', 12345],
+    ['a boolean', true],
+    ['an object', { year: 2024 }],
+  ])(
+    'rejects %s as a date instead of coercing it (12345 used to become 1970-01-01)',
+    (_label, purchaseDate) => {
+      expect(failedProperties(createDto({ purchaseDate }))).toContain(
+        'purchaseDate',
+      );
+    },
+  );
+
+  it('applies the same date rules to warrantyExpiresAt', () => {
+    expect(
+      failedProperties(createDto({ warrantyExpiresAt: '275760-09-13' })),
+    ).toContain('warrantyExpiresAt');
+  });
+
+  it.each([
+    ['assetTag', { assetTag: 'AB\u0000CD' }],
+    ['name', { name: 'AB\u0000CD' }],
+    ['serialNumber', { serialNumber: 'AB\u0000CD' }],
+    ['notes', { notes: 'AB\u0000CD' }],
+  ])(
+    'rejects a NUL byte in %s — Postgres refuses it and Prisma reports it as an unmapped 500',
+    (property, overrides) => {
+      expect(failedProperties(createDto(overrides))).toContain(property);
+    },
+  );
+
+  it('rejects other C0 control characters too, but still allows newlines in notes', () => {
+    expect(failedProperties(createDto({ notes: 'line\u0007bell' }))).toContain(
+      'notes',
+    );
+    expect(
+      failedProperties(createDto({ notes: 'line one\nline two\ttabbed' })),
+    ).toEqual([]);
+  });
+});
+
+describe('UpdateAssetDto — explicit null handling', () => {
+  // `@IsOptional()` skips every validator for null as well as undefined,
+  // so `{ name: null }` used to validate clean, reach Prisma as a null
+  // write to a NOT NULL column, and come back as a 500.
+  it.each([['name'], ['assetTypeId'], ['status']])(
+    'rejects an explicit null on the non-nullable %s',
+    (property) => {
+      const dto = plainToInstance(UpdateAssetDto, { [property]: null });
+      expect(failedProperties(dto)).toContain(property);
+    },
+  );
+
+  it.each([
+    ['serialNumber'],
+    ['notes'],
+    ['purchaseDate'],
+    ['warrantyExpiresAt'],
+  ])('accepts an explicit null on the nullable %s — that is how it is cleared', (property) => {
+    const dto = plainToInstance(UpdateAssetDto, { [property]: null });
+    expect(failedProperties(dto)).toEqual([]);
+    expect((dto as Record<string, unknown>)[property]).toBeNull();
+  });
+
+  it('still accepts an omitted field', () => {
+    expect(failedProperties(plainToInstance(UpdateAssetDto, {}))).toEqual([]);
+  });
+
+  it.each([
+    ['an out-of-range date', { purchaseDate: '275760-09-13' }, 'purchaseDate'],
+    ['a numeric date', { warrantyExpiresAt: 12345 }, 'warrantyExpiresAt'],
+    ['a NUL byte', { name: 'AB\u0000CD' }, 'name'],
+  ])('rejects %s on update too', (_label, payload, property) => {
+    expect(failedProperties(plainToInstance(UpdateAssetDto, payload))).toContain(
+      property,
+    );
+  });
+
+  it('accepts a normal calendar date on update', () => {
+    const dto = plainToInstance(UpdateAssetDto, { purchaseDate: '2024-03-01' });
+    expect(failedProperties(dto)).toEqual([]);
+    expect(dto.purchaseDate).toBeInstanceOf(Date);
+  });
 });
 
 describe('UpdateAssetDto', () => {
@@ -117,6 +219,14 @@ describe('AssignAssetDto', () => {
     const dto = plainToInstance(AssignAssetDto, {
       assignedToId: null,
       notes: 'x'.repeat(5001),
+    });
+    expect(failedProperties(dto)).toContain('notes');
+  });
+
+  it('rejects a NUL byte in notes', () => {
+    const dto = plainToInstance(AssignAssetDto, {
+      assignedToId: '22222222-2222-4222-8222-222222222222',
+      notes: 'Issued\u0000at onboarding',
     });
     expect(failedProperties(dto)).toContain('notes');
   });

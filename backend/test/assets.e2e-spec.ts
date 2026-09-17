@@ -35,6 +35,7 @@ describe('Assets (e2e)', () => {
   let laptopTypeId: string;
   let employee1Id: string;
   let employee2Id: string;
+  let employee2LastName: string;
 
   const createdAssetIds: string[] = [];
   const createdTicketIds: string[] = [];
@@ -70,6 +71,11 @@ describe('Assets (e2e)', () => {
       usersRes.body.data.find((u: { email: string }) => u.email === email).id;
     employee1Id = findUser('employee1@opsnow.local');
     employee2Id = findUser('employee2@opsnow.local');
+    // Read from the seed rather than hard-coded, so the leak assertions
+    // below stay true if the seeded names change.
+    employee2LastName = usersRes.body.data.find(
+      (u: { email: string }) => u.email === 'employee2@opsnow.local',
+    ).lastName;
   });
 
   afterAll(async () => {
@@ -735,6 +741,110 @@ describe('Assets (e2e)', () => {
         .delete(`/api/v1/tickets/${ticketId}/assets/${assetId}`)
         .set('Authorization', `Bearer ${employee1Token}`);
       expect(response.status).toBe(403);
+    });
+  });
+
+  describe('GET /tickets/:id/assets projection', () => {
+    // The ticket-link route does NO asset scoping of its own — it relies
+    // entirely on ticket visibility. What keeps that safe is the uniform
+    // AssetSummaryResponseDto projection: the fields GET /assets/:id
+    // would 404 on for this caller are never in the payload at all.
+    const SERIAL = 'SN-CONFIDENTIAL-8842';
+    const NOTES = 'Internal handling note: liquid damage claim pending.';
+
+    let ticketId: string;
+    let assetId: string;
+
+    beforeAll(async () => {
+      const ticket = await createTicket(employee1Token);
+      ticketId = ticket.body.id;
+
+      const asset = await createAsset(agent1Token, {
+        serialNumber: SERIAL,
+        notes: NOTES,
+      });
+      assetId = asset.body.id;
+
+      // Held by employee2 — a different employee from the requester.
+      await request(app.getHttpServer())
+        .patch(`/api/v1/assets/${assetId}/assignment`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ assignedToId: employee2Id })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post(`/api/v1/tickets/${ticketId}/assets`)
+        .set('Authorization', `Bearer ${agent1Token}`)
+        .send({ assetId })
+        .expect(201);
+    });
+
+    it('confirms the requester cannot read the asset directly', async () => {
+      const direct = await request(app.getHttpServer())
+        .get(`/api/v1/assets/${assetId}`)
+        .set('Authorization', `Bearer ${employee1Token}`);
+      expect(direct.status).toBe(404);
+    });
+
+    it.each([
+      ['the ticket requester', () => employee1Token],
+      ['a staff caller (the projection is uniform)', () => agent1Token],
+    ])('returns only the asset summary to %s', async (_label, token) => {
+      const response = await request(app.getHttpServer())
+        .get(`/api/v1/tickets/${ticketId}/assets`)
+        .set('Authorization', `Bearer ${token()}`);
+
+      expect(response.status).toBe(200);
+      const link = response.body.find(
+        (l: { asset: { id: string } }) => l.asset.id === assetId,
+      );
+      expect(link).toBeDefined();
+      expect(Object.keys(link.asset).sort()).toEqual([
+        'assetTag',
+        'assetType',
+        'id',
+        'name',
+        'status',
+      ]);
+
+      const payload = JSON.stringify(response.body);
+      expect(payload).not.toContain(SERIAL);
+      expect(payload).not.toContain(NOTES);
+      expect(payload).not.toContain(employee2LastName);
+    });
+  });
+
+  describe('concurrent assignment', () => {
+    it('lets exactly one of two simultaneous assignments win, leaving one open ledger row', async () => {
+      const created = await createAsset(agent1Token);
+      const assetId = created.body.id;
+
+      const patch = (assignedToId: string) =>
+        request(app.getHttpServer())
+          .patch(`/api/v1/assets/${assetId}/assignment`)
+          .set('Authorization', `Bearer ${agent1Token}`)
+          .send({ assignedToId });
+
+      const [first, second] = await Promise.all([
+        patch(employee1Id),
+        patch(employee2Id),
+      ]);
+
+      // The CAS predicate is what decides this: the loser's updateMany
+      // matches no row, so it is a 409 rather than a silent overwrite.
+      expect([first.status, second.status].sort()).toEqual([200, 409]);
+
+      const asset = await prisma.asset.findUniqueOrThrow({
+        where: { id: assetId },
+      });
+      expect(asset.status).toBe('Assigned');
+
+      const openRows = await prisma.assetAssignment.findMany({
+        where: { assetId, returnedAt: null },
+      });
+      expect(openRows).toHaveLength(1);
+      // The ledger and the asset agree about who holds it.
+      expect(openRows[0].assignedToId).toBe(asset.currentAssigneeId);
     });
   });
 });

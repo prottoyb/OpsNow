@@ -7,6 +7,7 @@ import {
 import { AssetStatus, Prisma, Role } from '@prisma/client';
 import { AssetTypesService } from '../asset-types/asset-types.service';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
+import { assetVisibilityWhere } from '../common/asset-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { AssetsService } from './assets.service';
@@ -310,6 +311,55 @@ describe('AssetsService', () => {
       });
     });
 
+    it('escapes LIKE wildcards in q, so `%` searches for a literal percent sign', async () => {
+      prisma.asset.findMany.mockResolvedValue([]);
+      prisma.asset.count.mockResolvedValue(0);
+
+      await service.findAll(
+        { limit: 20, offset: 0, q: '50%_off' } as never,
+        staffUser,
+      );
+
+      const clauses = (
+        prisma.asset.findMany.mock.calls[0][0] as {
+          where: { AND: Record<string, unknown>[] };
+        }
+      ).where.AND;
+      // Unescaped, `%` would match every row and `_` any single character.
+      const contains = { contains: '50\\%\\_off', mode: 'insensitive' };
+      expect(clauses).toContainEqual({
+        OR: [
+          { assetTag: contains },
+          { name: contains },
+          { serialNumber: contains },
+        ],
+      });
+    });
+
+    it('escapes the backslash itself, so the escape character cannot be smuggled in', async () => {
+      prisma.asset.findMany.mockResolvedValue([]);
+      prisma.asset.count.mockResolvedValue(0);
+
+      await service.findAll(
+        { limit: 20, offset: 0, q: 'a\\%b' } as never,
+        staffUser,
+      );
+
+      const clauses = (
+        prisma.asset.findMany.mock.calls[0][0] as {
+          where: { AND: Record<string, unknown>[] };
+        }
+      ).where.AND;
+      const contains = { contains: 'a\\\\\\%b', mode: 'insensitive' };
+      expect(clauses).toContainEqual({
+        OR: [
+          { assetTag: contains },
+          { name: contains },
+          { serialNumber: contains },
+        ],
+      });
+    });
+
     it('passes status and assetTypeId filters through', async () => {
       prisma.asset.findMany.mockResolvedValue([]);
       prisma.asset.count.mockResolvedValue(0);
@@ -398,13 +448,47 @@ describe('AssetsService', () => {
 
       await service.update('asset-1', { name: 'Renamed' }, staffUser);
 
+      // Visibility and the CAS pins live in separate AND clauses, so no
+      // key of one can ever overwrite a key of the other.
       expect(prisma.asset.updateMany).toHaveBeenCalledWith({
         where: {
-          id: 'asset-1',
-          updatedAt: asset.updatedAt,
-          deletedAt: null,
+          AND: [
+            assetVisibilityWhere(staffUser),
+            { id: 'asset-1', updatedAt: asset.updatedAt },
+          ],
         },
         data: { name: 'Renamed' },
+      });
+    });
+
+    it('writes an explicit null through for the four nullable fields', async () => {
+      const asset = buildAsset({
+        serialNumber: 'SN-1',
+        notes: 'Old note',
+        purchaseDate: new Date('2024-03-01T00:00:00.000Z'),
+        warrantyExpiresAt: new Date('2027-03-01T00:00:00.000Z'),
+      });
+      prisma.asset.findFirst.mockResolvedValue(asset);
+      prisma.asset.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.update(
+        'asset-1',
+        {
+          serialNumber: null,
+          notes: null,
+          purchaseDate: null,
+          warrantyExpiresAt: null,
+        },
+        staffUser,
+      );
+
+      // Clearing these is a real, supported edit — the null must reach
+      // the database, not be dropped as if the key were absent.
+      expect(prisma.asset.updateMany.mock.calls[0][0].data).toEqual({
+        serialNumber: null,
+        notes: null,
+        purchaseDate: null,
+        warrantyExpiresAt: null,
       });
     });
 
@@ -604,18 +688,24 @@ describe('AssetsService', () => {
         staffUser,
       );
 
+      expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.asset.updateMany).toHaveBeenCalledWith({
         where: {
-          id: 'asset-1',
-          currentAssigneeId: null,
-          status: AssetStatus.InStock,
-          deletedAt: null,
+          AND: [
+            assetVisibilityWhere(staffUser),
+            {
+              id: 'asset-1',
+              currentAssigneeId: null,
+              status: AssetStatus.InStock,
+            },
+          ],
         },
         data: {
           currentAssigneeId: 'employee-2',
           status: AssetStatus.Assigned,
         },
       });
+
       expect(prisma.assetAssignment.create).toHaveBeenCalledWith({
         data: {
           assetId: 'asset-1',
@@ -644,15 +734,21 @@ describe('AssetsService', () => {
         staffUser,
       );
 
+      expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.asset.updateMany).toHaveBeenCalledWith({
         where: {
-          id: 'asset-1',
-          currentAssigneeId: 'employee-1',
-          status: AssetStatus.Assigned,
-          deletedAt: null,
+          AND: [
+            assetVisibilityWhere(staffUser),
+            {
+              id: 'asset-1',
+              currentAssigneeId: 'employee-1',
+              status: AssetStatus.Assigned,
+            },
+          ],
         },
         data: { currentAssigneeId: null, status: AssetStatus.InStock },
       });
+
       const close = prisma.assetAssignment.updateMany.mock.calls[0][0];
       expect(close.where).toEqual({ assetId: 'asset-1', returnedAt: null });
       expect(close.data.returnedAt).toBeInstanceOf(Date);
@@ -686,6 +782,7 @@ describe('AssetsService', () => {
         staffUser,
       );
 
+      expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.assetAssignment.updateMany).toHaveBeenCalledWith({
         where: { assetId: 'asset-1', returnedAt: null },
         data: { returnedAt: expect.any(Date) },
@@ -693,10 +790,12 @@ describe('AssetsService', () => {
       expect(prisma.assetAssignment.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ assignedToId: 'employee-2' }),
       });
-      expect(prisma.asset.updateMany.mock.calls[0][0].where).toMatchObject({
+      expect(prisma.asset.updateMany.mock.calls[0][0].where.AND).toContainEqual({
+        id: 'asset-1',
         currentAssigneeId: 'employee-1',
         status: AssetStatus.Assigned,
       });
+
     });
 
     it('is a no-op when assigning to the current holder', async () => {
@@ -715,6 +814,32 @@ describe('AssetsService', () => {
       );
 
       expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(usersService.findById).not.toHaveBeenCalled();
+    });
+
+    it('rejects a same-holder no-op that carries notes instead of discarding them', async () => {
+      prisma.asset.findFirst.mockResolvedValue(
+        buildAsset({
+          status: AssetStatus.Assigned,
+          currentAssigneeId: 'employee-1',
+          currentAssignee: buildUserRecord(),
+        }),
+      );
+
+      // A ledger row is only opened by a real assignment change, so a
+      // note attached to a no-op has nowhere to go; a silent 200 would
+      // lose it.
+      await expect(
+        service.updateAssignment(
+          'asset-1',
+          { assignedToId: 'employee-1', notes: 'Swapped the charger' },
+          staffUser,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.assetAssignment.create).not.toHaveBeenCalled();
+      // Still rejected BEFORE the target lookup, so re-submitting the
+      // same assignment can never fail on a since-deactivated user.
       expect(usersService.findById).not.toHaveBeenCalled();
     });
 
@@ -784,6 +909,25 @@ describe('AssetsService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.assetAssignment.create).not.toHaveBeenCalled();
       expect(prisma.assetAssignment.updateMany).not.toHaveBeenCalled();
+      // The 409 has to come from the CAS predicate itself, so assert the
+      // full where: a `count: 0` assertion alone would still pass if the
+      // status pin — or the whole conditional update — were deleted.
+      expect(prisma.asset.updateMany).toHaveBeenCalledWith({
+        where: {
+          AND: [
+            assetVisibilityWhere(staffUser),
+            {
+              id: 'asset-1',
+              currentAssigneeId: null,
+              status: AssetStatus.InStock,
+            },
+          ],
+        },
+        data: {
+          currentAssigneeId: 'employee-2',
+          status: AssetStatus.Assigned,
+        },
+      });
     });
 
     it('re-asserts the visibility scope in the CAS where clause', async () => {
@@ -800,8 +944,19 @@ describe('AssetsService', () => {
 
       await service.updateAssignment('asset-1', { assignedToId: null }, staffUser);
 
-      expect(prisma.asset.updateMany.mock.calls[0][0].where).toMatchObject({
-        deletedAt: null,
+      const where = prisma.asset.updateMany.mock.calls[0][0].where as {
+        AND: unknown[];
+      };
+      // Compared against the helper's own output rather than a literal
+      // `{ deletedAt: null }`, so the test distinguishes "the scoping rule
+      // was applied" from "a clause that happens to look like it today".
+      expect(where.AND).toContainEqual(assetVisibilityWhere(staffUser));
+      // ...and the concurrency pins survive as a clause of their own,
+      // where the visibility rule cannot collide with them.
+      expect(where.AND).toContainEqual({
+        id: 'asset-1',
+        currentAssigneeId: 'employee-1',
+        status: AssetStatus.Assigned,
       });
     });
   });
@@ -883,7 +1038,18 @@ describe('AssetsService', () => {
       );
     });
 
-    it('maps each link with its asset embedded', async () => {
+    it('does not even load the holder relation for an embedded asset', async () => {
+      prisma.ticketAsset.findMany.mockResolvedValue([]);
+
+      await service.findForTicket('ticket-1');
+
+      const include = prisma.ticketAsset.findMany.mock.calls[0][0].include as {
+        asset: { include: Record<string, unknown> };
+      };
+      expect(include.asset.include).not.toHaveProperty('currentAssignee');
+    });
+
+    it('maps each link with an asset SUMMARY embedded — only the five link fields', async () => {
       prisma.ticketAsset.findMany.mockResolvedValue([
         {
           ticketId: 'ticket-1',
@@ -891,7 +1057,12 @@ describe('AssetsService', () => {
           linkedAt: new Date(),
           linkedById: null,
           linkedBy: null,
-          asset: buildAsset(),
+          asset: buildAsset({
+            serialNumber: 'SN-SECRET-42',
+            notes: 'Staff-only handling note',
+            currentAssigneeId: 'employee-2',
+            currentAssignee: buildUserRecord({ id: 'employee-2' }),
+          }),
         },
       ]);
 
@@ -899,7 +1070,27 @@ describe('AssetsService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].asset.assetTag).toBe('LAPTOP-9001');
+      expect(result[0].asset.assetType.name).toBe('Laptop');
       expect(result[0].linkedBy).toBeNull();
+
+      // The projection is what keeps this route — which does no asset
+      // scoping of its own — from handing out detail that
+      // GET /assets/:id would 404 for the same caller. Asserted as
+      // ABSENT, not merely null.
+      expect(Object.keys(result[0].asset).sort()).toEqual([
+        'assetTag',
+        'assetType',
+        'id',
+        'name',
+        'status',
+      ]);
+      expect(result[0].asset).not.toHaveProperty('serialNumber');
+      expect(result[0].asset).not.toHaveProperty('notes');
+      expect(result[0].asset).not.toHaveProperty('currentAssignee');
+      expect(result[0].asset).not.toHaveProperty('purchaseDate');
+      expect(result[0].asset).not.toHaveProperty('warrantyExpiresAt');
+      expect(JSON.stringify(result)).not.toContain('SN-SECRET-42');
+      expect(JSON.stringify(result)).not.toContain('Staff-only handling note');
     });
   });
 

@@ -20,6 +20,7 @@ import {
   AssetAssignmentResponseDto,
 } from './dto/asset-assignment-response.dto';
 import { AssetListResponseDto, AssetResponseDto } from './dto/asset-response.dto';
+import { AssetSummaryResponseDto } from './dto/asset-summary-response.dto';
 import { CreateAssetDto } from './dto/create-asset.dto';
 import { ListAssetAssignmentsQueryDto } from './dto/list-asset-assignments-query.dto';
 import { ListAssetsQueryDto } from './dto/list-assets-query.dto';
@@ -44,8 +45,11 @@ type AssignmentWithRelations = Prisma.AssetAssignmentGetPayload<{
   include: typeof assignmentInclude;
 }>;
 
+// Deliberately narrower than `assetInclude`: a ticket link only ever
+// renders an AssetSummaryResponseDto, so the holder relation is not
+// loaded at all and cannot leak through this route by accident.
 const ticketAssetInclude = {
-  asset: { include: assetInclude },
+  asset: { include: { assetType: true } },
   linkedBy: true,
 } as const;
 
@@ -89,6 +93,28 @@ function toAssetAssignmentResponse(
   };
 }
 
+/**
+ * The projection used wherever an asset is EMBEDDED in another resource.
+ *
+ * The ticket-link list answers "which assets is this ticket about", not
+ * "tell me everything about this asset": serialNumber, staff-authored
+ * notes and the current holder stay behind GET /assets/:id, which is
+ * row-scoped by `common/asset-visibility.ts`. Uniform for every role on
+ * purpose — a single shape means there is no role-dependent projection to
+ * get wrong. See AssetSummaryResponseDto.
+ */
+export function toAssetSummaryResponse(
+  asset: Prisma.AssetGetPayload<{ include: { assetType: true } }>,
+): AssetSummaryResponseDto {
+  return {
+    id: asset.id,
+    assetTag: asset.assetTag,
+    name: asset.name,
+    status: asset.status,
+    assetType: toAssetTypeResponse(asset.assetType),
+  };
+}
+
 function toTicketAssetResponse(
   link: TicketAssetWithRelations,
 ): TicketAssetResponseDto {
@@ -96,7 +122,7 @@ function toTicketAssetResponse(
     ticketId: link.ticketId,
     linkedAt: link.linkedAt,
     linkedBy: link.linkedBy ? toUserSummary(link.linkedBy) : null,
-    asset: toAssetResponse(link.asset),
+    asset: toAssetSummaryResponse(link.asset),
   };
 }
 
@@ -243,10 +269,16 @@ export class AssetsService {
       // this write — which would otherwise let a status change reach an
       // asset that has just acquired an assignee.
       const updated = await tx.asset.updateMany({
+        // Visibility is ANDed as its own clause rather than spread in
+        // alongside the CAS pins, exactly as findAll builds its filters:
+        // spreading lets a key collision silently replace a pin, so the
+        // two concerns are kept in separate objects where they cannot
+        // overwrite each other.
         where: {
-          id: asset.id,
-          updatedAt: asset.updatedAt,
-          ...this.assetVisibilityWhere(user),
+          AND: [
+            this.assetVisibilityWhere(user),
+            { id: asset.id, updatedAt: asset.updatedAt },
+          ],
         },
         data,
       });
@@ -284,6 +316,16 @@ export class AssetsService {
       // that is already unassigned. Checked before the target lookup
       // below so re-submitting the same assignment never fails on a user
       // who has since become inactive.
+      if (dto.notes !== undefined) {
+        // A ledger row is only ever opened by a real assignment change,
+        // so there is nowhere to record this note. Saying so is better
+        // than a 200 that quietly discards what the caller wrote.
+        throw new BadRequestException(
+          expectedAssigneeId === null
+            ? 'Asset is already unassigned'
+            : 'Asset is already assigned to this user',
+        );
+      }
       return toAssetResponse(asset);
     }
 
@@ -315,13 +357,21 @@ export class AssetsService {
       // staff hand the same in-stock asset to different people at once,
       // and the one where a status change (e.g. -> InRepair) lands first.
       // Re-asserting assetVisibilityWhere keeps the write itself in
-      // scope, not only the read that preceded it.
+      // scope, not only the read that preceded it — ANDed as its own
+      // clause, never spread, because `assetVisibilityWhere` itself
+      // yields a `currentAssigneeId` key for an Employee: spreading it
+      // last would overwrite the CAS pin above and quietly demote the
+      // concurrency guard into an ownership check.
       const rotated = await tx.asset.updateMany({
         where: {
-          id: asset.id,
-          currentAssigneeId: expectedAssigneeId,
-          status: expectedStatus,
-          ...this.assetVisibilityWhere(user),
+          AND: [
+            this.assetVisibilityWhere(user),
+            {
+              id: asset.id,
+              currentAssigneeId: expectedAssigneeId,
+              status: expectedStatus,
+            },
+          ],
         },
         data: dto.assignedToId
           ? { currentAssigneeId: dto.assignedToId, status: AssetStatus.Assigned }
@@ -388,13 +438,26 @@ export class AssetsService {
   }
 
   /**
-   * Ticket <-> asset links for one ticket. Callers (TicketsService) MUST
-   * have already established that the caller may see the ticket — this
-   * method deliberately performs no ticket-visibility check of its own,
-   * exactly like the comment/history listings.
+   * Ticket <-> asset links for one ticket.
+   *
+   * Ticket visibility is the caller's responsibility: TicketsService
+   * resolves the ticket through its own visibility helper first, so a
+   * ticket the caller cannot see never reaches this method. That ticket
+   * check is the ONLY scoping this route relies on, and deliberately so —
+   * every asset here is projected down to AssetSummaryResponseDto (id,
+   * assetTag, name, status, assetType) for EVERY role. The list answers
+   * "which assets is this ticket about"; the detail an Employee must not
+   * see about somebody else's asset — serialNumber, staff notes, the
+   * current holder — is never loaded here at all and stays behind
+   * GET /assets/:id, which is row-scoped by `common/asset-visibility.ts`.
+   *
+   * Because that projection is uniform there is no per-caller decision
+   * left to make, which is why this takes no `user` parameter.
    */
   async findForTicket(ticketId: string): Promise<TicketAssetResponseDto[]> {
     const links = await this.prisma.ticketAsset.findMany({
+      // Soft-deleted assets drop out of the listing rather than appearing
+      // as tombstones.
       where: { ticketId, asset: { deletedAt: null } },
       include: ticketAssetInclude,
       orderBy: [{ linkedAt: 'desc' }, { assetId: 'desc' }],
@@ -449,6 +512,14 @@ export class AssetsService {
         if (link) {
           return toTicketAssetResponse(link);
         }
+        // The link vanished again between the failed insert and this
+        // re-read (the competing writer rolled back, or unlinked). Falling
+        // through to mapPrismaError would report "an asset with this asset
+        // tag already exists" — the wrong resource entirely, since the
+        // constraint that fired was the ticket_assets composite key.
+        throw new ConflictException(
+          'Could not link the asset to the ticket; retry',
+        );
       }
       return this.mapPrismaError(error);
     }
@@ -480,7 +551,13 @@ export class AssetsService {
   }
 
   private searchWhere(term: string): Prisma.AssetWhereInput {
-    const contains = { contains: term, mode: Prisma.QueryMode.insensitive };
+    // `contains` compiles to a Postgres ILIKE, where `%` and `_` are
+    // wildcards and `\` is the default escape character. The term is a
+    // bound parameter either way (so this is not an injection fix) — it is
+    // a correctness one: without escaping, `q=%` matches every row and
+    // `q=a_b` matches "axb".
+    const escaped = term.replace(/[\\%_]/g, (char) => `\\${char}`);
+    const contains = { contains: escaped, mode: Prisma.QueryMode.insensitive };
     return {
       OR: [
         { assetTag: contains },
@@ -566,9 +643,9 @@ export class AssetsService {
       if (error.code === 'P2003') {
         throw new BadRequestException('Referenced record no longer exists');
       }
-      if (error.code === 'P2025') {
-        throw new NotFoundException('Asset not found');
-      }
+      // No P2025 branch: this service only ever issues create/updateMany/
+      // deleteMany, none of which raise "record to update not found" — a
+      // missing row surfaces as `count: 0` and is handled at the call site.
     }
     throw error as Error;
   }
