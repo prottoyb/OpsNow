@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CommentVisibility, Role, TicketPriority, TicketStatus } from '@prisma/client';
+import { AssetsService } from '../assets/assets.service';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlaService } from '../sla/sla.service';
@@ -96,6 +97,11 @@ describe('TicketsService', () => {
     recordResolutionOutcome: jest.Mock;
     toTicketSlaResponse: jest.Mock;
   };
+  let assetsService: {
+    findForTicket: jest.Mock;
+    linkToTicket: jest.Mock;
+    unlinkFromTicket: jest.Mock;
+  };
 
   beforeEach(() => {
     prisma = {
@@ -127,12 +133,18 @@ describe('TicketsService', () => {
       recordResolutionOutcome: jest.fn(),
       toTicketSlaResponse: jest.fn().mockReturnValue(null),
     };
+    assetsService = {
+      findForTicket: jest.fn().mockResolvedValue([]),
+      linkToTicket: jest.fn(),
+      unlinkFromTicket: jest.fn(),
+    };
 
     service = new TicketsService(
       prisma as unknown as PrismaService,
       usersService as unknown as UsersService,
       ticketCategoriesService as unknown as TicketCategoriesService,
       slaService as unknown as SlaService,
+      assetsService as unknown as AssetsService,
     );
   });
 
@@ -1089,6 +1101,110 @@ describe('TicketsService', () => {
 
       expect(result.total).toBe(1);
       expect(result.data[0].fieldName).toBe('status');
+    });
+  });
+
+  describe('ticket <-> asset links', () => {
+    const link = {
+      ticketId: 'ticket-1',
+      linkedAt: new Date(),
+      linkedBy: null,
+      asset: { id: 'asset-1' },
+    };
+
+    describe('findAssets', () => {
+      it('scopes the ticket lookup to the caller before listing links', async () => {
+        prisma.ticket.findFirst.mockResolvedValue(buildTicket());
+        assetsService.findForTicket.mockResolvedValue([link]);
+
+        const result = await service.findAssets('ticket-1', authUser());
+
+        expect(prisma.ticket.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              id: 'ticket-1',
+              deletedAt: null,
+              requesterId: 'employee-1',
+            }),
+          }),
+        );
+        expect(result).toEqual([link]);
+      });
+
+      it('404s for a ticket outside the caller scope, without listing anything', async () => {
+        prisma.ticket.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.findAssets('ticket-1', authUser({ id: 'employee-2' })),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(assetsService.findForTicket).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('linkAsset', () => {
+      it('rejects a non-staff caller (defense-in-depth beyond the controller guard)', async () => {
+        await expect(
+          service.linkAsset('ticket-1', { assetId: 'asset-1' }, authUser()),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(assetsService.linkToTicket).not.toHaveBeenCalled();
+      });
+
+      it('404s for a ticket outside the caller scope, without linking', async () => {
+        prisma.ticket.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.linkAsset('ticket-1', { assetId: 'asset-1' }, staffUser),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(assetsService.linkToTicket).not.toHaveBeenCalled();
+      });
+
+      it('delegates to AssetsService once the ticket is visible', async () => {
+        prisma.ticket.findFirst.mockResolvedValue(buildTicket());
+        assetsService.linkToTicket.mockResolvedValue(link);
+
+        const result = await service.linkAsset(
+          'ticket-1',
+          { assetId: 'asset-1' },
+          staffUser,
+        );
+
+        expect(assetsService.linkToTicket).toHaveBeenCalledWith(
+          'ticket-1',
+          'asset-1',
+          staffUser,
+        );
+        expect(result).toEqual(link);
+      });
+    });
+
+    describe('unlinkAsset', () => {
+      it('rejects a non-staff caller', async () => {
+        await expect(
+          service.unlinkAsset('ticket-1', 'asset-1', authUser()),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(assetsService.unlinkFromTicket).not.toHaveBeenCalled();
+      });
+
+      it('404s for a ticket outside the caller scope, without unlinking', async () => {
+        prisma.ticket.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.unlinkAsset('ticket-1', 'asset-1', staffUser),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expect(assetsService.unlinkFromTicket).not.toHaveBeenCalled();
+      });
+
+      it('delegates to AssetsService once the ticket is visible', async () => {
+        prisma.ticket.findFirst.mockResolvedValue(buildTicket());
+
+        await service.unlinkAsset('ticket-1', 'asset-1', staffUser);
+
+        expect(assetsService.unlinkFromTicket).toHaveBeenCalledWith(
+          'ticket-1',
+          'asset-1',
+          staffUser,
+        );
+      });
     });
   });
 });

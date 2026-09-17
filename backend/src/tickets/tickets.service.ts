@@ -12,6 +12,8 @@ import {
   TicketPriority,
   TicketStatus,
 } from '@prisma/client';
+import { AssetsService } from '../assets/assets.service';
+import { TicketAssetResponseDto } from '../assets/dto/ticket-asset-response.dto';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { ticketVisibilityWhere as buildTicketVisibilityWhere } from '../common/ticket-visibility';
 import { PrismaService } from '../prisma/prisma.service';
@@ -27,6 +29,7 @@ import { CreateTicketCommentDto } from './dto/create-ticket-comment.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { ListTicketCommentsQueryDto } from './dto/list-ticket-comments-query.dto';
 import { ListTicketHistoryQueryDto } from './dto/list-ticket-history-query.dto';
+import { LinkTicketAssetDto } from './dto/link-ticket-asset.dto';
 import { ListTicketsQueryDto } from './dto/list-tickets-query.dto';
 import {
   TicketCommentListResponseDto,
@@ -121,6 +124,7 @@ export class TicketsService {
     private readonly usersService: UsersService,
     private readonly ticketCategoriesService: TicketCategoriesService,
     private readonly slaService: SlaService,
+    private readonly assetsService: AssetsService,
   ) {}
 
   async create(
@@ -525,6 +529,44 @@ export class TicketsService {
     ]);
 
     return { data: entries.map(toTicketHistoryResponse), total };
+  }
+
+  /**
+   * Assets linked to a ticket. Like findComments/findHistory, the ticket
+   * lookup is routed through the visibility helper FIRST: a ticket the
+   * caller cannot see is a 404 that reveals nothing about whether any
+   * assets are linked to it.
+   */
+  async findAssets(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<TicketAssetResponseDto[]> {
+    await this.getVisibleTicketOrThrow(id, user);
+    return this.assetsService.findForTicket(id);
+  }
+
+  async linkAsset(
+    id: string,
+    dto: LinkTicketAssetDto,
+    user: AuthenticatedUser,
+  ): Promise<TicketAssetResponseDto> {
+    this.assertStaff(user, 'Only staff can link an asset to a ticket');
+
+    await this.getVisibleTicketOrThrow(id, user);
+
+    return this.assetsService.linkToTicket(id, dto.assetId, user);
+  }
+
+  async unlinkAsset(
+    id: string,
+    assetId: string,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    this.assertStaff(user, 'Only staff can unlink an asset from a ticket');
+
+    await this.getVisibleTicketOrThrow(id, user);
+
+    await this.assetsService.unlinkFromTicket(id, assetId, user);
   }
 
   /**

@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -9,12 +12,14 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { TicketAssetResponseDto } from '../assets/dto/ticket-asset-response.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { AssignTicketDto } from './dto/assign-ticket.dto';
 import { CreateTicketCommentDto } from './dto/create-ticket-comment.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
+import { LinkTicketAssetDto } from './dto/link-ticket-asset.dto';
 import { ListTicketCommentsQueryDto } from './dto/list-ticket-comments-query.dto';
 import { ListTicketHistoryQueryDto } from './dto/list-ticket-history-query.dto';
 import { ListTicketsQueryDto } from './dto/list-tickets-query.dto';
@@ -126,5 +131,39 @@ export class TicketsController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<TicketHistoryListResponseDto> {
     return this.ticketsService.findHistory(id, query, user);
+  }
+
+  /** Readable by anyone who can already see the ticket; the list is
+   * bounded by the number of assets on one ticket, so it is unpaginated. */
+  @Get(':id/assets')
+  async findAssets(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<TicketAssetResponseDto[]> {
+    return this.ticketsService.findAssets(id, user);
+  }
+
+  /** Idempotent: re-linking an already-linked asset returns the existing
+   * link rather than failing. */
+  @Roles(...STAFF_ROLES)
+  @Post(':id/assets')
+  async linkAsset(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: LinkTicketAssetDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<TicketAssetResponseDto> {
+    return this.ticketsService.linkAsset(id, dto, user);
+  }
+
+  /** Idempotent: unlinking an asset that is not linked succeeds. */
+  @Roles(...STAFF_ROLES)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete(':id/assets/:assetId')
+  async unlinkAsset(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('assetId', ParseUUIDPipe) assetId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.ticketsService.unlinkAsset(id, assetId, user);
   }
 }
