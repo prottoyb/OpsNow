@@ -37,7 +37,7 @@ describe('AssetStatusControl', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('disables every transition with a reason while the asset is assigned', () => {
+  it('replaces every transition with a reason while the asset is assigned', () => {
     render(
       <AssetStatusControl
         status="Assigned"

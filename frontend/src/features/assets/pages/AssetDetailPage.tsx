@@ -7,18 +7,20 @@ import { FullPageSpinner, Spinner } from '../../../components/ui/Spinner';
 import { Tabs } from '../../../components/ui/Tabs';
 import { toApiError } from '../../../lib/api/errors';
 import {
+  formatDate,
   formatDateTime,
   fullName,
+  toDateAttribute,
   toDateInputValue,
   toDateTimeAttribute,
 } from '../../../lib/format';
 import type { Asset, AssetStatus, UpdateAssetInput } from '../../../types/api';
+import { assetStatusLabel } from '../assetStatus';
 import { useAuth, useIsStaff } from '../../auth/useAuth';
 import { AssetAssignmentControl } from '../components/AssetAssignmentControl';
 import { AssetForm } from '../components/AssetForm';
 import type { AssetFormValues } from '../components/AssetForm';
 import { AssetStatusBadge } from '../components/AssetStatusBadge';
-import { assetStatusLabel } from '../assetStatus';
 import { AssetStatusControl } from '../components/AssetStatusControl';
 import { AssignmentHistoryList } from '../components/AssignmentHistoryList';
 import {
@@ -380,8 +382,10 @@ function AssetMetadata({ asset }: { asset: Asset }) {
           <>
             <dt className="font-medium text-slate-700">Purchased</dt>
             <dd className="text-slate-800">
-              <time dateTime={toDateTimeAttribute(asset.purchaseDate)}>
-                {formatDateTime(asset.purchaseDate)}
+              {/* Date-only column: formatted in UTC, never in the viewer's
+                  zone — see `formatDate`. */}
+              <time dateTime={toDateAttribute(asset.purchaseDate)}>
+                {formatDate(asset.purchaseDate)}
               </time>
             </dd>
           </>
@@ -390,8 +394,8 @@ function AssetMetadata({ asset }: { asset: Asset }) {
           <>
             <dt className="font-medium text-slate-700">Warranty expires</dt>
             <dd className="text-slate-800">
-              <time dateTime={toDateTimeAttribute(asset.warrantyExpiresAt)}>
-                {formatDateTime(asset.warrantyExpiresAt)}
+              <time dateTime={toDateAttribute(asset.warrantyExpiresAt)}>
+                {formatDate(asset.warrantyExpiresAt)}
               </time>
             </dd>
           </>

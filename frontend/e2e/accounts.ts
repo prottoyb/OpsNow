@@ -65,6 +65,13 @@ let assetTagSequence = 0;
  * value — this pairs the run's id with an incrementing per-run counter.
  * Always well under the 50-character column limit (`E2E-` + 8 hex chars +
  * `-` + a small counter is ~15 characters).
+ *
+ * The counter is module-level, so uniqueness holds within ONE worker
+ * process. That is sufficient only because `playwright.config.ts` pins
+ * `workers: 1` / `fullyParallel: false`; raising either would let two
+ * workers hand out the same tag and collide on the unique constraint. If
+ * this suite is ever parallelised, fold the worker index
+ * (`process.env.TEST_PARALLEL_INDEX`) into the value here.
  */
 export function taggedAssetTag(): string {
   assetTagSequence += 1;

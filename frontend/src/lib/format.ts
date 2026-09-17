@@ -37,6 +37,42 @@ export function toDateInputValue(isoString: string | null): string {
 }
 
 /**
+ * Formats a DATE-ONLY value — a column declared `@db.Date`, such as
+ * `Asset.purchaseDate` / `Asset.warrantyExpiresAt`.
+ *
+ * `formatDateTime` must NOT be used for these. A date-only column arrives as
+ * midnight UTC ("2026-09-17T00:00:00.000Z"), so formatting it in the viewer's
+ * zone shifts it a full calendar day backwards for anyone behind UTC — the
+ * asset would claim to have been bought the day before it was — and appends a
+ * time that the column does not actually carry.
+ *
+ * Formatting is therefore pinned to UTC, which is the zone the value was
+ * authored in, so every viewer sees the same day the record stores and the
+ * same day the edit form shows via `toDateInputValue`.
+ */
+const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeZone: 'UTC',
+});
+
+export function formatDate(isoString: string): string {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) {
+    return 'Unknown';
+  }
+  return DATE_FORMAT.format(date);
+}
+
+/**
+ * The machine-readable counterpart of `formatDate` for `<time dateTime>`:
+ * HTML wants the date-only form for a date-only value, not a full timestamp.
+ */
+export function toDateAttribute(isoString: string): string | undefined {
+  const value = toDateInputValue(isoString);
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+}
+
+/**
  * What `formatDurationMinutes` returns for a duration that has run out.
  *
  * Exported as a constant so callers can branch on it without string

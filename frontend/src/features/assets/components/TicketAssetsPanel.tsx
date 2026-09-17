@@ -25,7 +25,7 @@ function TicketAssetRow({
   const isStaff = useIsStaff();
   const { asset } = link;
   const unlinkAsset = useUnlinkTicketAsset(ticketId);
-  const assignToRequester = useUpdateAssetAssignment(asset.id, ticketId);
+  const assignToRequester = useUpdateAssetAssignment(asset.id);
   const [messages, setMessages] = useState<string[]>([]);
 
   // Deliberately NOT hyperlinked and no unlink/assign affordance for an

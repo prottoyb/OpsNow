@@ -107,7 +107,21 @@ export function useAssetListParams(currentUserId: string) {
       // page 7 of the old filter is meaningless under the new one.
       const offset = next.offset ?? 0;
       if (offset > 0) params.set(PARAM.offset, String(offset));
-      setSearchParams(params, { replace: false });
+      /*
+       * A change to the debounced free-text `q` REPLACES the current history
+       * entry; every other filter pushes a new one.
+       *
+       * The ticket list pushes unconditionally, and that is right there —
+       * each of its filters is a discrete click, so one click is one Back.
+       * Assets are the first list with a text input, and pushing per
+       * debounced commit would make typing "laptop" with two hesitations
+       * leave three entries the user has to Back through one keystroke-run
+       * at a time. Replacing keeps the URL shareable and bookmarkable (the
+       * point of holding filters in the URL) without that.
+       */
+      const isQueryTextChange =
+        next.q !== undefined && Object.keys(next).length === 1;
+      setSearchParams(params, { replace: isQueryTextChange });
     },
     [filters, setSearchParams],
   );

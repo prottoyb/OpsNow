@@ -1,10 +1,68 @@
 import { describe, expect, it } from 'vitest';
 import {
   DUE_NOW_LABEL,
+  formatDate,
   formatDateTime,
   formatDurationMinutes,
+  toDateAttribute,
+  toDateInputValue,
   toDateTimeAttribute,
 } from './format';
+
+/*
+ * `vitest.config.ts` pins TZ to America/New_York, a NEGATIVE-offset zone, so
+ * these assertions are reproducible and — crucially — can actually fail.
+ * Under a UTC-pinned run, a date-only value formatted in local time would be
+ * indistinguishable from one formatted in UTC, and the day-shift bug these
+ * cover would pass silently.
+ */
+/*
+ * Asserted by PROPERTY rather than against an exact string: the formatter
+ * uses the runtime's own locale, so "Sep 17, 2026" and "17 Sept 2026" are
+ * both correct and neither should be hard-coded. What must hold in every
+ * locale is the calendar day.
+ */
+describe('formatDate', () => {
+  it('renders the stored calendar day, not the viewer-local one', () => {
+    // Date-only columns (`Asset.purchaseDate`, `warrantyExpiresAt`) arrive as
+    // midnight UTC. In a UTC-5 zone that instant is 7pm on the 16th locally,
+    // so a date-time formatter would render the WRONG DAY here.
+    const formatted = formatDate('2026-09-17T00:00:00.000Z');
+    expect(formatted).toMatch(/\b17\b/);
+    expect(formatted).not.toMatch(/\b16\b/);
+    expect(formatted).toMatch(/2026/);
+  });
+
+  it('never appends a time to a date-only value', () => {
+    expect(formatDate('2026-09-17T00:00:00.000Z')).not.toMatch(/\d:\d{2}/);
+  });
+
+  it('agrees with what the edit form shows for the same value', () => {
+    // The read view and the date input must never disagree about the day —
+    // the bug this guards is a read view saying "31 Dec 2025" over an input
+    // showing "2026-01-01".
+    const iso = '2026-01-01T00:00:00.000Z';
+    expect(toDateInputValue(iso)).toBe('2026-01-01');
+    const formatted = formatDate(iso);
+    expect(formatted).toMatch(/\b1\b/);
+    expect(formatted).toMatch(/2026/);
+    expect(formatted).not.toMatch(/2025/);
+  });
+
+  it('returns Unknown for an unparseable value', () => {
+    expect(formatDate('not-a-date')).toBe('Unknown');
+  });
+});
+
+describe('toDateAttribute', () => {
+  it('emits the date-only form HTML wants for a date-only value', () => {
+    expect(toDateAttribute('2026-09-17T00:00:00.000Z')).toBe('2026-09-17');
+  });
+
+  it('returns undefined rather than an invalid attribute', () => {
+    expect(toDateAttribute('not-a-date')).toBeUndefined();
+  });
+});
 
 describe('formatDurationMinutes', () => {
   it('renders minutes below an hour', () => {

@@ -283,6 +283,109 @@ describe('asset detail — mutations', () => {
     expect(Object.keys(body)).toEqual(['serialNumber']);
   });
 
+  /*
+   * The date fields go through the subtlest path in the feature:
+   * `toDateInputValue` -> native <input type="date"> -> `diffOptionalDate`
+   * -> the backend's strict ISO-8601 validator. Covered explicitly because a
+   * regression anywhere along it is invisible to the other diff tests, which
+   * only exercise string fields.
+   */
+  it('sends a changed date as YYYY-MM-DD and nothing else', async () => {
+    seed(agentUser, { purchaseDate: '2025-01-15T00:00:00.000Z' });
+    let body: Record<string, unknown> = {};
+    server.use(
+      http.patch(`${BASE}/assets/:id`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(
+          makeAsset({
+            id: IDS.assetA,
+            purchaseDate: '2025-03-02T00:00:00.000Z',
+          }),
+        );
+      }),
+    );
+    const user = userEvent.setup();
+
+    await renderDetail();
+    await user.click(screen.getByRole('button', { name: 'Edit details' }));
+    const purchase = screen.getByLabelText(/purchase date/i);
+    await user.clear(purchase);
+    await user.type(purchase, '2025-03-02');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(body.purchaseDate).toBe('2025-03-02'));
+    expect(Object.keys(body)).toEqual(['purchaseDate']);
+  });
+
+  it('sends an explicit null to clear a date', async () => {
+    seed(agentUser, { purchaseDate: '2025-01-15T00:00:00.000Z' });
+    let body: Record<string, unknown> = {};
+    server.use(
+      http.patch(`${BASE}/assets/:id`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(
+          makeAsset({ id: IDS.assetA, purchaseDate: null }),
+        );
+      }),
+    );
+    const user = userEvent.setup();
+
+    await renderDetail();
+    await user.click(screen.getByRole('button', { name: 'Edit details' }));
+    await user.clear(screen.getByLabelText(/purchase date/i));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect('purchaseDate' in body).toBe(true));
+    expect(body.purchaseDate).toBeNull();
+    expect(Object.keys(body)).toEqual(['purchaseDate']);
+  });
+
+  it('omits an untouched date even when another field changes', async () => {
+    // The round trip must not make an unchanged date look changed: the ISO
+    // timestamp in, the YYYY-MM-DD the input shows, and the value compared on
+    // submit are three different shapes of the same day.
+    seed(agentUser, {
+      name: 'Old name',
+      purchaseDate: '2025-01-15T00:00:00.000Z',
+      warrantyExpiresAt: '2028-01-15T00:00:00.000Z',
+    });
+    let body: Record<string, unknown> = {};
+    server.use(
+      http.patch(`${BASE}/assets/:id`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(makeAsset({ id: IDS.assetA, name: 'New name' }));
+      }),
+    );
+    const user = userEvent.setup();
+
+    await renderDetail();
+    await user.click(screen.getByRole('button', { name: 'Edit details' }));
+    const name = screen.getByLabelText(/^name/i);
+    await user.clear(name);
+    await user.type(name, 'New name');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(body.name).toBe('New name'));
+    expect(Object.keys(body)).toEqual(['name']);
+    expect(body).not.toHaveProperty('purchaseDate');
+    expect(body).not.toHaveProperty('warrantyExpiresAt');
+  });
+
+  it('renders a date-only field on the stored calendar day', async () => {
+    // TZ is pinned to a negative-offset zone in vitest.config.ts, so a
+    // date-time formatter here would render 14 January, not 15.
+    seed(agentUser, { purchaseDate: '2025-01-15T00:00:00.000Z' });
+
+    await renderDetail();
+
+    const purchased = await screen.findByText(/purchased/i);
+    const value = purchased.nextElementSibling?.textContent ?? '';
+    expect(value).toMatch(/\b15\b/);
+    expect(value).not.toMatch(/\b14\b/);
+    // No time component on a date-only column.
+    expect(value).not.toMatch(/\d:\d{2}/);
+  });
+
   it('sends no request at all when Save is pressed with nothing changed', async () => {
     seed(agentUser);
     let called = false;

@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 8b — Asset Management (Frontend UI). Phase 8a — Asset Management backend API — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
+Current Phase: Phase 9 — Knowledge Base (not started). Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
 
 
 
@@ -598,15 +598,15 @@ Split into 8a (backend) / 8b (frontend) following the Phase 6a/6b and
 
 
 
-\- \[ ] Build asset list page
+\- \[x] Build asset list page
 
-\- \[ ] Build asset detail page
+\- \[x] Build asset detail page
 
-\- \[ ] Build asset assignment interface
+\- \[x] Build asset assignment interface
 
-\- \[ ] Show a ticket's linked assets
+\- \[x] Show a ticket's linked assets
 
-\- \[ ] Add asset frontend tests
+\- \[x] Add asset frontend tests
 
 
 
@@ -621,6 +621,22 @@ changing it. `GET /api/v1/tickets/:id/assets` deliberately returns a
 narrow asset summary (id, assetTag, name, status, assetType) for every
 
 role; full detail comes from the row-scoped `GET /api/v1/assets/:id`.
+
+
+
+Both are handled: the edit form has no `status` field at all (status is a
+
+separate staff-only control) and sends a minimal diff, and ticket-linked
+
+assets render only the narrow summary. Deferred out of 8b by decision: no
+
+asset deletion/decommission UI, no AssetType CRUD, no arbitrary-user
+
+assignment picker — `GET /api/v1/users` is Administrator-only, so the
+
+only assignment targets offered are "Assign to me", "Assign to requester"
+
+and "Return to stock".
 
 
 

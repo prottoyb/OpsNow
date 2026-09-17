@@ -20,8 +20,9 @@ export interface AssetAssignmentControlProps {
 /**
  * PRESENTATION ONLY — mirrors `UNASSIGNABLE_STATUSES` in
  * `backend/src/assets/assets.constants.ts` so the assign action can be
- * disabled with an explanation instead of offered and rejected. Grants
- * nothing; the backend re-validates on every request.
+ * REPLACED by an explanation instead of offered and rejected (prose rather
+ * than a disabled button, which assistive technology would skip past without
+ * announcing why). Grants nothing; the backend re-validates on every request.
  */
 const UNASSIGNABLE_STATUSES: readonly AssetStatus[] = [
   'InRepair',

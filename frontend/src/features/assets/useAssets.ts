@@ -36,6 +36,14 @@ export const assetKeys = {
   types: (userId: string) => ['asset-types', userId] as const,
   ticketAssets: (userId: string, ticketId: string) =>
     ['ticket-assets', userId, ticketId] as const,
+  /**
+   * Every ticket's linked-asset list for this user. The invalidation target
+   * when an asset changes: the embedded `AssetSummary` carries `status`, and
+   * one asset can be linked to several tickets, so a status or assignment
+   * change staleness-affects every one of them — not just the ticket the
+   * change happened to be made from.
+   */
+  ticketAssetsAll: (userId: string) => ['ticket-assets', userId] as const,
 };
 
 function useUserId(): string {
@@ -105,6 +113,12 @@ function invalidateAsset(
   void queryClient.invalidateQueries({
     queryKey: assetKeys.lists(userId),
   });
+  // A status or assignment change alters the `AssetSummary.status` embedded
+  // in every ticket that links this asset, so all of them are invalidated —
+  // not only the ticket a panel-initiated change came from.
+  void queryClient.invalidateQueries({
+    queryKey: assetKeys.ticketAssetsAll(userId),
+  });
 }
 
 export function useCreateAsset() {
@@ -130,26 +144,18 @@ export function useUpdateAsset(assetId: string) {
 }
 
 /**
- * `ticketId` is supplied only when the assignment change is made from a
- * ticket's linked-assets panel (the "Assign to requester" action) — in that
- * case the asset's status, shown in the ticket's own asset row, must also be
- * refreshed there. The asset detail page's "Assign to me"/"Return to stock"
- * controls have no ticket context and omit it.
+ * Takes no ticket context: `invalidateAsset` already invalidates every
+ * ticket's linked-asset list, which is what an assignment change needs —
+ * the asset's status is embedded in each of those rows, and the asset may be
+ * linked to more tickets than the one the change was made from.
  */
-export function useUpdateAssetAssignment(assetId: string, ticketId?: string) {
+export function useUpdateAssetAssignment(assetId: string) {
   const queryClient = useQueryClient();
   const userId = useUserId();
   return useMutation({
     mutationFn: (input: AssignAssetInput) =>
       api.updateAssetAssignment(assetId, input),
-    onSuccess: () => {
-      invalidateAsset(queryClient, userId, assetId);
-      if (ticketId) {
-        void queryClient.invalidateQueries({
-          queryKey: assetKeys.ticketAssets(userId, ticketId),
-        });
-      }
-    },
+    onSuccess: () => invalidateAsset(queryClient, userId, assetId),
   });
 }
 

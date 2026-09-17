@@ -14,19 +14,19 @@ Current phase: Phase 8 — Asset Management (not started)
 
 
 
-Current task: none — Phase 7b is complete
+Current task: none — Phase 8b is complete
 
 
 
-Last completed task: Phase 8a — Asset Management Backend API (asset type
+Last completed task: Phase 8b — Asset Management Frontend UI (asset list,
 
-lookup, asset CRUD-minus-delete, a single assignment seam backed by the
+detail, create/edit, staff-only status and assignment controls, the
 
-AssetAssignment ledger, and ticket <-> asset linking — implemented,
+staff-only assignment ledger, and ticket <-> asset linking — implemented,
 
-independently reviewed, tested and verified; no schema change, no
+independently reviewed by QA/Security and Senior Review, tested and
 
-migration, no new ADR and no dependency added)
+verified; no backend change, no new ADR and no dependency added)
 
 
 
@@ -2302,6 +2302,152 @@ Next:
 
 
 \- Begin Phase 8b — Asset Management Frontend UI.
+
+
+
+\---
+
+
+
+\### 2026-09-17 — Phase 8b Asset Management Frontend UI Implemented
+
+
+
+Phase 8b puts a UI on the Phase 8a API without changing one line of
+
+`backend/src`. It reuses the Phase 6b ticket-frontend patterns
+
+throughout — query keys namespaced by signed-in user id, URL-backed list
+
+filters, `apiFetch` + `toApiError`, the shared `components/ui`
+
+primitives — so it adds no ADR and no dependency.
+
+
+
+Implemented:
+
+
+
+\- `/assets`, `/assets/new` (staff-gated, rendering the ordinary
+
+not-found page for an Employee) and `/assets/:id`, plus a nav entry
+
+labelled "Assets" for staff and "My assets" for an Employee.
+
+\- Asset list with status, type, free-text and assigned-to-me filters,
+
+all held in the URL so a filtered list is shareable and survives
+
+back/forward.
+
+\- Asset detail with staff-only inline edit, a staff-only status control,
+
+an assignment control, the staff-only assignment ledger tab, and the
+
+404/400/403/409 branches the ticket detail page already models.
+
+\- A linked-assets panel on ticket detail: staff get links, unlink and
+
+"Assign to requester"; an Employee gets plain text only.
+
+
+
+Decisions that shaped it:
+
+
+
+\- There is no assignee picker. `GET /api/v1/users` is
+
+Administrator-only, so a SupportAgent or TeamLead cannot enumerate
+
+users at all — the same constraint the ticket `AssignmentControl`
+
+already documents. The UI therefore offers only the three operations
+
+every staff role can actually perform: "Assign to me", "Assign to
+
+requester" (the requester id is already in the ticket payload) and
+
+"Return to stock". A fuller assignment UI needs a staff-directory
+
+endpoint first, which is deliberately not in this phase.
+
+\- Status is a separate staff-only control, never a field in the
+
+create/edit form. `PATCH /api/v1/assets/:id` validates `status`
+
+whenever the key is present at all, so a form that PATCHed itself back
+
+would 400 on every assigned asset.
+
+\- An Employee never fires `GET /api/v1/assets/:id/assignments`; the
+
+endpoint is staff-only and would only ever answer 403. Asserted by a
+
+test that watches the actual request layer, not a mock spy.
+
+\- Ticket-linked assets are not hyperlinked for an Employee.
+
+`GET /api/v1/assets/:id` is row-scoped, so the link would usually
+
+dead-end on a 404 — and the 404 is itself the information boundary.
+
+
+
+Testing:
+
+
+
+\- 75 new component/unit tests (26 files / 282 total, up from 207).
+
+The security-relevant ones assert against real captured request
+
+bodies rather than mock call arguments.
+
+\- A new Playwright journey: the employee raises a tagged ticket, the
+
+agent creates a tagged asset, assigns it, returns it, links it, and
+
+the employee — in a separate browser context, since the refresh
+
+cookie is httpOnly and SameSite=Strict — sees it read-only.
+
+\- `cleanup-e2e-tickets.ts` became `cleanup-e2e-data.ts` and now also
+
+removes assets tagged `E2E-`, relying on the existing cascades. It
+
+keeps its fail-closed local-database guard and remains scoped
+
+deletion, never a reset: a full run was verified to leave the seeded
+
+assets, asset types and tickets untouched.
+
+
+
+Known limitations:
+
+
+
+\- No asset deletion or decommission UI, and no AssetType CRUD — asset
+
+types stay a read-only lookup.
+
+\- An Employee sees no assignment history, not even their own.
+
+\- "Assign to requester" is offered only while the asset is in stock,
+
+because the narrow ticket-linked summary carries no `currentAssignee`
+
+to compare against.
+
+
+
+Next:
+
+
+
+\- Begin Phase 9 — Knowledge Base.
 
 
 

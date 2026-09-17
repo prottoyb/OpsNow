@@ -19,9 +19,12 @@ export interface AssetStatusControlProps {
  * `AssetAssignmentControl` -> `PATCH /assets/:id/assignment`, which keeps
  * `status` and `currentAssignee` from drifting apart.
  *
- * Disabled with a visible reason while the asset has a current assignee —
- * the backend rejects ANY status change on an assigned asset, so offering
- * these buttons would only produce a 400 the user cannot anticipate.
+ * While the asset has a current assignee the buttons are REPLACED by an
+ * explanation rather than merely disabled — the backend rejects ANY status
+ * change on an assigned asset, so offering these buttons would only produce
+ * a 400 the user cannot anticipate. Prose beats a disabled control here: a
+ * disabled button is skipped by most screen-reader controls navigation, so
+ * the reason it cannot be used would never be announced.
  */
 export function AssetStatusControl({
   status,
