@@ -1,4 +1,7 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { AssetCreatePage } from '../features/assets/pages/AssetCreatePage';
+import { AssetDetailPage } from '../features/assets/pages/AssetDetailPage';
+import { AssetListPage } from '../features/assets/pages/AssetListPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { useIsStaff } from '../features/auth/useAuth';
 import { SlaDashboardPage } from '../features/sla/pages/SlaDashboardPage';
@@ -32,6 +35,25 @@ function SlaDashboardRoute() {
   return useIsStaff() ? <SlaDashboardPage /> : <NotFoundPage />;
 }
 
+/**
+ * Keyed by asset id for the same reason as `TicketDetailRoute`: the page
+ * holds local UI state (open edit form, active tab, last notice) that
+ * belongs to one asset.
+ */
+function AssetDetailRoute() {
+  const { id = '' } = useParams<{ id: string }>();
+  return <AssetDetailPage key={id} />;
+}
+
+/**
+ * Asset creation is staff-only on the backend (`POST /assets`). Same
+ * precedent as `SlaDashboardRoute`: an Employee gets the ordinary "page not
+ * found" rather than a page that mounts and then fails.
+ */
+function AssetCreateRoute() {
+  return useIsStaff() ? <AssetCreatePage /> : <NotFoundPage />;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -47,6 +69,9 @@ export function AppRoutes() {
         <Route path="/tickets" element={<TicketListPage />} />
         <Route path="/tickets/new" element={<TicketCreatePage />} />
         <Route path="/tickets/:id" element={<TicketDetailRoute />} />
+        <Route path="/assets" element={<AssetListPage />} />
+        <Route path="/assets/new" element={<AssetCreateRoute />} />
+        <Route path="/assets/:id" element={<AssetDetailRoute />} />
         <Route path="/sla" element={<SlaDashboardRoute />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

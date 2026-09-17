@@ -45,7 +45,7 @@ function useUserId(): string {
   return user?.id ?? 'anonymous';
 }
 
-export function useAssetList(query: ListAssetsQuery) {
+export function useAssetList(query: ListAssetsQuery, enabled = true) {
   const userId = useUserId();
   return useQuery({
     queryKey: assetKeys.list(userId, query),
@@ -53,6 +53,7 @@ export function useAssetList(query: ListAssetsQuery) {
     // Keeps the current page visible while the next one loads instead of
     // collapsing the table back to a skeleton on every filter change.
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 

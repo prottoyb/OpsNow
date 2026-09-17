@@ -1,18 +1,7 @@
 import { Badge } from '../../../components/ui/Badge';
 import type { BadgeTone } from '../../../components/ui/Badge';
 import type { AssetStatus } from '../../../types/api';
-
-const STATUS_LABELS: Record<AssetStatus, string> = {
-  InStock: 'In stock',
-  Assigned: 'Assigned',
-  InRepair: 'In repair',
-  Retired: 'Retired',
-  Lost: 'Lost',
-};
-
-export function assetStatusLabel(status: AssetStatus): string {
-  return STATUS_LABELS[status];
-}
+import { assetStatusLabel } from '../assetStatus';
 
 /**
  * Tone is decoration only — the badge always renders the status as text, so

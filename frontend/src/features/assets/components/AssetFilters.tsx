@@ -4,7 +4,7 @@ import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import type { AssetType } from '../../../types/api';
 import { ASSET_STATUSES } from '../../../types/api';
-import { assetStatusLabel } from './AssetStatusBadge';
+import { assetStatusLabel } from '../assetStatus';
 import { AssetTypeSelect } from './AssetTypeSelect';
 import type { AssetListFilters } from '../useAssetListParams';
 

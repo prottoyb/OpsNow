@@ -1,12 +1,14 @@
 import { Button } from '../../../components/ui/Button';
 import type { AssetStatus } from '../../../types/api';
-import { assetStatusLabel } from './AssetStatusBadge';
+import { assetStatusLabel } from '../assetStatus';
 
 export interface AssetStatusControlProps {
   status: AssetStatus;
   /** Whether the asset currently has an assignee. */
   hasAssignee: boolean;
   submitting: boolean;
+  /** Backend validation messages for the last status change, rendered verbatim. */
+  serverMessages?: string[];
   onChange: (status: AssetStatus) => void;
 }
 
@@ -25,6 +27,7 @@ export function AssetStatusControl({
   status,
   hasAssignee,
   submitting,
+  serverMessages = [],
   onChange,
 }: AssetStatusControlProps) {
   if (hasAssignee) {
@@ -41,17 +44,29 @@ export function AssetStatusControl({
   ).filter((option) => option !== status);
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((option) => (
-        <Button
-          key={option}
-          variant="secondary"
-          disabled={submitting}
-          onClick={() => onChange(option)}
-        >
-          Move to {assetStatusLabel(option)}
-        </Button>
-      ))}
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <Button
+            key={option}
+            variant="secondary"
+            disabled={submitting}
+            onClick={() => onChange(option)}
+          >
+            Move to {assetStatusLabel(option)}
+          </Button>
+        ))}
+      </div>
+      {/* Mounted unconditionally; only the text inside is swapped. A live
+          region inserted with its content already present is not reliably
+          announced (same rationale as `TicketDetailPage`). */}
+      <div aria-live="assertive">
+        {serverMessages.length > 0 ? (
+          <p className="text-sm font-medium text-red-700">
+            {serverMessages.join(' ')}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

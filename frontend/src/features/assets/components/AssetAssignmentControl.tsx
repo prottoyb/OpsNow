@@ -5,13 +5,15 @@ import { Textarea } from '../../../components/ui/Textarea';
 import { fullName } from '../../../lib/format';
 import type { AssetStatus, AssignAssetInput, UserSummary } from '../../../types/api';
 import { FIELD_LIMITS } from '../../../types/api';
-import { assetStatusLabel } from './AssetStatusBadge';
+import { assetStatusLabel } from '../assetStatus';
 
 export interface AssetAssignmentControlProps {
   status: AssetStatus;
   currentAssignee: UserSummary | null;
   currentUserId: string;
   submitting: boolean;
+  /** Backend validation messages for the last assignment attempt, rendered verbatim. */
+  serverMessages?: string[];
   onAssign: (input: AssignAssetInput) => void;
 }
 
@@ -46,9 +48,24 @@ export function AssetAssignmentControl({
   currentAssignee,
   currentUserId,
   submitting,
+  serverMessages = [],
   onAssign,
 }: AssetAssignmentControlProps) {
   const [notes, setNotes] = useState('');
+
+  // The live region is mounted unconditionally and its content swapped
+  // inside, never inserted into the DOM already containing its text — see
+  // the comment in `TicketDetailPage` for why the latter is not reliably
+  // announced.
+  const errors = (
+    <div aria-live="assertive">
+      {serverMessages.length > 0 ? (
+        <p className="text-sm font-medium text-red-700">
+          {serverMessages.join(' ')}
+        </p>
+      ) : null}
+    </div>
+  );
 
   if (currentAssignee) {
     return (
@@ -68,6 +85,7 @@ export function AssetAssignmentControl({
             Return to stock
           </Button>
         </div>
+        {errors}
       </div>
     );
   }
@@ -119,6 +137,7 @@ export function AssetAssignmentControl({
           </div>
         </>
       )}
+      {errors}
     </div>
   );
 }

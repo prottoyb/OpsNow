@@ -15,6 +15,7 @@ import type {
   UpdateTicketInput,
 } from '../../../types/api';
 import { useAuth, useIsStaff } from '../../auth/useAuth';
+import { TicketAssetsPanel } from '../../assets/components/TicketAssetsPanel';
 import { TicketSlaPanel } from '../../sla/components/TicketSlaPanel';
 import { AssignmentControl } from '../components/AssignmentControl';
 import { CommentForm } from '../components/CommentForm';
@@ -384,6 +385,13 @@ export function TicketDetailPage() {
           {/* Identical for every role: the SLA payload is the same shape for
               an Employee and for staff on a ticket they can already see. */}
           <TicketSlaPanel ticket={ticket} />
+
+          {/*
+            `GET /tickets/:id/assets` is readable by anyone who can already
+            see the ticket; the panel itself decides what each role is
+            offered on top of the same rows (D4).
+          */}
+          <TicketAssetsPanel ticketId={ticket.id} requester={ticket.requester} />
 
           <TicketMetadata ticket={ticket} />
         </aside>

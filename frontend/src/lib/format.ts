@@ -25,6 +25,18 @@ export function toDateTimeAttribute(isoString: string): string | undefined {
 }
 
 /**
+ * Extracts the YYYY-MM-DD portion of an ISO-8601 timestamp for a native
+ * `<input type="date">` — the pairing used by `Asset.purchaseDate` /
+ * `Asset.warrantyExpiresAt`, which are date-only in meaning but still cross
+ * the wire as a full ISO timestamp (see the header of `types/api.ts`).
+ * `null` (not recorded) maps to `''`, the empty-input convention the asset
+ * form already uses for every optional field.
+ */
+export function toDateInputValue(isoString: string | null): string {
+  return isoString ? isoString.slice(0, 10) : '';
+}
+
+/**
  * What `formatDurationMinutes` returns for a duration that has run out.
  *
  * Exported as a constant so callers can branch on it without string

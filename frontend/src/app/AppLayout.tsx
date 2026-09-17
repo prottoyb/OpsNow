@@ -76,6 +76,23 @@ export function AppLayout() {
                     New ticket
                   </NavLink>
                 </li>
+                <li>
+                  <NavLink
+                    to="/assets"
+                    className={({ isActive }) =>
+                      `${NAV_LINK_CLASSES} ${
+                        isActive
+                          ? 'font-semibold text-slate-900 underline'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    {/* D3: an Employee's list is already row-scoped to their
+                        own assigned equipment, so the label reflects that
+                        rather than implying a full inventory view. */}
+                    {isStaff ? 'Assets' : 'My assets'}
+                  </NavLink>
+                </li>
                 {/* The SLA dashboard is staff-only; the route itself renders
                     "page not found" for anyone else. */}
                 {isStaff ? (
