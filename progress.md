@@ -10,7 +10,7 @@ Project status: In Progress
 
 
 
-Current phase: Phase 8 — Asset Management (not started)
+Current phase: Phase 9 — Knowledge Base (not started)
 
 
 
@@ -30,7 +30,7 @@ verified; no backend change, no new ADR and no dependency added)
 
 
 
-Next task: Begin Phase 8b — Asset Management Frontend UI
+Next task: Begin Phase 9 — Knowledge Base
 
 
 
