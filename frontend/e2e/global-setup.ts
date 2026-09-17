@@ -98,14 +98,35 @@ export default async function globalSetup(): Promise<void> {
     abort('No active ticket category exists.');
   }
 
-  // 4. Publish the run identity. Workers inherit process.env, and every
+  // 4. At least one active asset type exists. `GET /api/v1/asset-types` is a
+  //    bare array (no envelope) and open to any authenticated user. Chosen
+  //    by NAME from the live response at runtime, for the same reason as the
+  //    ticket category above — a seeded id is never hardcoded because ids
+  //    differ per database.
+  const assetTypesResponse = await fetch(`${API_ORIGIN}/api/v1/asset-types`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!assetTypesResponse.ok) {
+    abort(`GET /api/v1/asset-types returned ${assetTypesResponse.status}.`);
+  }
+  const assetTypes = (await assetTypesResponse.json()) as Array<{
+    name: string;
+    isActive: boolean;
+  }>;
+  const usableAssetType = assetTypes.find((assetType) => assetType.isActive);
+  if (!usableAssetType) {
+    abort('No active asset type exists.');
+  }
+
+  // 5. Publish the run identity. Workers inherit process.env, and every
   //    ticket the suite creates is prefixed with the run tag so teardown can
   //    find exactly what this run made — and nothing else.
   const runId = randomUUID().slice(0, 8);
   process.env[ENV_KEYS.run] = `${E2E_TAG}[${runId}]`;
   process.env[ENV_KEYS.category] = usable.name;
+  process.env[ENV_KEYS.assetType] = usableAssetType.name;
 
   console.log(
-    `e2e: run tag ${process.env[ENV_KEYS.run]}, category "${usable.name}"`,
+    `e2e: run tag ${process.env[ENV_KEYS.run]}, category "${usable.name}", asset type "${usableAssetType.name}"`,
   );
 }

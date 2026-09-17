@@ -32,7 +32,20 @@ a Node script over Bash to reach the target worktree.
 **How to apply:** when delegating phase implementation, expect the diff to
 come back in the agent's worktree. Consolidate afterwards by renaming that
 branch to the phase's feature branch. Also note a fresh worktree has no
-`node_modules` and no `.env` — run `npm ci` + `npx prisma generate` and copy
-`backend/.env` in before the agent needs to run tests, or its first test run
+`node_modules` and no `.env` — tell the agent to run `npm ci` +
+`npx prisma generate` and copy `backend/.env` in, or its first test run
 fails. Reviewers ([[phase-approval-workflow]] gate) can read the branch from
 any worktree, so only the implementer's location matters.
+
+**Never let an agent junction/symlink its worktree `node_modules` to the
+primary repo's.** In Phase 8b an agent did that to save an install; the later
+`git worktree remove --force` followed the junction and emptied the PRIMARY
+`frontend/node_modules`, so every gate command failed with "'tsc' is not
+recognized" until a reinstall. Brief agents to run `npm ci` in their own
+worktree instead.
+
+When adopting a worktree's files by copying, the copies may land with LF
+while the working tree is CRLF, so `git status` shows every file modified.
+Use `git diff --ignore-cr-at-eol --stat` to find the files with REAL changes
+and `git checkout --` the rest, or you will commit formatting-only noise
+across untouched files (forbidden by `.claude/rules/git.md`).

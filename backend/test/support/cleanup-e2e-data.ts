@@ -1,23 +1,34 @@
 import { PrismaClient } from '@prisma/client';
 
 /**
- * Removes the tickets created by the frontend Playwright suite, and nothing
- * else.
+ * Removes the tickets and assets created by the frontend Playwright suite,
+ * and nothing else.
  *
- * Scope is deliberately narrow: only rows whose `subject` starts with the
- * fixed `[E2E]` tag that `frontend/e2e/global-setup.ts` prefixes onto every
- * ticket it creates. Matching the fixed prefix rather than one run's id means
- * leftovers from a crashed run are cleaned up by the next one.
+ * Scope is deliberately narrow, on two independent fixed prefixes:
+ *  - Tickets whose `subject` starts with `[E2E]`, the tag
+ *    `frontend/e2e/global-setup.ts` prefixes onto every ticket it creates
+ *    (via `taggedSubject`).
+ *  - Assets whose `assetTag` starts with `E2E-`, the prefix
+ *    `frontend/e2e/accounts.ts`'s `taggedAssetTag()` generates.
+ * Matching a fixed prefix rather than one run's id means leftovers from a
+ * crashed run are cleaned up by the next one.
  *
- * A single `deleteMany` is sufficient. Every child relation of `Ticket` is
+ * Each is a single `deleteMany`. Every child relation of `Ticket` is
  * declared `onDelete: Cascade` in `prisma/schema.prisma` — TicketComment,
  * TicketHistory, TicketSla, TicketAsset, TicketKnowledgeArticle and
- * Notification — so the database removes the dependent rows itself.
+ * Notification — so the database removes the dependent rows itself. The same
+ * is true of `Asset`'s two child relations, `AssetAssignment.asset` and
+ * `TicketAsset.asset`, both also `onDelete: Cascade` — so deleting a tagged
+ * asset removes its assignment ledger rows and any ticket links in the same
+ * statement. `Asset.assetType` is `onDelete: Restrict`, so this can never
+ * accidentally remove an `AssetType` row even if one were tagged, which none
+ * ever are — asset types are not created by this suite at all.
  *
  * This script NEVER touches users, ticket categories, refresh tokens, SLA
- * policies, assets, knowledge articles, or any ticket without the tag. It is
- * not a database reset and must never become one: the seeded development data
- * it runs alongside is expected to survive untouched.
+ * policies, asset types, knowledge articles, or any ticket/asset without its
+ * tag. It is not a database reset and must never become one: the seeded
+ * development data it runs alongside — including the seeded assets and asset
+ * types — is expected to survive untouched.
  *
  * Refresh-token rows are a deliberate omission rather than an oversight:
  * `frontend/e2e/global-setup.ts` signs in as the seeded accounts to verify its
@@ -25,6 +36,7 @@ import { PrismaClient } from '@prisma/client';
  * the developer running the suite is using.
  */
 const E2E_SUBJECT_PREFIX = '[E2E]';
+const E2E_ASSET_TAG_PREFIX = 'E2E-';
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
@@ -33,8 +45,9 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
  *
  * The script deletes rows and runs automatically at the end of every e2e run,
  * so it must never be one stray `DATABASE_URL` away from doing that somewhere
- * that matters. `[E2E]` is a subject prefix a real user could type, not a
- * reserved namespace, so the blast radius is not zero by construction.
+ * that matters. Neither tag is a reserved namespace — a real user could type
+ * a `[E2E]` subject or an `E2E-` asset tag — so the blast radius is not zero
+ * by construction.
  */
 function assertLocalDatabase(): void {
   if (process.env.NODE_ENV === 'production') {
@@ -72,11 +85,18 @@ async function main(): Promise<void> {
   try {
     assertLocalDatabase();
 
-    const { count } = await prisma.ticket.deleteMany({
+    const { count: ticketCount } = await prisma.ticket.deleteMany({
       where: { subject: { startsWith: E2E_SUBJECT_PREFIX } },
     });
     console.log(
-      `cleanup-e2e-tickets: removed ${count} ticket(s) tagged ${E2E_SUBJECT_PREFIX}.`,
+      `cleanup-e2e-data: removed ${ticketCount} ticket(s) tagged ${E2E_SUBJECT_PREFIX}.`,
+    );
+
+    const { count: assetCount } = await prisma.asset.deleteMany({
+      where: { assetTag: { startsWith: E2E_ASSET_TAG_PREFIX } },
+    });
+    console.log(
+      `cleanup-e2e-data: removed ${assetCount} asset(s) tagged ${E2E_ASSET_TAG_PREFIX}.`,
     );
   } finally {
     await prisma.$disconnect();
@@ -84,6 +104,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error('cleanup-e2e-tickets: failed', error);
+  console.error('cleanup-e2e-data: failed', error);
   process.exitCode = 1;
 });
