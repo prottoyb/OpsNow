@@ -1,9 +1,14 @@
 import { HttpResponse, http } from 'msw';
 import type {
+  Asset,
+  AssetAssignment,
+  AssetStatus,
+  AssetType,
   AuthenticatedUser,
   SlaMetrics,
   SlaPolicy,
   Ticket,
+  TicketAsset,
   TicketCategory,
   TicketComment,
   TicketHistoryEntry,
@@ -11,12 +16,25 @@ import type {
 import { isStaffRole } from '../types/api';
 import {
   agentUser,
+  assetTypes as defaultAssetTypes,
   categories as defaultCategories,
   employeeUser,
+  makeAsset,
   makeTicket,
   slaMetrics as defaultSlaMetrics,
   slaPolicies as defaultSlaPolicies,
 } from './fixtures';
+
+/**
+ * Mirrors `UNASSIGNABLE_STATUSES` in `backend/src/assets/assets.constants.ts` —
+ * an asset in one of these statuses cannot be assigned to anyone (it is not
+ * physically available), but can always be returned to stock.
+ */
+const UNASSIGNABLE_STATUSES: readonly AssetStatus[] = [
+  'InRepair',
+  'Retired',
+  'Lost',
+];
 
 /**
  * Test-only MSW handlers (`msw/node` + `setupServer`).
@@ -45,6 +63,10 @@ export interface MockState {
   categories: TicketCategory[];
   slaPolicies: SlaPolicy[];
   slaMetrics: SlaMetrics;
+  assets: Asset[];
+  assetTypes: AssetType[];
+  assetAssignments: AssetAssignment[];
+  ticketAssets: TicketAsset[];
 }
 
 export const mockState: MockState = createInitialState();
@@ -61,6 +83,10 @@ function createInitialState(): MockState {
     categories: [...defaultCategories],
     slaPolicies: [...defaultSlaPolicies],
     slaMetrics: { ...defaultSlaMetrics },
+    assets: [makeAsset()],
+    assetTypes: [...defaultAssetTypes],
+    assetAssignments: [],
+    ticketAssets: [],
   };
 }
 
@@ -108,6 +134,18 @@ function visibleTickets(user: AuthenticatedUser): Ticket[] {
 
 function findVisibleTicket(user: AuthenticatedUser, id: string): Ticket | null {
   return visibleTickets(user).find((t) => t.id === id) ?? null;
+}
+
+/** Mirrors `assetVisibilityWhere` — an Employee only ever sees assets currently assigned to them. */
+function visibleAssets(user: AuthenticatedUser): Asset[] {
+  if (isStaffRole(user.role)) {
+    return mockState.assets;
+  }
+  return mockState.assets.filter((a) => a.currentAssignee?.id === user.id);
+}
+
+function findVisibleAsset(user: AuthenticatedUser, id: string): Asset | null {
+  return visibleAssets(user).find((a) => a.id === id) ?? null;
 }
 
 const UUID_RE =
@@ -476,6 +514,380 @@ export const coreHandlers = [
   }),
 ];
 
+/* ------------------------------- assets ------------------------------- */
+
+/**
+ * Read routes are open to any authenticated user but row-scoped (an Employee
+ * only ever sees the assets currently assigned to them, mirroring
+ * `assetVisibilityWhere`). Every mutating route is staff-only, reproduced
+ * here purely to exercise the UI — the real boundary is
+ * `backend/src/assets/assets.service.ts`.
+ */
+export const assetHandlers = [
+  http.get(`${BASE}/asset-types`, ({ request }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/asset-types');
+    }
+    // Bare array, not a {data,total} envelope.
+    return HttpResponse.json(mockState.assetTypes.filter((t) => t.isActive));
+  }),
+
+  http.get(`${BASE}/assets`, ({ request }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/assets');
+    }
+
+    const url = new URL(request.url);
+    const status = url.searchParams.get('status');
+    const assetTypeId = url.searchParams.get('assetTypeId');
+    const assigneeId = url.searchParams.get('assigneeId');
+    const q = url.searchParams.get('q')?.toLowerCase() ?? '';
+    const limit = Number(url.searchParams.get('limit') ?? '20');
+    const offset = Number(url.searchParams.get('offset') ?? '0');
+
+    const filtered = visibleAssets(user).filter(
+      (a) =>
+        (!status || a.status === status) &&
+        (!assetTypeId || a.assetType.id === assetTypeId) &&
+        (!assigneeId || a.currentAssignee?.id === assigneeId) &&
+        (!q ||
+          a.assetTag.toLowerCase().includes(q) ||
+          a.name.toLowerCase().includes(q) ||
+          (a.serialNumber?.toLowerCase().includes(q) ?? false)),
+    );
+
+    return HttpResponse.json({
+      data: filtered.slice(offset, offset + limit),
+      total: filtered.length,
+    });
+  }),
+
+  http.post(`${BASE}/assets`, async ({ request }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/assets');
+    }
+    if (!isStaffRole(user.role)) {
+      return errorResponse(403, 'Only staff can create an asset', '/api/v1/assets');
+    }
+
+    const body = (await request.json()) as Record<string, unknown>;
+    const assetTag = typeof body.assetTag === 'string' ? body.assetTag.trim() : '';
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const assetTypeId =
+      typeof body.assetTypeId === 'string' ? body.assetTypeId : '';
+
+    const messages: string[] = [];
+    if (assetTag === '') messages.push('assetTag should not be empty');
+    if (name === '') messages.push('name should not be empty');
+    const assetType = mockState.assetTypes.find((t) => t.id === assetTypeId);
+    if (!assetType) {
+      messages.push('assetTypeId does not refer to an active asset type');
+    }
+    if (messages.length > 0) {
+      return badRequest(messages, '/api/v1/assets');
+    }
+
+    const asset = makeAsset({
+      id: `7${String(mockState.assets.length + 1).padStart(7, '0')}-1111-4111-8111-111111111111`,
+      assetTag,
+      name,
+      assetType,
+      status: 'InStock',
+      currentAssignee: null,
+      serialNumber:
+        typeof body.serialNumber === 'string' ? body.serialNumber : null,
+      purchaseDate:
+        typeof body.purchaseDate === 'string' ? body.purchaseDate : null,
+      warrantyExpiresAt:
+        typeof body.warrantyExpiresAt === 'string'
+          ? body.warrantyExpiresAt
+          : null,
+      notes: typeof body.notes === 'string' ? body.notes : null,
+    });
+    mockState.assets = [asset, ...mockState.assets];
+    return HttpResponse.json(asset, { status: 201 });
+  }),
+
+  http.get(`${BASE}/assets/:id`, ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/assets');
+    }
+    const id = String(params.id);
+    if (!UUID_RE.test(id)) {
+      // ParseUUIDPipe rejects before the handler runs: 400, not 404.
+      return badRequest(
+        'Validation failed (uuid is expected)',
+        `/api/v1/assets/${id}`,
+      );
+    }
+    const asset = findVisibleAsset(user, id);
+    if (!asset) {
+      return errorResponse(404, 'Asset not found', `/api/v1/assets/${id}`);
+    }
+    return HttpResponse.json(asset);
+  }),
+
+  http.patch(`${BASE}/assets/:id`, async ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/assets');
+    }
+    const id = String(params.id);
+    if (!isStaffRole(user.role)) {
+      return errorResponse(403, 'Only staff can update an asset', `/api/v1/assets/${id}`);
+    }
+    const asset = findVisibleAsset(user, id);
+    if (!asset) {
+      return errorResponse(404, 'Asset not found', `/api/v1/assets/${id}`);
+    }
+
+    const body = (await request.json()) as Record<string, unknown>;
+
+    // Validated whenever the key is present at all — including a value
+    // equal to the current status — mirroring
+    // `assertNonAssignmentStatusChange`.
+    if ('status' in body) {
+      if (body.status === 'Assigned') {
+        return badRequest(
+          'Assign an asset through PATCH /assets/:id/assignment, not by setting status',
+          `/api/v1/assets/${id}`,
+        );
+      }
+      if (asset.currentAssignee !== null) {
+        return badRequest(
+          `Asset is currently assigned; return it through PATCH /assets/:id/assignment before changing its status to ${String(body.status)}`,
+          `/api/v1/assets/${id}`,
+        );
+      }
+    }
+
+    const assetType = body.assetTypeId
+      ? mockState.assetTypes.find((t) => t.id === body.assetTypeId)
+      : undefined;
+
+    const updated: Asset = {
+      ...asset,
+      name: typeof body.name === 'string' ? body.name : asset.name,
+      assetType: assetType ?? asset.assetType,
+      status: typeof body.status === 'string' ? (body.status as AssetStatus) : asset.status,
+      serialNumber:
+        'serialNumber' in body
+          ? ((body.serialNumber as string | null) ?? null)
+          : asset.serialNumber,
+      notes: 'notes' in body ? ((body.notes as string | null) ?? null) : asset.notes,
+      purchaseDate:
+        'purchaseDate' in body
+          ? ((body.purchaseDate as string | null) ?? null)
+          : asset.purchaseDate,
+      warrantyExpiresAt:
+        'warrantyExpiresAt' in body
+          ? ((body.warrantyExpiresAt as string | null) ?? null)
+          : asset.warrantyExpiresAt,
+    };
+    mockState.assets = mockState.assets.map((a) => (a.id === id ? updated : a));
+    return HttpResponse.json(updated);
+  }),
+
+  http.patch(`${BASE}/assets/:id/assignment`, async ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/assets');
+    }
+    const id = String(params.id);
+    if (!isStaffRole(user.role)) {
+      return errorResponse(
+        403,
+        'Only staff can change an asset assignment',
+        `/api/v1/assets/${id}`,
+      );
+    }
+    const asset = findVisibleAsset(user, id);
+    if (!asset) {
+      return errorResponse(404, 'Asset not found', `/api/v1/assets/${id}`);
+    }
+
+    const body = (await request.json()) as {
+      assignedToId?: string | null;
+      notes?: string;
+    };
+    if (body.assignedToId === undefined) {
+      return badRequest('assignedToId must be a UUID', `/api/v1/assets/${id}`);
+    }
+
+    const expectedAssigneeId = asset.currentAssignee?.id ?? null;
+
+    if (body.assignedToId === expectedAssigneeId) {
+      if (body.notes !== undefined) {
+        return badRequest(
+          expectedAssigneeId === null
+            ? 'Asset is already unassigned'
+            : 'Asset is already assigned to this user',
+          `/api/v1/assets/${id}`,
+        );
+      }
+      return HttpResponse.json(asset);
+    }
+
+    if (body.assignedToId && UNASSIGNABLE_STATUSES.includes(asset.status)) {
+      return badRequest(
+        `An asset in status ${asset.status} cannot be assigned; move it back to stock first`,
+        `/api/v1/assets/${id}`,
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    // Close whatever the ledger still has open for this asset.
+    mockState.assetAssignments = mockState.assetAssignments.map((entry) =>
+      entry.assetId === id && entry.returnedAt === null
+        ? { ...entry, returnedAt: now }
+        : entry,
+    );
+
+    const updated: Asset = {
+      ...asset,
+      status: body.assignedToId ? 'Assigned' : 'InStock',
+      currentAssignee: body.assignedToId
+        ? { id: body.assignedToId, firstName: 'Test', lastName: 'User', role: 'Employee' }
+        : null,
+      updatedAt: now,
+    };
+    mockState.assets = mockState.assets.map((a) => (a.id === id ? updated : a));
+
+    if (body.assignedToId && updated.currentAssignee) {
+      mockState.assetAssignments = [
+        {
+          id: `8${String(mockState.assetAssignments.length + 1).padStart(7, '0')}-1111-4111-8111-111111111111`,
+          assetId: id,
+          assignedAt: now,
+          returnedAt: null,
+          notes: body.notes ?? null,
+          assignedTo: updated.currentAssignee,
+          assignedBy: {
+            id: user.id,
+            firstName: 'Test',
+            lastName: 'User',
+            role: user.role,
+          },
+        },
+        ...mockState.assetAssignments,
+      ];
+    }
+
+    return HttpResponse.json(updated);
+  }),
+
+  http.get(`${BASE}/assets/:id/assignments`, ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/assets');
+    }
+    const id = String(params.id);
+    if (!isStaffRole(user.role)) {
+      return errorResponse(403, 'Forbidden resource', `/api/v1/assets/${id}`);
+    }
+    const asset = findVisibleAsset(user, id);
+    if (!asset) {
+      return errorResponse(404, 'Asset not found', `/api/v1/assets/${id}`);
+    }
+    const entries = mockState.assetAssignments.filter((e) => e.assetId === id);
+    return HttpResponse.json({ data: entries, total: entries.length });
+  }),
+
+  /* ----------------------- ticket <-> asset links ----------------------- */
+
+  http.get(`${BASE}/tickets/:id/assets`, ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/tickets');
+    }
+    const id = String(params.id);
+    const ticket = findVisibleTicket(user, id);
+    if (!ticket) {
+      return errorResponse(404, 'Ticket not found', `/api/v1/tickets/${id}`);
+    }
+    // Bare, unpaginated array.
+    return HttpResponse.json(
+      mockState.ticketAssets.filter((link) => link.ticketId === id),
+    );
+  }),
+
+  http.post(`${BASE}/tickets/:id/assets`, async ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/tickets');
+    }
+    const id = String(params.id);
+    if (!isStaffRole(user.role)) {
+      return errorResponse(
+        403,
+        'Only staff can link an asset to a ticket',
+        `/api/v1/tickets/${id}/assets`,
+      );
+    }
+    const ticket = findVisibleTicket(user, id);
+    if (!ticket) {
+      return errorResponse(404, 'Ticket not found', `/api/v1/tickets/${id}`);
+    }
+    const body = (await request.json()) as { assetId?: string };
+    const asset = mockState.assets.find((a) => a.id === body.assetId);
+    if (!asset) {
+      return badRequest(
+        'assetId does not refer to an existing asset',
+        `/api/v1/tickets/${id}/assets`,
+      );
+    }
+
+    const existing = mockState.ticketAssets.find(
+      (link) => link.ticketId === id && link.asset.id === asset.id,
+    );
+    if (existing) {
+      // Idempotent: re-linking returns the existing link.
+      return HttpResponse.json(existing, { status: 201 });
+    }
+
+    const link: TicketAsset = {
+      ticketId: id,
+      linkedAt: new Date().toISOString(),
+      linkedBy: { id: user.id, firstName: 'Test', lastName: 'User', role: user.role },
+      asset: {
+        id: asset.id,
+        assetTag: asset.assetTag,
+        name: asset.name,
+        status: asset.status,
+        assetType: asset.assetType,
+      },
+    };
+    mockState.ticketAssets = [link, ...mockState.ticketAssets];
+    return HttpResponse.json(link, { status: 201 });
+  }),
+
+  http.delete(`${BASE}/tickets/:id/assets/:assetId`, ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/tickets');
+    }
+    const id = String(params.id);
+    if (!isStaffRole(user.role)) {
+      return errorResponse(
+        403,
+        'Only staff can unlink an asset from a ticket',
+        `/api/v1/tickets/${id}/assets`,
+      );
+    }
+    const assetId = String(params.assetId);
+    // Idempotent: unlinking something that is not linked still succeeds.
+    mockState.ticketAssets = mockState.ticketAssets.filter(
+      (link) => !(link.ticketId === id && link.asset.id === assetId),
+    );
+    return new HttpResponse(null, { status: 204 });
+  }),
+];
+
 /* ------------------------------- sla ------------------------------- */
 
 export const slaHandlers = [
@@ -520,4 +932,4 @@ export const slaHandlers = [
   }),
 ];
 
-export const handlers = [...coreHandlers, ...slaHandlers];
+export const handlers = [...coreHandlers, ...assetHandlers, ...slaHandlers];

@@ -1,9 +1,13 @@
 import type {
+  Asset,
+  AssetAssignment,
+  AssetType,
   AuthenticatedUser,
   Role,
   SlaMetrics,
   SlaPolicy,
   Ticket,
+  TicketAsset,
   TicketCategory,
   TicketComment,
   TicketHistoryEntry,
@@ -25,6 +29,11 @@ export const IDS = {
   policyCritical: 'b1111111-1111-4111-8111-111111111111',
   policyHigh: 'b2222222-2222-4222-8222-222222222222',
   policyMedium: 'b3333333-3333-4333-8333-333333333333',
+  assetTypeLaptop: '91111111-1111-4111-8111-111111111111',
+  assetTypeMonitor: '92222222-2222-4222-8222-222222222222',
+  assetA: '71111111-1111-4111-8111-111111111111',
+  assetB: '72222222-2222-4222-8222-222222222222',
+  assignmentA: '81111111-1111-4111-8111-111111111111',
 } as const;
 
 export const employeeUser: AuthenticatedUser = {
@@ -187,6 +196,67 @@ export function makeHistoryEntry(
     newValue: 'New',
     createdAt: '2026-01-05T09:00:00.000Z',
     actor: employeeSummary,
+    ...overrides,
+  };
+}
+
+/**
+ * Deliberately flat, exactly as `GET /asset-types` returns it — active
+ * types only.
+ */
+export const assetTypes: AssetType[] = [
+  { id: IDS.assetTypeLaptop, name: 'Laptop', isActive: true },
+  { id: IDS.assetTypeMonitor, name: 'Monitor', isActive: true },
+];
+
+export function makeAsset(overrides: Partial<Asset> = {}): Asset {
+  return {
+    id: IDS.assetA,
+    assetTag: 'LAPTOP-0001',
+    name: 'ThinkPad X1',
+    status: 'InStock',
+    serialNumber: 'SN-0001',
+    purchaseDate: '2025-01-15T00:00:00.000Z',
+    warrantyExpiresAt: '2028-01-15T00:00:00.000Z',
+    notes: null,
+    createdAt: '2026-01-01T09:00:00.000Z',
+    updatedAt: '2026-01-01T09:00:00.000Z',
+    assetType: assetTypes[0],
+    currentAssignee: null,
+    ...overrides,
+  };
+}
+
+export function makeAssignment(
+  overrides: Partial<AssetAssignment> = {},
+): AssetAssignment {
+  return {
+    id: IDS.assignmentA,
+    assetId: IDS.assetA,
+    assignedAt: '2026-01-02T09:00:00.000Z',
+    returnedAt: null,
+    notes: null,
+    assignedTo: employeeSummary,
+    assignedBy: agentSummary,
+    ...overrides,
+  };
+}
+
+export function makeTicketAsset(
+  overrides: Partial<TicketAsset> = {},
+): TicketAsset {
+  const asset = makeAsset();
+  return {
+    ticketId: IDS.ticketA,
+    linkedAt: '2026-01-05T09:30:00.000Z',
+    linkedBy: agentSummary,
+    asset: {
+      id: asset.id,
+      assetTag: asset.assetTag,
+      name: asset.name,
+      status: asset.status,
+      assetType: asset.assetType,
+    },
     ...overrides,
   };
 }

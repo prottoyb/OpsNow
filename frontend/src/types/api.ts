@@ -230,6 +230,161 @@ export interface Paginated<T> {
   total: number;
 }
 
+export const ASSET_STATUSES = [
+  'InStock',
+  'Assigned',
+  'InRepair',
+  'Retired',
+  'Lost',
+] as const;
+export type AssetStatus = (typeof ASSET_STATUSES)[number];
+
+/**
+ * `GET /asset-types` returns a BARE ARRAY of these (not `{data,total}`),
+ * active types only. Read-only — there is no asset-type CRUD in this phase.
+ */
+export interface AssetType {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface Asset {
+  id: string;
+  /** Stable human-facing identifier, e.g. "LAPTOP-0001". Not editable after creation. */
+  assetTag: string;
+  name: string;
+  status: AssetStatus;
+  serialNumber: string | null;
+  /**
+   * Date-only over the wire but still a full ISO-8601 timestamp string (see
+   * the file header) — the backend DTO types it `Date`. The create/edit form
+   * reads and writes only the date portion via a native
+   * `<input type="date">`.
+   */
+  purchaseDate: string | null;
+  /** ISO-8601 string over the wire — see the file header and `purchaseDate`. */
+  warrantyExpiresAt: string | null;
+  notes: string | null;
+  /** ISO-8601 string over the wire — see the file header. */
+  createdAt: string;
+  /** ISO-8601 string over the wire — see the file header. */
+  updatedAt: string;
+  assetType: AssetType;
+  currentAssignee: UserSummary | null;
+}
+
+/**
+ * The narrow projection an asset takes when embedded in something else —
+ * today, a ticket <-> asset link (`TicketAsset.asset`). Deliberately missing
+ * `serialNumber`, `notes`, `currentAssignee` and the purchase/warranty dates:
+ * those stay behind the row-scoped `GET /assets/:id`. This shape is the same
+ * for every role.
+ */
+export interface AssetSummary {
+  id: string;
+  assetTag: string;
+  name: string;
+  status: AssetStatus;
+  assetType: AssetType;
+}
+
+/**
+ * One row of an asset's assignment ledger — staff only
+ * (`GET /assets/:id/assignments`). An open row (`returnedAt === null`) is
+ * the asset's current holding; closed rows are past holdings. This ledger IS
+ * the asset's history; there is no separate audit endpoint.
+ */
+export interface AssetAssignment {
+  id: string;
+  assetId: string;
+  /** ISO-8601 string over the wire — see the file header. */
+  assignedAt: string;
+  /** Null while the assignment is still open. ISO-8601 string when set. */
+  returnedAt: string | null;
+  notes: string | null;
+  assignedTo: UserSummary;
+  assignedBy: UserSummary;
+}
+
+/**
+ * A ticket <-> asset link, from `GET /tickets/:id/assets`. Returns a BARE,
+ * UNPAGINATED array — the list is bounded by how many assets one ticket has.
+ * Readable by anyone who can already see the ticket.
+ */
+export interface TicketAsset {
+  ticketId: string;
+  /** ISO-8601 string over the wire — see the file header. */
+  linkedAt: string;
+  /** Null if the linking user has since been removed. */
+  linkedBy: UserSummary | null;
+  asset: AssetSummary;
+}
+
+export interface ListAssetsQuery {
+  status?: AssetStatus;
+  assetTypeId?: string;
+  assigneeId?: string;
+  /** Free-text search against assetTag, name and serialNumber. Max 100 chars. */
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * `status` and `currentAssigneeId` are deliberately absent: a new asset is
+ * always created InStock and unassigned — assignment happens only through
+ * `PATCH /assets/:id/assignment`.
+ */
+export interface CreateAssetInput {
+  assetTag: string;
+  name: string;
+  assetTypeId: string;
+  serialNumber?: string;
+  /** YYYY-MM-DD, as produced by a native `<input type="date">`. */
+  purchaseDate?: string;
+  /** YYYY-MM-DD, as produced by a native `<input type="date">`. */
+  warrantyExpiresAt?: string;
+  notes?: string;
+}
+
+/**
+ * The global ValidationPipe runs with `forbidNonWhitelisted: true`, so the
+ * body must contain only the fields being changed — never a whole asset
+ * spread into a PATCH. `assetTag` is not editable and has no field here.
+ *
+ * `serialNumber`, `purchaseDate`, `warrantyExpiresAt` and `notes` accept an
+ * explicit `null` to clear them; omitting a key leaves it unchanged.
+ *
+ * `status` is validated whenever the key is present AT ALL, including a
+ * value equal to the asset's current status — `Assigned` is always
+ * rejected here, and so is any status on an asset that currently has an
+ * assignee. Never include this key from the general edit form
+ * (`AssetForm`); it is owned by `AssetStatusControl`, which sends it only
+ * as a deliberate, standalone status change.
+ */
+export interface UpdateAssetInput {
+  name?: string;
+  assetTypeId?: string;
+  serialNumber?: string | null;
+  purchaseDate?: string | null;
+  warrantyExpiresAt?: string | null;
+  notes?: string | null;
+  status?: AssetStatus;
+}
+
+/**
+ * `assignedToId` is required-but-nullable on the backend DTO, so the key is
+ * always sent: a uuid assigns/reassigns, `null` returns the asset to stock.
+ * `notes` is legal ONLY when the assignment actually changes — a same-value
+ * submission plus notes is a 400, since there is no ledger row to record it
+ * on.
+ */
+export interface AssignAssetInput {
+  assignedToId: string | null;
+  notes?: string;
+}
+
 export interface ListTicketsQuery {
   status?: TicketStatus;
   priority?: TicketPriority;
@@ -268,6 +423,10 @@ export const FIELD_LIMITS = {
   subject: 255,
   description: 10000,
   commentBody: 5000,
+  assetTag: 50,
+  assetName: 150,
+  serialNumber: 100,
+  assetNotes: 5000,
 } as const;
 
 export const PAGE_SIZE = 20;
