@@ -1,0 +1,1 @@
+- [Review scope for OpsNow phases](project_review_scope.md) — ADR-001..021 settled; phases reuse ticket patterns on purpose, so don't propose new abstractions.

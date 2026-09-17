@@ -1,0 +1,4 @@
+- [Fresh worktree setup](worktree-setup-opsnow.md) — npm ci both packages, copy backend/.env, prisma generate, start the API before Playwright.
+- [The dev database is not ours to reset](opsnow-dev-db-is-not-ours-to-reset.md) — never seed/wipe opsnow_dev; verify seed counts before and after every run.
+- [OpsNow docs use escaped, double-spaced markdown](project-docs-escaped-markdown.md) — edit DECISIONS/TASKS/progress/README programmatically; line endings differ per file.
+- [Control chars in sources](feedback-control-chars-in-sources.md) — `\uXXXX` in written files becomes a real byte; re-escape it or git sees binary.
