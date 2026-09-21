@@ -2639,6 +2639,240 @@ Next:
 
 
 
+\### 2026-09-21 — Phase 10 Dashboard & Analytics Implemented (backend API and frontend UI)
+
+
+
+Phase 10 was built in the two halves the previous phases established — 10a
+
+the backend API, 10b the frontend UI. Like Phase 9 it was interrupted by a
+
+session limit, this time mid-backend. The interrupted work was recovered
+
+from the stalled agent's worktree, inspected, verified to typecheck, and
+
+committed as its own checkpoint (`7a74d1e`) BEFORE any further work began,
+
+so that the recovery could not be lost a second time. It was not recreated
+
+and not discarded: the five files it contained are the design the rest of
+
+the phase was built on.
+
+
+
+Implemented (10a — backend):
+
+
+
+\- `GET /api/v1/analytics/tickets` — totals, counts by status and by
+
+priority, opened versus resolved in the window, mean and median
+
+resolution minutes, and backlog.
+
+
+
+\- `GET /api/v1/analytics/sla` — response and resolution met/breached
+
+counts with a compliance rate, plus the pause-aware at-risk and
+
+in-flight-breached counts that ADR-020 explicitly deferred to this phase.
+
+
+
+\- `GET /api/v1/analytics/categories` and `GET /api/v1/analytics/agents` —
+
+per-group volume, resolved count, average resolution minutes and SLA
+
+figures, ordered by volume and capped with a `truncated` flag.
+
+
+
+\- `common/ticket-visibility.ts` gains `ticketVisibilitySql`, the ADR-019
+
+rule expressed a second time as a `Prisma.Sql` predicate for the three
+
+aggregates Prisma cannot express, defined immediately beside its ORM twin
+
+for the reason ADR-022 gives for the same pattern.
+
+
+
+Implemented (10b — frontend):
+
+
+
+\- `/dashboard`, staff-only, with Tickets / SLA / Categories tabs and an
+
+Agent performance tab visible only to a TeamLead or Administrator. Only
+
+the visible tab fetches.
+
+
+
+\- A shared filter bar — date range, priority, category, assignee — with
+
+URL-backed state, so a filtered dashboard is linkable and survives
+
+reload, and client-side range validation that mirrors the backend's
+
+366-day and inverted-window rules rather than replacing them.
+
+
+
+\- Dependency-free visuals: stat tiles, proportional bar rows and a
+
+compliance meter, built from plain HTML and CSS. Every figure is also
+
+rendered as text, bars expose `role="meter"` with an accessible name and
+
+value, and no meaning is carried by colour alone.
+
+
+
+Decisions that shaped it — recorded in full as ADR-024:
+
+
+
+\- Cohorts are defined explicitly. The window selects tickets created in
+
+it, except that `total` and `backlog` ignore the window (a backlog is a
+
+statement about now) and `resolved` plus the resolution averages select
+
+on `resolvedAt`. `opened` and `resolved` in one window are therefore not
+
+two views of one cohort and deliberately do not reconcile.
+
+
+
+\- A rate or duration with nothing to compute from is `null`, never `0`.
+
+On a dashboard, rendering "no completed clocks" as 0% would read as total
+
+failure — the most alarming possible rendering of no data. Both cases are
+
+asserted explicitly in the frontend tests.
+
+
+
+\- The at-risk aggregate is pinned in both directions: its TypeScript
+
+predicates against `deriveResponseState`/`deriveResolutionState` over a
+
+scenario table, and its SQL against the live per-ticket API in e2e, so a
+
+dashboard total cannot contradict the badge on the tickets it counts.
+
+
+
+\- `/analytics/agents` is TeamLead/Administrator only — narrower than the
+
+other three routes — because ranking named colleagues is line-management
+
+information, not operational information.
+
+
+
+\- No materialized view, cache or scheduled job; no charting library; no
+
+migration and no new model.
+
+
+
+Testing:
+
+
+
+\- Backend: 539 unit tests across 27 suites pass, 65 of them new across
+
+four analytics specs, including an 18-row scenario table pinning the
+
+at-risk predicates against the SLA read model.
+
+
+
+\- Backend e2e: 281 tests across 9 suites pass, 41 of them in
+
+`test/analytics.e2e-spec.ts` — every role against every route, eight
+
+validation cases, and the at-risk SQL checked against the per-ticket API
+
+at each step as a ticket is driven to at-risk, paused and breached.
+
+
+
+\- Frontend: 395 tests across 32 files pass; typecheck, lint and build
+
+clean.
+
+
+
+\- The e2e suite creates tickets tagged `E2E-ANALYTICS-<ts>`, cleans up
+
+only those, aborts with an actionable message if the database is not
+
+seeded, and ends by asserting every pre-existing ticket is still present
+
+with an unchanged `updatedAt`. Nothing is reset or reseeded.
+
+
+
+Known limitations:
+
+
+
+\- Resolution time is wall-clock and does not subtract paused time, so a
+
+ticket parked awaiting a user reply reports longer than the work took.
+
+
+
+\- Agent SLA compliance uses the resolution clock only.
+
+
+
+\- The filter bar offers only "Assigned to me", because `GET /api/v1/users`
+
+is Administrator-only and no staff directory endpoint exists — the same
+
+limitation already deferred from Phases 6b and 8b.
+
+
+
+\- No trend charts, no drill-down from a figure to the ticket list, no date
+
+presets.
+
+
+
+\- The at-risk e2e test asserts on aggregate deltas against the shared
+
+development database, so it depends on no pre-existing ticket crossing
+
+the threshold during its run.
+
+
+
+\- The dashboard was verified through the test DOM only; it was not opened
+
+in a browser, so layout and overflow are untested visually.
+
+
+
+Next:
+
+
+
+\- Begin Phase 11 — Audit Logging.
+
+
+
+\---
+
+
+
 ## Resume Instructions
 
 

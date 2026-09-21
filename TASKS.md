@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 10 — Dashboard & Analytics (not started). Phase 9 — Knowledge Base (backend API and frontend UI) — complete; Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
+Current Phase: Phase 11 — Audit Logging (in progress). Phase 10 — Dashboard & Analytics (backend API and frontend UI) — complete; Phase 9 — Knowledge Base (backend API and frontend UI) — complete; Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
 
 
 
@@ -712,27 +712,103 @@ data, like ticket categories and asset types.
 
 
 
-\- \[ ] Create dashboard API
+Split into 10a (backend API) / 10b (frontend UI) following the Phase 6a/6b,
 
-\- \[ ] Calculate ticket metrics
+7a/7b, 8a/8b and 9a/9b precedent. Both halves are complete.
 
-\- \[ ] Calculate SLA metrics
+\## Phase 10a — Dashboard \& Analytics (Backend API)
 
-\- \[ ] Calculate resolution metrics
+\- \[x] Create dashboard API
 
-\- \[ ] Calculate category statistics
+\- \[x] Calculate ticket metrics
 
-\- \[ ] Calculate agent performance
+\- \[x] Calculate SLA metrics
 
-\- \[ ] Build management dashboard
+\- \[x] Calculate resolution metrics
 
-\- \[ ] Build ticket analytics
+\- \[x] Calculate category statistics
 
-\- \[ ] Build SLA analytics
+\- \[x] Calculate agent performance
 
-\- \[ ] Add dashboard filtering
+\## Phase 10b — Dashboard \& Analytics (Frontend UI)
 
-\- \[ ] Add analytics tests
+\- \[x] Build management dashboard
+
+\- \[x] Build ticket analytics
+
+\- \[x] Build SLA analytics
+
+\- \[x] Add dashboard filtering
+
+\- \[x] Add analytics tests (backend unit + e2e, frontend vitest)
+
+See DECISIONS.md ADR-024 for the cohort definitions, the raw-SQL
+
+visibility twin, the pause-aware at-risk aggregate and the null-versus-zero
+
+reporting rule. No migration, no new model and no new dependency — the
+
+figures are computed on demand from the live tables, with no materialized
+
+view, summary table, cache or scheduled job (ADR-017, and ADR-020's
+
+Decision 8 which already rejected a poller on the same grounds).
+
+Note: `GET /api/v1/analytics/agents` is gated to TeamLead and Administrator
+
+only — narrower than the `STAFF_ROLES` gate on the other three routes —
+
+because it names individual members of staff and ranks them against one
+
+another, which is line-management information rather than operational
+
+information.
+
+\## Deferred from Phase 10 (tracked, not dropped)
+
+\- \[ ] Resolution time is wall-clock from creation to resolution and does
+
+NOT subtract time the ticket spent paused (OnHold). A ticket parked
+
+awaiting a user reply therefore reports a longer resolution time than the
+
+work actually took. Subtracting pause credit would need the same
+
+pause-ledger arithmetic ADR-020 applies to SLA due dates, which is a
+
+larger change than Phase 10's scope.
+
+\- \[ ] Agent SLA compliance is based on the resolution clock only; the
+
+response clock does not contribute to an agent's compliance figure.
+
+\- \[ ] No assignee picker on the dashboard filter bar — the filter offers
+
+only "Assigned to me", because `GET /api/v1/users` is Administrator-only
+
+and no staff directory endpoint exists. This is the same limitation
+
+already deferred from Phases 6b and 8b and would be resolved by the same
+
+endpoint.
+
+\- \[ ] No time-series/trend charts, no drill-down from a dashboard figure
+
+to the underlying ticket list, and no date presets ("last 7 days"). The
+
+visuals are dependency-free stat tiles, bar rows and a compliance meter;
+
+a charting library was deliberately not added (ADR-017).
+
+\- \[ ] The analytics e2e at-risk test asserts on aggregate deltas against
+
+the shared development database. It would flap only if a pre-existing
+
+ticket crossed the at-risk threshold during the few hundred milliseconds
+
+of the test's run — unlikely, but it is a real shared-state dependency
+
+rather than a hermetic assertion.
 
 
 

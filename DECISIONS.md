@@ -2533,3 +2533,339 @@ makes that a decision the operator takes, rather than one this
 
 architecture takes for them.
 
+
+
+\---
+
+
+
+\## ADR-024 — Analytics Aggregates: Cohorts, Raw-SQL Scope and Reporting Nulls
+
+
+
+Status: Accepted
+
+
+
+Context:
+
+
+
+Phase 10 turns the ticket, SLA and category tables into four reporting
+
+endpoints. Nothing here is a new storage or transport problem — the data
+
+already exists and ADR-019 already settles how a route is shaped and
+
+guarded. What had to be decided is subtler and, for a reporting feature,
+
+more dangerous to leave implicit: exactly which rows each number counts,
+
+what a number means when there is nothing to count, and how an aggregate
+
+that cannot be expressed through Prisma stays subject to the same row
+
+visibility as the aggregate next to it.
+
+
+
+A reporting bug does not throw. It renders a plausible number, and the
+
+number is wrong. That is the failure mode this ADR is written against.
+
+
+
+Decisions:
+
+
+
+1. Every figure is computed on demand from the live tables. There is no
+
+materialized view, summary table, cache or scheduled job. This follows
+
+ADR-017's infrastructure simplicity and ADR-020's Decision 8, which
+
+already rejected a poller for SLA state on the same grounds. The cost is
+
+that each request runs real aggregates, so the design compensates with
+
+bounds rather than with storage: a default 30-day window, a hard 366-day
+
+cap, and a cardinality cap on the grouped routes. Nothing loads tickets
+
+into application memory to count them; every aggregate is computed in the
+
+database.
+
+
+
+2. A window wider than 366 days is a 400, not a silently narrowed answer.
+
+Quietly truncating a caller's window would return a different question
+
+from the one they asked, which in a reporting API is the same class of
+
+error as returning a wrong number. 366 days covers any full calendar year
+
+including a leap year.
+
+
+
+3. Where Prisma's query API cannot express an aggregate, the query drops
+
+to `$queryRaw` — and the visibility rule is therefore expressed twice, in
+
+two dialects. `ticketVisibilityWhere` (ADR-019's rule) gains a twin,
+
+`ticketVisibilitySql`, returning a `Prisma.Sql` predicate; the same
+
+pattern `knowledge-article-visibility.ts` established in ADR-022. A median
+
+(`percentile_cont`), a per-group average duration and the pause-aware
+
+at-risk count are the three things that genuinely cannot be written
+
+through the ORM.
+
+
+
+The twins are defined immediately beside one another, in the same file, on
+
+purpose. The highest-risk failure in this phase is a raw path whose scope
+
+drifts *weaker* than the ORM path's — an Employee seeing a figure computed
+
+over everyone's tickets — and adjacency is what makes that drift visible
+
+to a reviewer in a single glance rather than requiring them to hold two
+
+files in their head.
+
+
+
+4. Filters can only ever narrow. The caller's visibility clause is ANDed
+
+in as its own top-level clause and never merged field by field with the
+
+request's filters, in both dialects. This is structural: there is no
+
+ordering of user-supplied filters that can widen the scope, because the
+
+scope is a sibling clause rather than a set of fields a filter could
+
+overwrite. No analytics filter is role-gated, and none needs to be, for
+
+exactly this reason.
+
+
+
+5. Every caller-supplied value reaches SQL as a bound parameter through a
+
+`Prisma.sql` tagged template. `$queryRawUnsafe` is not used anywhere in
+
+this module and input is never concatenated into statement text.
+
+
+
+6. The pause-aware at-risk aggregate, which ADR-020 deferred, is computed
+
+in SQL — and its TypeScript twin is pinned to the per-ticket read model by
+
+test rather than by care. "At risk" is not a fixed cutoff: a clock is at
+
+risk once its remaining time falls to `AT_RISK_FRACTION` of *that clock's
+
+own* snapshotted target, so no `where` clause over a single column can
+
+express it, which is why Phase 7 shipped no such count. Postgres can
+
+express it, because it is arithmetic between two columns of one row.
+
+
+
+Two things stop the SQL and the TypeScript disagreeing, which would make a
+
+dashboard total contradict the badge on the very tickets it counts. The
+
+TypeScript predicates are composed from the same primitives
+
+`SlaService.toTicketSlaResponse` uses, so they cannot drift by
+
+construction, and a scenario table pins them against `deriveResponseState`
+
+/`deriveResolutionState`. The e2e suite then pins the *SQL* against the
+
+live per-ticket API: it drives one ticket's SLA row to an at-risk
+
+position, asserts `GET /tickets/:id` reports `AtRisk`, and asserts the
+
+aggregate moved by exactly one.
+
+
+
+A paused clock is never at risk. That is not an approximation of the pause
+
+arithmetic — in both `deriveResponseState` and `deriveResolutionState`,
+
+`Paused` is returned before `AtRisk` is considered, so excluding `OnHold`
+
+up front is that arithmetic's own conclusion reached one step earlier. The
+
+scenario table includes paused rows so this stays true if that ordering
+
+ever changes.
+
+
+
+7. The cohorts are defined explicitly, because "how many tickets in
+
+October" has more than one defensible answer. The window selects tickets
+
+*created* in it, with two deliberate exceptions: `total` and `backlog`
+
+ignore the window entirely, because a backlog is a statement about now and
+
+not about a period; and `resolved`, together with the mean and median
+
+resolution times, selects tickets whose `resolvedAt` falls in the window,
+
+because a ticket resolved in October is October's resolution however long
+
+it had been open. Backlog is New, Open, InProgress and OnHold.
+
+
+
+The consequence to be aware of when reading a dashboard: `opened` and
+
+`resolved` in the same window are not two views of one cohort and will not
+
+reconcile. That is correct, and it is why they are labelled as distinct
+
+figures rather than presented as a balance.
+
+
+
+8. Resolution time is wall-clock from creation to resolution and does not
+
+subtract paused time. A ticket parked awaiting a user's reply therefore
+
+reports a longer resolution time than the work took. Crediting pauses
+
+would need the same pause-ledger arithmetic ADR-020 applies to due dates,
+
+which is a larger change than this phase's scope; it is recorded as a
+
+tracked limitation in TASKS.md rather than left for a reader to discover
+
+from a surprising number.
+
+
+
+9. A rate or a duration with nothing to compute from is `null`, never `0`,
+
+and the frontend must render the two differently. `complianceRate` is
+
+`met / (met + breached)`; with no completed clocks in the window there is
+
+no compliance rate, and reporting that as `0` would read on a dashboard as
+
+total failure — the most alarming possible rendering of "no data". The
+
+frontend honours this: `null` shows "No completed clocks in this window"
+
+with no meter, while a real `0` shows 0%, an empty meter and the
+
+underlying counts. Both cases are asserted explicitly in the frontend
+
+tests, because this is the distinction most likely to be quietly lost in a
+
+later refactor.
+
+
+
+10. The grouped routes cap cardinality in SQL and say when they did.
+
+Neither the category count nor the staff-account count is bounded by the
+
+schema, so both `/analytics/categories` and `/analytics/agents` order by
+
+volume descending and cap at `MAX_GROUPS`, dropping the least significant
+
+groups and setting a `truncated` flag so the response never silently
+
+misrepresents itself as complete.
+
+
+
+11. `GET /analytics/agents` is gated to TeamLead and Administrator, which
+
+is narrower than the `STAFF_ROLES` gate on the other three routes. A
+
+SupportAgent may see every aggregate their own work contributes to, but
+
+not a league table of their colleagues: naming individuals and ranking
+
+them is line-management information, not operational information. Each
+
+route carries its `@Roles` guard plus a service-level assertion as defence
+
+in depth, following `SlaController`.
+
+
+
+12. The dashboard adds no charting dependency. Stat tiles, proportional
+
+bar rows and a compliance meter are built from plain accessible HTML and
+
+CSS; every figure is also present as text, and no meaning is carried by
+
+colour alone. Filter state lives in the URL so a filtered dashboard is
+
+linkable and survives reload. The client re-implements the window
+
+validation so the UI cannot originate a 400 it could have prevented — this
+
+mirrors the backend rule and does not replace it; the backend remains the
+
+enforcement point, as it must be for the role gates too.
+
+
+
+Consequences:
+
+
+
+The module is a pure read layer over existing tables with no new schema,
+
+dependency or infrastructure, and it can be deleted without touching
+
+anything else. Against that: each request pays for real aggregation, so
+
+the window and cardinality caps are load-bearing rather than decorative,
+
+and a much larger ticket corpus would eventually justify revisiting
+
+Decision 1 — at which point the on-demand queries here become the
+
+specification a materialized view would have to match.
+
+
+
+The at-risk aggregate is now the second place in the codebase that encodes
+
+SLA state. It is pinned by tests in both directions, but it remains a
+
+duplication that any change to `sla.calculations.ts` must consider; the
+
+pinning tests are what will fail if someone forgets.
+
+
+
+Because the visibility rule exists in two dialects, an Employee-scoped
+
+analytics response depends on both being right. The adjacency rule in
+
+Decision 3 and the role matrix in the e2e suite are the controls; neither
+
+is optional maintenance.
+
