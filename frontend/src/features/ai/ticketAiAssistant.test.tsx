@@ -14,8 +14,10 @@ import {
 } from '../../mocks/fixtures';
 import { mockState, resetMockState } from '../../mocks/handlers';
 import { server } from '../../mocks/server';
+import { createQueryClient } from '../../lib/api/queryClient';
 import { renderApp } from '../../test/renderApp';
 import { AI_FAILURE_REASONS } from '../../types/api';
+import { aiFailureMessage } from './aiFailure';
 import type { MockState } from '../../mocks/handlers';
 
 const ROUTE = `/tickets/${IDS.ticketA}`;
@@ -118,7 +120,13 @@ describe('AI assistant — who sees it', () => {
     expect(
       await panel.findByText(/not available on this server/i),
     ).toBeInTheDocument();
-    expect(panel.queryByRole('button', { name: /suggest triage/i })).toBeNull();
+    for (const name of [
+      /suggest triage/i,
+      /draft a response/i,
+      /summarise resolution/i,
+    ]) {
+      expect(panel.queryByRole('button', { name })).toBeNull();
+    }
   });
 });
 
@@ -256,8 +264,11 @@ describe('AI assistant — draft response and resolution summary', () => {
     expect(panel.getByText(/not sent and not posted/i)).toBeInTheDocument();
 
     // A draft is written to be sent to a requester; it must never reach them
-    // without a person putting it there.
+    // without a person putting it there. Flushed past the current task first,
+    // so a POST fired a tick after the render would still be caught.
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(requestsMatching(/POST .*\/comments$/)).toEqual([]);
+    expect(mockState.comments).toEqual([]);
   });
 
   it('renders a resolution summary, labelled', async () => {
@@ -289,12 +300,15 @@ describe('AI assistant — failure handling', () => {
     expect(
       await panel.findByText(/suggested triage unavailable/i),
     ).toBeInTheDocument();
+    // The reason-specific wording, not just the heading — otherwise this loop
+    // would assert the same generic string six times.
+    expect(panel.getByText(aiFailureMessage(reason))).toBeInTheDocument();
     // No result is rendered alongside the failure.
     expect(panel.queryByText('Software')).toBeNull();
-    // Exactly one attempt: nothing anywhere retries an AI call.
-    await waitFor(() =>
-      expect(requestsMatching(/POST .*\/ai\/triage$/)).toHaveLength(1),
-    );
+    // One click, one request. This does NOT prove nothing retries — a retry
+    // would fire after this assertion; `production query client` below is what
+    // pins that.
+    expect(requestsMatching(/POST .*\/ai\/triage$/)).toHaveLength(1);
   });
 
   it('shows the reason-specific wording, not a generic 5xx message', async () => {
@@ -384,6 +398,71 @@ describe('AI assistant — demonstration mode', () => {
 
     // Exact, because the notice below repeats the phrase in a sentence.
     expect(await panel.findByText('Demonstration mode')).toBeInTheDocument();
-    expect(panel.getByText(/canned sample output/i)).toBeInTheDocument();
+    expect(
+      panel.getByText(/this server is in demonstration mode:/i),
+    ).toBeInTheDocument();
+  });
+
+  it('labels a mock RESULT even when the cached status says otherwise', async () => {
+    /*
+     * `GET /ai/status` is cached for five minutes and is not refetched on
+     * focus, so a provider change on the server leaves a stale `anthropic`
+     * status in front of responses that are actually canned. Each result
+     * carries its own `mode` for that reason, and must label itself from it —
+     * otherwise fabricated category and priority advice renders with no
+     * demonstration-mode marking at all.
+     */
+    seed(agentUser, {
+      aiStatus: { enabled: true, mode: 'anthropic' },
+      aiTriage: makeAiTriage({ mode: 'mock' }),
+    });
+    const user = userEvent.setup();
+
+    await renderDetail();
+    const panel = await assistant();
+    // The stale status shows no panel-level warning at all.
+    expect(panel.queryByText('Demonstration mode')).toBeNull();
+
+    await user.click(await panel.findByRole('button', { name: /suggest triage/i }));
+
+    expect(
+      await panel.findByText(/canned sample output — this server is in demonstration mode/i),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('AI assistant — untrusted model output', () => {
+  it('renders hostile model text as text, never as markup', async () => {
+    // Ticket subject and description are written by an Employee and are
+    // exactly what the prompt is built from, so a model's rationale is
+    // attacker-influenceable (ADR-023 Decision 7).
+    const hostile = '<img src=x onerror="alert(1)"> <script>alert(2)</script>';
+    seed(agentUser, {
+      aiTriage: makeAiTriage({ rationale: hostile }),
+      aiResolutionSummary: makeAiResolutionSummary({ summary: hostile }),
+    });
+    const user = userEvent.setup();
+
+    await renderDetail();
+    const panel = await assistant();
+    await user.click(await panel.findByRole('button', { name: /suggest triage/i }));
+
+    expect(await panel.findByText(hostile)).toBeInTheDocument();
+    expect(document.querySelector('img')).toBeNull();
+    expect(document.querySelector('script')).toBeNull();
+  });
+});
+
+describe('production query client', () => {
+  it('never retries a mutation, which is what makes the AI routes fire once', () => {
+    /*
+     * The AI task routes are mutations precisely so nothing re-runs them: each
+     * call costs money and sends ticket text to a third party, and ADR-023
+     * Decision 8 puts retry policy in the human's hands. The component tests
+     * run against `createTestQueryClient`, which sets `retry: false` itself —
+     * so they cannot see this. Asserting the PRODUCTION client directly is the
+     * only thing that pins it.
+     */
+    expect(createQueryClient().getDefaultOptions().mutations?.retry).toBe(false);
   });
 });

@@ -40,6 +40,21 @@ const REVIEW_NOTICE =
 const MOCK_NOTICE =
   'This server is in demonstration mode: the text below is canned sample output, not a model’s analysis.';
 
+/**
+ * The same disclosure, attached to one result.
+ *
+ * The panel-level notice above is derived from the cached `GET /ai/status`,
+ * which has a five-minute `staleTime` and is not refetched on focus — so a
+ * provider change on the server can leave the cached status saying `anthropic`
+ * while a response actually carries `mode: 'mock'`. Every result payload
+ * carries its own `mode` for exactly this reason, and a result labels itself
+ * from that rather than from the cached configuration. Without this, canned
+ * category and priority advice could render with no demonstration-mode label
+ * at all, which is the outcome ADR-023 Decision 3 exists to prevent.
+ */
+const MOCK_RESULT_NOTICE =
+  'Canned sample output — this server is in demonstration mode.';
+
 export interface TicketAiAssistantPanelProps {
   ticket: Ticket;
   /**
@@ -159,6 +174,7 @@ export function TicketAiAssistantPanel({
           heading="Suggested triage"
           error={triage.error}
           show={triage.isSuccess && !triage.isPending}
+          resultMode={triage.data?.mode}
         >
           {triage.data ? (
             <TriageResult
@@ -175,6 +191,7 @@ export function TicketAiAssistantPanel({
           heading="Draft response"
           error={draft.error}
           show={draft.isSuccess && !draft.isPending}
+          resultMode={draft.data?.mode}
         >
           {draft.data ? (
             <>
@@ -213,6 +230,7 @@ export function TicketAiAssistantPanel({
           heading="Resolution summary"
           error={summary.error}
           show={summary.isSuccess && !summary.isPending}
+          resultMode={summary.data?.mode}
         >
           {summary.data ? (
             <p className="user-content text-sm text-slate-800">
@@ -259,11 +277,15 @@ function ResultBlock({
   heading,
   error,
   show,
+  resultMode,
   children,
 }: {
   heading: string;
   error: unknown;
   show: boolean;
+  /** This result's OWN mode, not the cached server status — see
+   * `MOCK_RESULT_NOTICE`. */
+  resultMode?: AiMode;
   children: ReactNode;
 }) {
   if (error) {
@@ -289,6 +311,11 @@ function ResultBlock({
     <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3">
       <h3 className="text-sm font-semibold text-slate-900">{heading}</h3>
       <p className="text-xs font-medium text-slate-600">{REVIEW_NOTICE}</p>
+      {resultMode === 'mock' ? (
+        <p className="text-xs font-medium text-amber-900">
+          {MOCK_RESULT_NOTICE}
+        </p>
+      ) : null}
       {children}
     </div>
   );

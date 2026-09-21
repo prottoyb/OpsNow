@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 12 — AI Ticket Assistant (in progress). Phase 11 — Audit Logging (backend and UI) — complete; Phase 10 — Dashboard & Analytics (backend API and frontend UI) — complete; Phase 9 — Knowledge Base (backend API and frontend UI) — complete; Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
+Current Phase: Phase 13 — Testing & Quality (not started). Phase 12 — AI Ticket Assistant (backend API and frontend UI) — complete; Phase 11 — Audit Logging (backend and UI) — complete; Phase 10 — Dashboard & Analytics (backend API and frontend UI) — complete; Phase 9 — Knowledge Base (backend API and frontend UI) — complete; Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
 
 
 
@@ -942,27 +942,89 @@ reference, and there is no export or live refresh.
 
 
 
-\- \[ ] Define AI use cases
+Split into 12a (backend API) / 12b (frontend UI) following the Phase 6a/6b,
+7a/7b, 8a/8b, 9a/9b and 10a/10b precedent. Both halves are complete.
 
-\- \[ ] Design AI service architecture
+\## Phase 12a — AI Ticket Assistant (Backend API)
 
-\- \[ ] Implement secure AI API integration
+\- \[x] Define AI use cases
 
-\- \[ ] Implement ticket analysis
+\- \[x] Design AI service architecture
 
-\- \[ ] Implement category suggestion
+\- \[x] Implement secure AI API integration
 
-\- \[ ] Implement priority suggestion
+\- \[x] Implement ticket analysis
 
-\- \[ ] Implement knowledge article suggestions
+\- \[x] Implement category suggestion
 
-\- \[ ] Implement response draft generation
+\- \[x] Implement priority suggestion
 
-\- \[ ] Implement resolution summary generation
+\- \[x] Implement knowledge article suggestions
 
-\- \[ ] Handle AI failures safely
+\- \[x] Implement response draft generation
 
-\- \[ ] Add AI feature tests
+\- \[x] Implement resolution summary generation
+
+\- \[x] Handle AI failures safely
+
+\- \[x] Add AI feature tests (backend unit + e2e)
+
+\## Phase 12b — AI Ticket Assistant (Frontend UI)
+
+\- \[x] Build the staff AI assistant panel on the ticket detail page
+(triage, draft response, resolution summary)
+
+\- \[x] Handle the disabled, unavailable and 503 states safely
+
+\- \[x] Add AI frontend tests (vitest)
+
+See DECISIONS.md ADR-023 for the provider boundary, the grounding model
+and the failure model. No migration, no new npm dependency on either side,
+and no new endpoint for 12b — the UI consumes the 12a contract as-is.
+
+Note: ADR-023's Decision 12 originally recorded Phase 12 as backend-only,
+because the Phase 12 task list above named no frontend items. The project
+owner subsequently asked for the UI, so that decision is amended in
+DECISIONS.md rather than left contradicting the built state, and the task
+list is split into 12a/12b to match every other phase since Phase 6.
+
+Note: the assistant is OFF in a default install. With no `AI_PROVIDER` and
+no `AI_API_KEY`, `GET /ai/status` answers `enabled: false` and the panel
+renders a short "not available on this server" note with no buttons —
+which is the intended out-of-the-box experience, not a failure. Set
+`AI_PROVIDER=mock` to demonstrate the success path without a vendor key;
+the UI labels mock output as canned sample text.
+
+Note: nothing in the UI can change a ticket. A suggestion is applied only
+by a second explicit click, which calls the ordinary `PATCH /tickets/:id`
+(or `/priority`) through the ticket page's existing mutations, so an
+accepted suggestion gets the same validation, history write and 403/409
+recovery as a change someone typed.
+
+\## Deferred from Phase 12 (tracked, not dropped)
+
+\- \[ ] No "copy draft" button. The generated reply renders in a read-only
+textarea the agent selects and copies by hand. A clipboard button needs
+`navigator.clipboard` feature detection and a fallback (it is absent under
+jsdom), which was judged not worth the surface for this phase.
+
+\- \[ ] A draft, a triage result and a summary are lost on refresh and are
+not auditable after the fact, because ADR-023 Decision 11 persists no AI
+output. There is also no acceptance-rate analytics and no caching, so
+clicking twice bills twice.
+
+\- \[ ] A failed `GET /ai/status` is deliberately indistinguishable from a
+deliberately unconfigured server: both render the same quiet note. That
+is the right call for an optional helper on a ticket page, but it does
+mean a genuinely broken status endpoint is invisible to the user.
+
+\- \[ ] The assistant is not surfaced anywhere but the ticket detail page —
+no bulk triage, no assistant on the ticket list, and no suggestion at
+creation time.
+
+\- \[ ] The in-process concurrency cap that produces a `busy` 503 is
+per-instance and would not hold behind more than one backend replica
+(carried over from ADR-023's Consequences).
 
 
 

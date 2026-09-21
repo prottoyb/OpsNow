@@ -381,7 +381,16 @@ export function TicketDetailPage() {
             exists so an Employee issues no AI request at all.
           */}
           {isStaff ? (
+            /*
+              Keyed by ticket id so results cannot outlive the ticket they were
+              generated for. Mutation results are component state, and a
+              navigation from one ticket to another that never unmounts this
+              page — reachable only when the next ticket is already cached —
+              would otherwise leave the previous ticket's suggestions on screen
+              with Apply buttons now pointed at a different ticket.
+            */
             <TicketAiAssistantPanel
+              key={ticket.id}
               ticket={ticket}
               applying={updateTicket.isPending || updatePriority.isPending}
               onApplyCategory={handleApplySuggestedCategory}

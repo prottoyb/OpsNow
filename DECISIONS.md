@@ -2519,6 +2519,52 @@ outside the caller's scope is a 404, not a 403, per ADR-019.
 
 
 
+Amended after the backend shipped: Phase 12 is no longer backend-only. The
+
+project owner asked for the staff-facing UI, so the phase was split into
+
+12a (backend) and 12b (frontend) like every phase since Phase 6, and
+
+TASKS.md now names the frontend items it previously lacked. The reasoning
+
+above was about scope, not about architecture, and nothing else in this
+
+ADR changes: the UI consumes the contract as designed, adds no endpoint,
+
+and the prediction that `enabled` would let a frontend carry no role logic
+
+of its own held — the panel gates on `enabled` alone, and its staff check
+
+exists only to keep an Employee from issuing a request at all.
+
+
+
+Two properties of that UI are worth recording here, because they are this
+
+ADR's decisions showing up in the interface rather than new choices.
+
+Decision 5's advisory-only rule is implemented structurally: the AI feature
+
+contains no code that can change a ticket, and an accepted suggestion is
+
+applied by a callback into the ticket page's own update mutations, so it
+
+travels the same validation, history-write and 403/409 recovery path as a
+
+change someone typed. And Decision 7's closing clause — that residual
+
+injection risk is mitigated "by labelling AI output as such in any future
+
+UI" — is now a requirement the UI meets rather than a promise: every block
+
+of generated text carries a review notice, and mock mode says plainly that
+
+its output is canned, so the distinction Decision 3 draws between
+
+"disabled" and "mock" is not quietly given back at the last step.
+
+
+
 Consequences:
 
 

@@ -316,7 +316,7 @@ Prefer small changes that can be verified independently.
 
 
 
-Phases 0–11 are complete: project foundation, approved architecture (ADR-001
+Phases 0–12 are complete: project foundation, approved architecture (ADR-001
 
 through ADR-025 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, the
 
@@ -328,12 +328,24 @@ asset management (backend API and frontend UI), the knowledge base
 
 (backend API and frontend UI), dashboard analytics (backend API and
 
-frontend UI), and audit logging (backend and Administrator-only UI).
+frontend UI), audit logging (backend and Administrator-only UI), and the
+
+AI ticket assistant (backend API and staff-facing frontend UI).
 
 
 
-Phase 12 — AI Ticket Assistant is next; its architecture is already
+The AI assistant is OFF in a default install. With no `AI_PROVIDER` and no
 
-recorded as ADR-023 and it is scoped backend-only. See `TASKS.md` for the
+`AI_API_KEY`, `GET /ai/status` answers `enabled: false` and the ticket page
 
-current task list and `progress.md` for the full development log.
+says the assistant is unavailable — that is the intended out-of-the-box
+
+state (ADR-023), not a broken build. `AI_PROVIDER=mock` demonstrates the
+
+success path without a vendor key, and the UI labels mock output as canned.
+
+
+
+Phase 13 — Testing & Quality is next. See `TASKS.md` for the current task
+
+list and `progress.md` for the full development log.

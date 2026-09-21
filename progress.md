@@ -10,25 +10,35 @@ Project status: In Progress
 
 
 
-Current phase: Phase 10 — Dashboard & Analytics (not started)
+Current phase: Phase 13 — Testing & Quality (not started)
 
 
 
-Current task: none — Phase 9 is complete
+Current task: none — Phases 0–12 are complete
 
 
 
-Last completed task: Phase 9 — Knowledge Base, backend API and
+Last completed task: Phase 12 — AI Ticket Assistant, backend API and
 
-frontend UI (articles, categories, full-text search, filtering, reader
+frontend UI (a read-only provider side car with grounded, advisory-only
 
-feedback and ticket <-> article links — implemented, tested and verified;
+triage, response-draft and resolution-summary tasks, off by default and
 
-no new migration, recorded as ADR-022)
+failing closed in the UI — implemented, tested and verified; no new
+
+migration and no new dependency, recorded as ADR-023)
 
 
 
-Next task: Begin Phase 10 — Dashboard & Analytics
+Next task: Begin Phase 13 — Testing & Quality
+
+
+
+Note: this header had been left reporting Phase 9 while Phases 10, 11 and
+
+12 were completed; their own log entries below were written at the time.
+
+It is corrected here as part of closing Phase 12.
 
 
 
@@ -3082,6 +3092,228 @@ Next:
 \- Begin Phase 12 — AI Ticket Assistant (architecture already recorded as
 
 ADR-023).
+
+
+
+\---
+
+
+
+\### 2026-09-22 — Phase 12 AI Ticket Assistant Implemented (backend and UI)
+
+
+
+Phase 12 adds this project's first dependency on a system outside its own
+
+database. The backend landed first and is described by ADR-023; this entry
+
+covers it and the staff-facing UI that now consumes it. No migration, no
+
+new npm dependency on either side, and no new endpoint for the UI.
+
+
+
+Implemented (backend):
+
+
+
+\- `ai/` as a read-only side car: it imports Prisma and the knowledge base,
+
+no ticket route calls it, and it never calls `TicketsService` — so an AI
+
+outage, timeout or rate limit cannot make ticket work fail.
+
+
+
+\- A narrow provider boundary. `AiProvider` is a transport with a single
+
+`generate()`; prompt assembly, output parsing, grounding and validation
+
+all live above it in vendor-neutral modules, so every safety-relevant
+
+line is the same for every provider and is exercised by tests against a
+
+fake transport.
+
+
+
+\- Three providers: disabled (the default with no key, which throws rather
+
+than inventing output), mock (explicit opt-in, rejected by Joi in
+
+production), and a live adapter written against `fetch` with an
+
+`AbortController` timeout rather than a vendor SDK.
+
+
+
+\- `GET /ai/status` plus staff-only `POST /tickets/:id/ai/{triage,`
+
+`draft-response,resolution-summary}`, all advisory: an e2e test asserts a
+
+ticket's priority, category, status, `updatedAt`, history count and
+
+comment count are unchanged after every AI route is called.
+
+
+
+\- Failures are a 503 carrying a reason enum and no retries; nothing about
+
+a prompt, a completion or a key is ever logged.
+
+
+
+Implemented (UI):
+
+
+
+\- A staff AI assistant panel in the ticket detail page's main column with
+
+three human-triggered actions, their results labelled as generated and
+
+unverified, and related knowledge articles linked through.
+
+
+
+\- The three task routes are wired as mutations rather than queries. This
+
+is a safety property, not a style choice: each call costs money and
+
+sends ticket text to a third party, so it must fire on a click and at no
+
+other time, and a query would re-run on mount, on remount, on
+
+invalidation and on retry.
+
+
+
+\- Reading a 503's reason needed one deliberate detour. `ApiError`
+
+replaces any 5xx body with a generic message so no server internals
+
+reach the UI, but keeps the parsed body on `.raw` — so the reason is
+
+read from there, defensively, gated on `code === 'AI_UNAVAILABLE'` so a
+
+gateway 503 is never rendered as an assistant rate limit. An
+
+unrecognised reason degrades to assistant-shaped copy and the
+
+unvalidated string is never echoed back.
+
+
+
+\- Fail-closed on every branch: the panel is staff-only, `useAiStatus` is
+
+additionally gated on `isStaff` so the "an Employee issues no AI
+
+request" invariant does not depend on future call sites, and a status
+
+query that errors renders the same quiet note as an unconfigured server
+
+rather than a red alert over an optional helper.
+
+
+
+\- Nothing in the feature can change a ticket. Applying a suggestion calls
+
+back into the ticket page's existing update mutations, so it travels the
+
+same validation, history-write and 403/409 path as a typed change, and a
+
+suggestion the ticket already matches offers no button.
+
+
+
+\- A generated draft renders read-only and is never wired into the comment
+
+composer — it is written to be sent to a requester, so it must pass
+
+through a person's hands.
+
+
+
+\- The frontend mirrors the backend's closed failure-reason and mode lists,
+
+and a drift guard parses `backend/src/ai/ai.types.ts` and fails if they
+
+diverge — the same technique Phase 11 used for audit actions.
+
+
+
+Decisions:
+
+
+
+\- ADR-023's Decision 12 recorded Phase 12 as backend-only, on the grounds
+
+that the task list named no frontend items. The project owner asked for
+
+the UI, so the phase is now split 12a/12b like every phase since Phase 6
+
+and the ADR is amended in place rather than left contradicting the built
+
+state. Nothing else in ADR-023 changed; the UI consumes the contract as
+
+designed, and the prediction that `enabled` would let a frontend carry no
+
+role logic of its own held.
+
+
+
+Verification:
+
+
+
+\- Backend: typecheck clean, 731 unit tests across 39 suites, 342 e2e
+
+tests across 11 suites, `nest build` clean. The backend has no lint
+
+script — `tsc --noEmit` is the static gate there.
+
+
+
+\- Frontend: typecheck clean, eslint clean, 459 vitest tests across 37
+
+files (36 of them new for this feature), production build clean.
+
+
+
+Deferred (also recorded in TASKS.md):
+
+
+
+\- No copy-to-clipboard button on the draft; it is selected and copied by
+
+hand from a read-only textarea.
+
+
+
+\- No AI output is persisted, so a draft is lost on refresh, suggestions
+
+are not auditable afterwards, there is no acceptance-rate analytics and
+
+repeated clicks re-bill.
+
+
+
+\- A failed status request is deliberately indistinguishable from an
+
+unconfigured server.
+
+
+
+\- The assistant appears only on the ticket detail page: no bulk triage,
+
+no assistant on the list, none at creation time.
+
+
+
+Next:
+
+
+
+\- Begin Phase 13 — Testing & Quality.
 
 
 
