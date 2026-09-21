@@ -5,6 +5,12 @@ import * as Joi from 'joi';
 export const DEFAULT_JWT_ACCESS_EXPIRES_IN = '15m';
 export const DEFAULT_REFRESH_TOKEN_TTL_SECONDS = 604800;
 
+/** AI assistant defaults (ADR-023). The model id is the exact string from
+ * Anthropic's current model guidance (the claude-api skill's model table),
+ * with no date suffix; override with AI_MODEL rather than editing this. */
+export const DEFAULT_AI_MODEL = 'claude-opus-5';
+export const DEFAULT_AI_TIMEOUT_MS = 15000;
+
 const schema = Joi.object({
   NODE_ENV: Joi.string()
     .valid('development', 'test', 'production')
@@ -19,6 +25,24 @@ const schema = Joi.object({
     .integer()
     .positive()
     .default(DEFAULT_REFRESH_TOKEN_TTL_SECONDS),
+  // AI assistant (ADR-023) — every key is optional, so validation passes
+  // with none set. The mock provider fabricates output, so it is refused
+  // outright in production.
+  AI_PROVIDER: Joi.string()
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.valid('disabled', 'anthropic'),
+      otherwise: Joi.valid('disabled', 'mock', 'anthropic'),
+    })
+    .allow('')
+    .optional(),
+  AI_API_KEY: Joi.string().allow('').optional(),
+  AI_MODEL: Joi.string().default(DEFAULT_AI_MODEL),
+  AI_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(1000)
+    .max(120000)
+    .default(DEFAULT_AI_TIMEOUT_MS),
 }).unknown(true);
 
 export function validateEnv(
