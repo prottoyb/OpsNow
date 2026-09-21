@@ -2,20 +2,86 @@ import { TicketStatus } from '@prisma/client';
 import {
   deriveResolutionState,
   deriveResponseState,
+  isAtRisk,
+  isBreached,
   isPausedFromStatus,
   remainingMinutes,
 } from '../sla/sla.calculations';
 import { SlaResolutionState, SlaResponseState } from '../sla/sla.constants';
 import {
-  AtRiskRow,
-  isResolutionAtRisk,
-  isResponseAtRisk,
   liveClockSql,
   resolutionAtRiskSql,
   resolutionInFlightBreachedSql,
   responseAtRiskSql,
   responseInFlightBreachedSql,
 } from './analytics.at-risk';
+
+/*
+ * TEST ORACLE — not production code. Nothing outside this spec imports it, and
+ * production never runs it: the real at-risk count is the SQL in
+ * `analytics.at-risk.ts`. It is a readable, independent statement of the rule,
+ * built from the same primitives the per-ticket API uses, so the scenario
+ * table below can pin the rule against `deriveResponseState` /
+ * `deriveResolutionState`. It proves the RULE, not the SQL; the SQL is pinned
+ * against a real database in `test/analytics.e2e-spec.ts`.
+ */
+
+/** The columns an at-risk decision reads, from the ticket and its SLA row. */
+interface AtRiskRow {
+  status: TicketStatus;
+  resolvedAt: Date | null;
+  responseAt: Date | null;
+  responseDueAt: Date;
+  responseTargetMinutes: number;
+  resolutionDueAt: Date;
+  resolutionTargetMinutes: number;
+}
+
+/**
+ * True exactly when `deriveResponseState` would return `AtRisk` for this row.
+ *
+ * The guards mirror that function's branch order: a completed clock, a ticket
+ * that concluded without a response, and a paused clock all resolve to some
+ * other state before at-risk is reached.
+ */
+function isResponseAtRiskOracle(row: AtRiskRow, now: Date): boolean {
+  if (row.responseAt !== null) {
+    return false;
+  }
+  if (row.resolvedAt !== null) {
+    return false;
+  }
+  if (isPausedFromStatus(row.status)) {
+    return false;
+  }
+  if (isBreached(row.responseDueAt, now)) {
+    return false;
+  }
+  return isAtRisk(
+    remainingMinutes(row.responseDueAt, now, false, null),
+    row.responseTargetMinutes,
+  );
+}
+
+/** True exactly when `deriveResolutionState` would return `AtRisk`. There is
+ * no `responseAt` guard here: the resolution clock does not care whether
+ * anyone has replied yet. */
+function isResolutionAtRiskOracle(row: AtRiskRow, now: Date): boolean {
+  if (row.resolvedAt !== null) {
+    return false;
+  }
+  if (isPausedFromStatus(row.status)) {
+    return false;
+  }
+  if (isBreached(row.resolutionDueAt, now)) {
+    return false;
+  }
+  return isAtRisk(
+    remainingMinutes(row.resolutionDueAt, now, false, null),
+    row.resolutionTargetMinutes,
+  );
+}
+
 
 const NOW = new Date('2026-06-15T12:00:00.000Z');
 const minutesFromNow = (m: number): Date =>
@@ -90,8 +156,8 @@ const scenarios: ReadonlyArray<[string, AtRiskRow]> = [
 describe('analytics.at-risk predicates vs the per-ticket read model', () => {
   it.each(scenarios)('%s', (_name, r) => {
     const state = derive(r);
-    expect(isResponseAtRisk(r, NOW)).toBe(state.response === SlaResponseState.AtRisk);
-    expect(isResolutionAtRisk(r, NOW)).toBe(
+    expect(isResponseAtRiskOracle(r, NOW)).toBe(state.response === SlaResponseState.AtRisk);
+    expect(isResolutionAtRiskOracle(r, NOW)).toBe(
       state.resolution === SlaResolutionState.AtRisk,
     );
   });
@@ -112,8 +178,8 @@ describe('analytics.at-risk predicates vs the per-ticket read model', () => {
       responseDueAt: minutesFromNow(1),
       resolutionDueAt: minutesFromNow(1),
     });
-    expect(isResponseAtRisk(paused, NOW)).toBe(false);
-    expect(isResolutionAtRisk(paused, NOW)).toBe(false);
+    expect(isResponseAtRiskOracle(paused, NOW)).toBe(false);
+    expect(isResolutionAtRiskOracle(paused, NOW)).toBe(false);
   });
 });
 

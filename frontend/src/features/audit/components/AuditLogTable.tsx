@@ -9,7 +9,13 @@ import type { AuditLogEntry } from '../../../types/api';
 
 /** What a missing value reads as, so a null is never a blank cell. */
 export const NOT_RECORDED = 'Not recorded';
-export const UNAUTHENTICATED = 'Unauthenticated';
+/**
+ * A null actor is not always an anonymous caller: it is also a user who has
+ * since been deleted (`ON DELETE SET NULL`) and a `refresh_failed` row, so the
+ * label says only that no actor is recorded, never that the caller was
+ * unauthenticated.
+ */
+export const NOT_ATTRIBUTED = 'Not attributed';
 
 const OUTCOME_TONES: Record<string, BadgeTone> = {
   success: 'success',
@@ -158,7 +164,7 @@ export function AuditLogTable({
                     </span>
                   </>
                 ) : (
-                  <span className="text-slate-600">{UNAUTHENTICATED}</span>
+                  <span className="text-slate-600">{NOT_ATTRIBUTED}</span>
                 )}
               </td>
               <td className={TD}>

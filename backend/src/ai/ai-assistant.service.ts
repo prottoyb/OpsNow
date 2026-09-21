@@ -84,7 +84,9 @@ export class AiAssistantService {
     const ticket = await this.loadTicket(ticketId, user, 'triage');
 
     const categories = await this.activeCategories();
-    const articles = await this.candidateArticles(ticket, user, false);
+    // Published ONLY, for staff too (ADR-023 Decision 7): Draft titles and
+    // excerpts must never reach the third-party provider.
+    const articles = await this.candidateArticles(ticket, user, true);
     const prompt = buildTriagePrompt({ ticket: toPromptTicket(ticket), categories, articles });
 
     const categoryNames = new Map(categories.map((c) => [c.id, c.name]));
@@ -98,7 +100,7 @@ export class AiAssistantService {
 
     // Re-read under the caller's visibility so a change between assembly and
     // response is honoured; titles come from the row, not the model.
-    const relatedArticles = await this.rereadArticles(validated.articleIds, user, false);
+    const relatedArticles = await this.rereadArticles(validated.articleIds, user, true);
 
     return {
       suggestedCategory:
@@ -207,6 +209,14 @@ export class AiAssistantService {
       const reason: AiFailureReason =
         error instanceof AiProviderError ? error.reason : 'provider_error';
       this.logFailure(prompt.task, user.id, ticketId, reason, Date.now() - started);
+      if (!(error instanceof AiProviderError)) {
+        // The class name only — never the message, which vendor and Prisma
+        // errors can fill with payload (ADR-023 Decision 9). It separates a
+        // genuine bug (TypeError) from an unclassified vendor failure.
+        this.logger.warn(
+          `ai task=${prompt.task} unexpectedError=${errorClassName(error)} ticketId=${ticketId}`,
+        );
+      }
       throw new AiUnavailableException(reason);
     }
   }
@@ -294,6 +304,14 @@ export class AiAssistantService {
       .map((id) => byId.get(id))
       .filter((row): row is AiArticleReferenceDto => row !== undefined);
   }
+}
+
+function errorClassName(error: unknown): string {
+  if (error instanceof Error) {
+    const name: unknown = error.constructor?.name;
+    return typeof name === 'string' && /^\w{1,80}$/.test(name) ? name : 'Error';
+  }
+  return typeof error;
 }
 
 function toPromptTicket(ticket: {

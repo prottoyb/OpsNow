@@ -2,7 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { AnalyticsQuery } from '../../types/api';
 import { TICKET_PRIORITIES } from '../../types/api';
-import { parseDay, toRequestRange, validateRange } from './analyticsRange';
+import { parseDay } from '../../lib/utcDays';
+import { toRequestRange, validateRange } from './analyticsRange';
 
 export const ANALYTICS_TABS = ['tickets', 'sla', 'categories', 'agents'] as const;
 export type AnalyticsTab = (typeof ANALYTICS_TABS)[number];

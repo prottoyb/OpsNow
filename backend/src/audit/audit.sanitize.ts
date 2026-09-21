@@ -105,12 +105,27 @@ export function sanitizeIp(ip: string | undefined | null): string | null {
   return isIP(ip) !== 0 ? ip : null;
 }
 
+/**
+ * A User-Agent is client-controlled free text, so a secret can appear
+ * ANYWHERE in it, not only at the start. The shared value patterns are
+ * start-anchored, so these unanchored forms are added for this field. No real
+ * browser or HTTP client sends a `Bearer <token>` or a JWT in its UA.
+ */
+const SECRET_LIKE_ANYWHERE: RegExp[] = [
+  /\b(bearer|basic)\s+\S/i,
+  /\beyJ[\w-]+\.[\w-]+\.[\w-]*/,
+];
+
 export function sanitizeUserAgent(
   ua: string | undefined | null,
 ): string | null {
   if (!ua) return null;
   const cleaned = cleanText(ua, MAX_USER_AGENT_LENGTH);
-  return cleaned.length > 0 ? cleaned : null;
+  if (cleaned.length === 0) return null;
+  if (looksSecret(cleaned) || SECRET_LIKE_ANYWHERE.some((p) => p.test(cleaned))) {
+    return REDACTED;
+  }
+  return cleaned;
 }
 
 // local@label(.label)+ — a dotted domain, so a bare `Pass@word1` is not one.

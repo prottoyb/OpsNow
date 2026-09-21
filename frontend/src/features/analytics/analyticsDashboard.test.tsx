@@ -200,6 +200,17 @@ describe('analytics dashboard: category statistics', () => {
     expect(categories.getByRole('row', { name: /Uncategorised/ })).toBeInTheDocument();
   });
 
+  it('labels Resolved as a count among tickets created in the window, not the tickets tab figure', async () => {
+    resetMockState({ currentUser: agentUser });
+    await openDashboard();
+    const categories = await openTab('Categories');
+    expect(
+      await categories.findByRole('columnheader', {
+        name: 'Resolved (of tickets created in window)',
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('says so when the backend truncated the list', async () => {
     resetMockState({
       currentUser: agentUser,
@@ -244,6 +255,10 @@ describe('analytics dashboard: agent performance and RBAC', () => {
     });
     await openDashboard();
     const agents = await openTab('Agent performance');
+
+    expect(
+      agents.getByRole('columnheader', { name: 'Resolved (of tickets created in window)' }),
+    ).toBeInTheDocument();
 
     const priya = within(await agents.findByRole('row', { name: /Priya Shah/ }));
     expect(priya.getByText('83.3%')).toBeInTheDocument();

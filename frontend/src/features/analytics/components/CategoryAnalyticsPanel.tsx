@@ -39,7 +39,7 @@ export function CategoryAnalyticsPanel({
                     <tr className="border-b border-slate-300 text-slate-700">
                       <th scope="col" className="px-3 py-2 font-semibold">Category</th>
                       <th scope="col" className="px-3 py-2 font-semibold">Volume</th>
-                      <th scope="col" className="px-3 py-2 font-semibold">Resolved</th>
+                      <th scope="col" className="px-3 py-2 font-semibold">Resolved (of tickets created in window)</th>
                       <th scope="col" className="px-3 py-2 font-semibold">Avg resolution</th>
                       <th scope="col" className="px-3 py-2 font-semibold">SLA breaches</th>
                     </tr>

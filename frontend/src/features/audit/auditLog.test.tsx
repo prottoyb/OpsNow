@@ -101,7 +101,7 @@ describe('audit log: table', () => {
     const created = within(rows[2]);
 
     expect(failed.getByText('auth.login.failed')).toBeInTheDocument();
-    expect(failed.getByText('Unauthenticated')).toBeInTheDocument();
+    expect(failed.getByText('Not attributed')).toBeInTheDocument();
     expect(failed.getByText('failure', { selector: 'span' })).toBeInTheDocument();
     expect(failed.getByText('203.0.113.9')).toBeInTheDocument();
     expect(failed.getByText('Mozilla/5.0 (Test)')).toBeInTheDocument();

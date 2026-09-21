@@ -1,10 +1,4 @@
 import { Prisma, TicketStatus } from '@prisma/client';
-import {
-  isAtRisk,
-  isBreached,
-  isPausedFromStatus,
-  remainingMinutes,
-} from '../sla/sla.calculations';
 import { AT_RISK_FRACTION } from '../sla/sla.constants';
 
 /**
@@ -28,30 +22,38 @@ import { AT_RISK_FRACTION } from '../sla/sla.constants';
  * SQL `count(*) FILTER (...)` over `tickets JOIN ticket_sla`, with no
  * per-ticket round trip and no unbounded `findMany`.
  *
- * ## Why this is safe against drift
- *
- * The one real hazard is the SQL and the TypeScript read model disagreeing,
- * so that a dashboard total contradicts the badge on the tickets it counts.
- * Two things prevent that:
- *
- *  1. The TypeScript predicates below are not a second implementation. They
- *     are composed from the very primitives `SlaService.toTicketSlaResponse`
- *     uses — `isPausedFromStatus`, `isBreached`, `remainingMinutes`,
- *     `isAtRisk` — so they cannot drift from the per-ticket state by
- *     construction. `analytics.at-risk.spec.ts` pins them against
- *     `deriveResponseState`/`deriveResolutionState` over a scenario table.
- *  2. The SQL fragments sit here, immediately beside those predicates — the
- *     same adjacency rule `knowledge-article-visibility.ts` applies to its
- *     raw-SQL visibility twin — and `analytics.e2e-spec.ts` pins the SQL
- *     against the live per-ticket API: it creates a ticket, drives its SLA
- *     row to an at-risk position, asserts `GET /tickets/:id` reports
- *     `AtRisk`, and asserts the analytics total moved by exactly one.
- *
- * ## The pause simplification, stated explicitly
+ * ## What pins the SQL to the per-ticket read model
+
+The one real hazard is the SQL and the TypeScript read model disagreeing, so
+that a dashboard total contradicts the badge on the tickets it counts.
+
+The SQL fragments below are the ONLY production implementation. They are NOT
+composed from the TypeScript primitives in `sla.calculations.ts`: they are a
+separate, hand-written expression of the same rule, and nothing at compile time
+keeps the two in step. What holds them together is testing, in two layers:
+
+ 1. `analytics.at-risk.spec.ts` holds a pure-TypeScript ORACLE
+    (`isResponseAtRiskOracle` / `isResolutionAtRiskOracle`, defined in that
+    spec and never imported by production code). The oracle is built from the
+    primitives `SlaService.toTicketSlaResponse` uses, and the spec pins it
+    against `deriveResponseState` / `deriveResolutionState` over a scenario
+    table. That proves the ORACLE matches the per-ticket read model; it does
+    not, by itself, execute any SQL.
+ 2. `analytics.e2e-spec.ts` runs the SQL against a real database. It drives a
+    ticket's SLA row to the at-risk threshold, to `due == now` (which must not
+    count as breached: `isBreached` is strictly `now > dueAt`) and to one
+    millisecond past due, asserts `GET /tickets/:id` reports the same state,
+    and asserts the aggregate counts it.
+
+The SQL fragments sit here, beside the rule they encode, for the same adjacency
+reason `knowledge-article-visibility.ts` keeps its raw-SQL twin next to its
+Prisma one.
+
+## The pause simplification, stated explicitly
  *
  * `remainingMinutes` freezes at the pause anchor while a ticket is OnHold, so
- * a paused clock's remaining time is a different computation. Neither
- * predicate below has to implement it, and neither does the SQL: in BOTH
+ * a paused clock's remaining time is a different computation. The SQL does not
+ * have to implement it (nor does the spec's oracle): in BOTH
  * `deriveResponseState` and `deriveResolutionState`, `Paused` is returned
  * before `AtRisk` is ever considered, so a paused clock is never at risk in
  * the first place. Excluding `OnHold` up front is therefore not an
@@ -60,62 +62,6 @@ import { AT_RISK_FRACTION } from '../sla/sla.constants';
  * includes paused rows precisely so this stays true if the ordering in
  * `sla.calculations.ts` ever changes.
  */
-
-/** The columns an at-risk decision reads, from the ticket and its SLA row. */
-export interface AtRiskRow {
-  status: TicketStatus;
-  resolvedAt: Date | null;
-  responseAt: Date | null;
-  responseDueAt: Date;
-  responseTargetMinutes: number;
-  resolutionDueAt: Date;
-  resolutionTargetMinutes: number;
-}
-
-/**
- * True exactly when `deriveResponseState` would return `AtRisk` for this row.
- *
- * The guards mirror that function's branch order: a completed clock, a ticket
- * that concluded without a response, and a paused clock all resolve to some
- * other state before at-risk is reached.
- */
-export function isResponseAtRisk(row: AtRiskRow, now: Date): boolean {
-  if (row.responseAt !== null) {
-    return false;
-  }
-  if (row.resolvedAt !== null) {
-    return false;
-  }
-  if (isPausedFromStatus(row.status)) {
-    return false;
-  }
-  if (isBreached(row.responseDueAt, now)) {
-    return false;
-  }
-  return isAtRisk(
-    remainingMinutes(row.responseDueAt, now, false, null),
-    row.responseTargetMinutes,
-  );
-}
-
-/** True exactly when `deriveResolutionState` would return `AtRisk`. There is
- * no `responseAt` guard here: the resolution clock does not care whether
- * anyone has replied yet. */
-export function isResolutionAtRisk(row: AtRiskRow, now: Date): boolean {
-  if (row.resolvedAt !== null) {
-    return false;
-  }
-  if (isPausedFromStatus(row.status)) {
-    return false;
-  }
-  if (isBreached(row.resolutionDueAt, now)) {
-    return false;
-  }
-  return isAtRisk(
-    remainingMinutes(row.resolutionDueAt, now, false, null),
-    row.resolutionTargetMinutes,
-  );
-}
 
 /**
  * The outer scope both at-risk counts and both in-flight breach counts share:
@@ -143,7 +89,7 @@ function remainingMinutesSql(dueAtColumn: Prisma.Sql, now: Date): Prisma.Sql {
 }
 
 /**
- * The SQL twin of `isResponseAtRisk`, for use inside a
+ * The SQL form of the response at-risk rule, for use inside a
  * `count(*) FILTER (WHERE ...)` whose surrounding query already applies
  * `liveClockSql` (which covers the `resolvedAt`/`OnHold` guards).
  *
@@ -159,7 +105,7 @@ export function responseAtRiskSql(now: Date): Prisma.Sql {
   `;
 }
 
-/** The SQL twin of `isResolutionAtRisk`, under the same assumptions. */
+/** The SQL form of the resolution at-risk rule, under the same assumptions. */
 export function resolutionAtRiskSql(now: Date): Prisma.Sql {
   return Prisma.sql`
     s.resolution_due_at >= ${now}::timestamptz

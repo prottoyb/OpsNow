@@ -159,6 +159,37 @@ describe('AnalyticsService', () => {
       expect(result.resolution.complianceRate).toBeNull();
       expect(result.resolution.atRisk).toBe(1);
     });
+
+    it('scopes met/breached to the window but NOT the at-risk and in-flight counts', async () => {
+      prisma.$queryRaw.mockResolvedValueOnce([
+        {
+          tickets_with_sla: 0, response_met: 0, response_breached: 0, response_in_flight: 0,
+          response_at_risk: 0, resolution_met: 0, resolution_breached: 0,
+          resolution_in_flight: 0, resolution_at_risk: 0,
+        },
+      ]);
+      await service.getSlaAnalytics(user(Role.SupportAgent), {}, NOW);
+
+      const { sql } = prisma.$queryRaw.mock.calls[0][0] as { sql: string };
+      const selectList = sql.slice(0, sql.indexOf('FROM tickets'));
+      const columns = selectList.split(/\n\s*\(?count\(\*\)/).filter((c) => c.includes('AS '));
+      const column = (alias: string) =>
+        columns.find((c) => c.includes(`AS ${alias}`)) as string;
+
+      for (const alias of [
+        'tickets_with_sla', 'response_met', 'response_breached',
+        'resolution_met', 'resolution_breached',
+      ]) {
+        expect(column(alias)).toContain('created_at');
+      }
+      for (const alias of [
+        'response_in_flight', 'response_at_risk', 'resolution_in_flight', 'resolution_at_risk',
+      ]) {
+        expect(column(alias)).not.toContain('created_at');
+      }
+      // The window is not a top-level filter any more: only visibility/filters are.
+      expect(sql.slice(sql.lastIndexOf('WHERE'))).not.toContain('created_at');
+    });
   });
 
   describe('grouped endpoints', () => {

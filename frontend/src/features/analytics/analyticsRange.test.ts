@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   RANGE_ORDER_MESSAGE,
   RANGE_SPAN_MESSAGE,
-  parseDay,
   toRequestRange,
   validateRange,
 } from './analyticsRange';
@@ -13,19 +12,6 @@ import {
 } from './analyticsFormat';
 
 const NOW = new Date('2026-09-21T12:00:00.000Z');
-
-describe('parseDay', () => {
-  it('accepts a real calendar day and rejects everything else', () => {
-    expect(parseDay('2026-09-21')).toBe('2026-09-21');
-    expect(parseDay('2026-02-31')).toBeUndefined();
-    expect(parseDay('21/09/2026')).toBeUndefined();
-    expect(parseDay('nonsense')).toBeUndefined();
-    expect(parseDay('1969-12-31')).toBeUndefined();
-    expect(parseDay('2200-01-01')).toBeUndefined();
-    expect(parseDay('')).toBeUndefined();
-    expect(parseDay(null)).toBeUndefined();
-  });
-});
 
 describe('validateRange', () => {
   it('allows no dates, one date, and a one-day window', () => {

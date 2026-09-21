@@ -12,7 +12,7 @@ import {
   AUDIT_OUTCOMES,
   PAGE_SIZE,
 } from '../../types/api';
-import { dayEndIso, dayStartIso, parseDay } from '../analytics/analyticsRange';
+import { dayEndIso, dayStartIso, parseDay } from '../../lib/utcDays';
 
 export interface AuditFilters {
   actorId?: string;
