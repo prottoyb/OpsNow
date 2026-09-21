@@ -3,6 +3,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/configure-app';
+import { Role } from '@prisma/client';
+import { AnalyticsService } from '../src/analytics/analytics.service';
+import { AnalyticsQueryDto } from '../src/analytics/dto/analytics-query.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const SEED_PASSWORD = 'DevPassword123!';
@@ -32,6 +35,8 @@ async function loginAs(app: INestApplication, email: string): Promise<string> {
 describe('Analytics (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let analytics: AnalyticsService;
+  let adminId: string;
 
   let adminToken: string;
   let teamLeadToken: string;
@@ -41,6 +46,7 @@ describe('Analytics (e2e)', () => {
   let hardwareCategoryId: string;
 
   const createdTicketIds: string[] = [];
+  const createdUserIds: string[] = [];
   let preExisting: Map<string, number>;
 
   beforeAll(async () => {
@@ -52,6 +58,7 @@ describe('Analytics (e2e)', () => {
     configureApp(app);
     await app.init();
     prisma = app.get(PrismaService);
+    analytics = app.get(AnalyticsService);
 
     // Preconditions are verified, never repaired.
     adminToken = await loginAs(app, 'admin@opsnow.local');
@@ -65,6 +72,9 @@ describe('Analytics (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     agent1Id = usersRes.body.data.find(
       (u: { email: string }) => u.email === 'agent1@opsnow.local',
+    ).id;
+    adminId = usersRes.body.data.find(
+      (u: { email: string }) => u.email === 'admin@opsnow.local',
     ).id;
 
     const categoriesRes = await request(app.getHttpServer())
@@ -105,6 +115,8 @@ describe('Analytics (e2e)', () => {
           ],
         },
       });
+      // Tickets first (they reference the throwaway assignee), then the user.
+      await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     } catch (error) {
       console.warn('analytics e2e cleanup failed', error);
     }
@@ -147,7 +159,7 @@ describe('Analytics (e2e)', () => {
   async function setStatus(id: string, status: string) {
     await request(app.getHttpServer())
       .patch(`/api/v1/tickets/${id}/status`)
-      .set('Authorization', `Bearer ${agent1Token}`)
+      .set('Authorization', `Bearer ${teamLeadToken}`)
       .send({ status })
       .expect(200);
   }
@@ -155,7 +167,7 @@ describe('Analytics (e2e)', () => {
   async function slaOf(id: string) {
     const response = await request(app.getHttpServer())
       .get(`/api/v1/tickets/${id}`)
-      .set('Authorization', `Bearer ${agent1Token}`)
+      .set('Authorization', `Bearer ${teamLeadToken}`)
       .expect(200);
     return response.body.sla as { responseState: string; resolutionState: string };
   }
@@ -351,12 +363,67 @@ describe('Analytics (e2e)', () => {
   });
 
   describe('GET /analytics/sla — the at-risk SQL is pinned to the per-ticket API', () => {
+    // Hermetic scope (no dependence on other data in the shared database):
+    // every ticket below is assigned to a throwaway agent this run creates, and
+    // every query filters by that assignee, so the counts cover ONLY this
+    // suite's tickets and can be asserted as exact values, not deltas. The
+    // at-risk/in-flight figures ignore the window (they are about "now"), so
+    // the assignee filter is what isolates them.
+    let scopedAssigneeId: string;
+
+    beforeAll(async () => {
+      const agent = await prisma.user.create({
+        data: {
+          email: `${MARKER.toLowerCase()}-agent@opsnow.local`,
+          // Never used to log in: not a valid hash, so no credential exists.
+          passwordHash: 'e2e-not-a-real-hash',
+          firstName: 'E2E',
+          lastName: 'Scoped',
+          role: 'SupportAgent',
+        },
+      });
+      scopedAssigneeId = agent.id;
+      createdUserIds.push(agent.id);
+    });
+
+    async function createAssignedTicket(overrides: Record<string, unknown> = {}) {
+      const id = await createTicket(overrides);
+      await request(app.getHttpServer())
+        .patch(`/api/v1/tickets/${id}/assignment`)
+        .set('Authorization', `Bearer ${teamLeadToken}`)
+        .send({ assigneeId: scopedAssigneeId })
+        .expect(200);
+      return id;
+    }
+
+    /** The throwaway assignee plus a window bracketing "now" by an hour either side. */
+    function bracket(): Record<string, string> {
+      return {
+        assigneeId: scopedAssigneeId,
+        from: new Date(Date.now() - 3_600_000).toISOString(),
+        to: new Date(Date.now() + 3_600_000).toISOString(),
+      };
+    }
+
+    /** The service called directly with a fixed clock, so boundaries are exact. */
+    function slaAt(now: Date) {
+      return analytics.getSlaAnalytics(
+        { id: adminId, email: 'admin@opsnow.local', role: Role.Administrator },
+        {
+          assigneeId: scopedAssigneeId,
+          from: new Date(now.getTime() - 3_600_000),
+          to: new Date(now.getTime() + 3_600_000),
+        } as AnalyticsQueryDto,
+        now,
+      );
+    }
+
     it('counts a ticket at risk exactly when GET /tickets/:id reports AtRisk, and never while paused', async () => {
-      const before = await ok('sla', agent1Token);
-      const id = await createTicket({ priority: 'Medium' }); // 60 / 480 minute targets
-      const fresh = await ok('sla', agent1Token);
-      expect(fresh.ticketsWithSla).toBe(before.ticketsWithSla + 1);
-      expect(fresh.response.atRisk).toBe(before.response.atRisk);
+      const id = await createAssignedTicket({ priority: 'Medium' }); // 60 / 480 minute targets
+      const fresh = await ok('sla', teamLeadToken, bracket());
+      expect(fresh.ticketsWithSla).toBe(1);
+      expect(fresh.response.atRisk).toBe(0);
+      expect(fresh.resolution.atRisk).toBe(0);
       expect((await slaOf(id)).responseState).toBe('Running');
 
       // Response clock: 5 of 60 minutes left is within the 20% threshold.
@@ -365,9 +432,9 @@ describe('Analytics (e2e)', () => {
         data: { responseDueAt: new Date(Date.now() + 5 * 60_000) },
       });
       expect((await slaOf(id)).responseState).toBe('AtRisk');
-      const responseAtRisk = await ok('sla', agent1Token);
-      expect(responseAtRisk.response.atRisk).toBe(before.response.atRisk + 1);
-      expect(responseAtRisk.resolution.atRisk).toBe(before.resolution.atRisk);
+      const responseAtRisk = await ok('sla', teamLeadToken, bracket());
+      expect(responseAtRisk.response.atRisk).toBe(1);
+      expect(responseAtRisk.resolution.atRisk).toBe(0);
 
       // Resolution clock: 30 of 480 minutes left is within 96.
       await prisma.ticketSla.update({
@@ -375,22 +442,22 @@ describe('Analytics (e2e)', () => {
         data: { resolutionDueAt: new Date(Date.now() + 30 * 60_000) },
       });
       expect((await slaOf(id)).resolutionState).toBe('AtRisk');
-      const bothAtRisk = await ok('sla', agent1Token);
-      expect(bothAtRisk.response.atRisk).toBe(before.response.atRisk + 1);
-      expect(bothAtRisk.resolution.atRisk).toBe(before.resolution.atRisk + 1);
+      const bothAtRisk = await ok('sla', teamLeadToken, bracket());
+      expect(bothAtRisk.response.atRisk).toBe(1);
+      expect(bothAtRisk.resolution.atRisk).toBe(1);
 
       // Paused: the per-ticket API reports Paused and the aggregate drops it.
       await setStatus(id, 'OnHold');
       const paused = await slaOf(id);
       expect(paused.responseState).toBe('Paused');
       expect(paused.resolutionState).toBe('Paused');
-      const pausedAgg = await ok('sla', agent1Token);
-      expect(pausedAgg.response.atRisk).toBe(before.response.atRisk);
-      expect(pausedAgg.resolution.atRisk).toBe(before.resolution.atRisk);
-      expect(pausedAgg.response.inFlightBreached).toBe(before.response.inFlightBreached);
+      const pausedAgg = await ok('sla', teamLeadToken, bracket());
+      expect(pausedAgg.response.atRisk).toBe(0);
+      expect(pausedAgg.resolution.atRisk).toBe(0);
+      expect(pausedAgg.response.inFlightBreached).toBe(0);
 
       // Resume, then push both clocks past due: Breached per ticket,
-      // inFlightBreached +1 in the aggregate, and no longer at risk.
+      // inFlightBreached 1 in the aggregate, and no longer at risk.
       await setStatus(id, 'InProgress');
       await prisma.ticketSla.update({
         where: { ticketId: id },
@@ -402,26 +469,127 @@ describe('Analytics (e2e)', () => {
       const breached = await slaOf(id);
       expect(breached.responseState).toBe('Breached');
       expect(breached.resolutionState).toBe('Breached');
-      const breachedAgg = await ok('sla', agent1Token);
-      expect(breachedAgg.response.atRisk).toBe(before.response.atRisk);
-      expect(breachedAgg.resolution.atRisk).toBe(before.resolution.atRisk);
-      expect(breachedAgg.response.inFlightBreached).toBe(before.response.inFlightBreached + 1);
-      expect(breachedAgg.resolution.inFlightBreached).toBe(before.resolution.inFlightBreached + 1);
+      const breachedAgg = await ok('sla', teamLeadToken, bracket());
+      expect(breachedAgg.response.atRisk).toBe(0);
+      expect(breachedAgg.resolution.atRisk).toBe(0);
+      expect(breachedAgg.response.inFlightBreached).toBe(1);
+      expect(breachedAgg.resolution.inFlightBreached).toBe(1);
+    });
+
+    it('applies the SQL exactly at the at-risk threshold and at due == now', async () => {
+      // Deterministic: the service takes `now`, so the boundaries are exact.
+      // The Medium targets are 60 (response) and 480 (resolution) minutes, so
+      // the 20% thresholds are 12 and 96 minutes of remaining time. This ticket
+      // is the only one live for the throwaway assignee whose clocks matter:
+      // its due times are rewritten before every read.
+      const id = await createAssignedTicket({ priority: 'Medium' });
+      const now = new Date();
+      const at = (ms: number) => new Date(now.getTime() + ms);
+      const MIN = 60_000;
+      const far = at(1000 * MIN);
+
+      async function counts(responseDue: Date, resolutionDue: Date) {
+        await prisma.ticketSla.update({
+          where: { ticketId: id },
+          data: { responseDueAt: responseDue, resolutionDueAt: resolutionDue },
+        });
+        const body = await slaAt(now);
+        return {
+          rAtRisk: body.response.atRisk,
+          rBreached: body.response.inFlightBreached,
+          sAtRisk: body.resolution.atRisk,
+          sBreached: body.resolution.inFlightBreached,
+        };
+      }
+
+      // Park earlier tickets of this suite so only `id` can contribute.
+      await prisma.ticketSla.updateMany({
+        where: {
+          ticketId: { in: createdTicketIds.filter((t) => t !== id) },
+        },
+        data: { responseDueAt: far, resolutionDueAt: far },
+      });
+
+      // Exactly the threshold: 12 (and 96) minutes left is at risk.
+      expect(await counts(at(12 * MIN), at(96 * MIN))).toEqual({
+        rAtRisk: 1, rBreached: 0, sAtRisk: 1, sBreached: 0,
+      });
+      // 12m29.999s rounds to 12: still at risk.
+      expect(await counts(at(12 * MIN + 29_999), far)).toMatchObject({ rAtRisk: 1, rBreached: 0 });
+      // 12m30s rounds half away from zero to 13: no longer at risk.
+      expect(await counts(at(12 * MIN + 30_000), far)).toMatchObject({ rAtRisk: 0, rBreached: 0 });
+      expect(await counts(far, at(96 * MIN + 30_000))).toMatchObject({ sAtRisk: 0, sBreached: 0 });
+
+      // due == now is NOT breached (isBreached is strictly now > dueAt), and
+      // with nothing left it is at risk.
+      expect(await counts(at(0), at(0))).toEqual({
+        rAtRisk: 1, rBreached: 0, sAtRisk: 1, sBreached: 0,
+      });
+      // One millisecond late is breached and no longer at risk.
+      expect(await counts(at(-1), at(-1))).toEqual({
+        rAtRisk: 0, rBreached: 1, sAtRisk: 0, sBreached: 1,
+      });
+
+      // Park this ticket too, so later tests in this block start from zero.
+      await prisma.ticketSla.update({
+        where: { ticketId: id },
+        data: { responseDueAt: far, resolutionDueAt: far },
+      });
+    });
+
+    it('counts a live at-risk ticket created BEFORE the window (at-risk is about now)', async () => {
+      const id = await createAssignedTicket({ priority: 'Medium' });
+      await prisma.ticketSla.update({
+        where: { ticketId: id },
+        data: {
+          responseDueAt: new Date(Date.now() + 5 * 60_000),
+          resolutionDueAt: new Date(Date.now() - 60_000),
+        },
+      });
+      // Created 8 days ago; the request narrows to the last 7 days.
+      await prisma.ticket.update({
+        where: { id },
+        data: { createdAt: new Date(Date.now() - 8 * 86_400_000) },
+      });
+
+      const body = await ok('sla', teamLeadToken, {
+        assigneeId: scopedAssigneeId,
+        from: new Date(Date.now() - 7 * 86_400_000).toISOString(),
+        to: new Date().toISOString(),
+      });
+      // Window-scoped figures do not see the 8-day-old ticket: only the two
+      // tickets the earlier tests created (today) are inside the 7-day window.
+      expect(body.ticketsWithSla).toBe(2);
+      // ... the live ones do. Exact: the earlier tickets of this suite are
+      // parked far in the future by the boundary test.
+      expect(body.response.atRisk).toBe(1);
+      expect(body.resolution.inFlightBreached).toBe(1);
+      expect(body.response.inFlightBreached).toBe(0);
+    });
+
+    it('still applies the other filters to the live counts', async () => {
+      const body = await ok('sla', teamLeadToken, {
+        assigneeId: scopedAssigneeId,
+        priority: 'Critical', // every ticket above is Medium or Low
+      });
+      expect(body.response.atRisk).toBe(0);
+      expect(body.resolution.inFlightBreached).toBe(0);
     });
 
     it('moves a completed late resolution into the breached count and lowers compliance', async () => {
-      const before = await ok('sla', agent1Token);
-      const id = await createTicket({ priority: 'Low' });
+      const id = await createAssignedTicket({ priority: 'Low' });
       await prisma.ticketSla.update({
         where: { ticketId: id },
         data: { resolutionDueAt: new Date(Date.now() - 60_000) },
       });
+      const before = await ok('sla', teamLeadToken, bracket());
       await setStatus(id, 'Resolved');
 
-      const after = await ok('sla', agent1Token);
+      const after = await ok('sla', teamLeadToken, bracket());
       expect(after.resolution.breached).toBe(before.resolution.breached + 1);
       expect(after.resolution.met).toBe(before.resolution.met);
-      expect(after.resolution.inFlightBreached).toBe(before.resolution.inFlightBreached);
+      // Completed now, so it leaves the in-flight count instead of adding to it.
+      expect(after.resolution.inFlightBreached).toBe(before.resolution.inFlightBreached - 1);
       expect(after.resolution.complianceRate).toBeGreaterThanOrEqual(0);
     });
   });
