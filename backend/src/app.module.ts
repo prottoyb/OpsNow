@@ -11,6 +11,7 @@ import { AssetTypesModule } from './asset-types/asset-types.module';
 import { AssetsModule } from './assets/assets.module';
 import { KnowledgeBaseCategoriesModule } from './knowledge-base-categories/knowledge-base-categories.module';
 import { KnowledgeBaseModule } from './knowledge-base/knowledge-base.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { KnowledgeBaseModule } from './knowledge-base/knowledge-base.module';
     AssetsModule,
     KnowledgeBaseCategoriesModule,
     KnowledgeBaseModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}
