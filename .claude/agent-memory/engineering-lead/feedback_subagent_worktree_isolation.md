@@ -37,6 +37,22 @@ Two consequences:
    review agents are unaffected — reading the main checkout from inside a
    worktree works — so keep delegating QA/security and senior review.
 
+**`git -C <primary checkout>` is refused too.** Probed again during the
+Phases 13-16 milestone (2026-09-22): a delegated fullstack-engineer's single
+trial `Edit` to `D:\Projects\OpsNowrontend\src\...` was refused with
+"Edit the worktree copy of this file instead", and
+`git -C D:\Projects\OpsNow log --oneline -1` was refused as well, with the
+harness explicitly naming `-C` as redirecting git to the shared checkout. An
+isolated agent's only way to learn the primary checkout's sha is
+`git worktree list`, which reports it. Omitting the `isolation` parameter
+does NOT prevent isolation - it happened anyway on a plain
+`Agent(subagent_type: "fullstack-engineer")` call.
+
+So the write probe is worth keeping as the FIRST instruction in any
+delegated implementation brief, and the brief should say plainly: if the
+probe fails, hand back immediately rather than attempting a workaround. That
+cost one cheap round trip instead of a wasted turn.
+
 If the agent stops early (rate limit, error), its work is usually
 UNCOMMITTED in its worktree. You do NOT have to copy it out: an engineering-
 lead working in the primary checkout can `cd` into the stalled worktree,
