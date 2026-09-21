@@ -2363,6 +2363,26 @@ unparseable output is `invalid_output` and becomes a 503.
 
 
 
+Amended after implementation: partial degradation applies to *triage*,
+
+where category, priority, rationale and article ids are each independently
+
+optional, so dropping one still leaves a useful answer. It does NOT apply
+
+to a draft response or a resolution summary, where the generated text is
+
+the entire payload — an empty or oversized one is `invalid_output` and a
+
+503, because a 200 carrying a null draft would read to a client as success
+
+and truncating one would hand an agent a mid-sentence reply to send to a
+
+user. The reviewer agreed this is the right split; the original wording
+
+simply had not distinguished the two shapes.
+
+
+
 7. Prompt injection is mitigated structurally, and the residual risk is
 
 stated rather than papered over. Delimiters are used — a per-request
@@ -2509,9 +2529,35 @@ single file that the default build never executes. Every safety-relevant
 
 line — grounding, validation, redaction, role gating — runs in the test
 
-suite against a fake transport, with network access blocked at the Jest
+suite against a fake transport.
 
-setup level so no test can reach a real endpoint even by mistake.
+
+
+Amended after the Phases 10–12 review: an earlier draft of this paragraph
+
+claimed network access was "blocked at the Jest setup level". That was
+
+never built and the claim was wrong. What `test/support/jest-ai-env.ts`
+
+actually does is force `AI_PROVIDER=disabled` and delete `AI_API_KEY`, so
+
+a developer's own `.env` cannot switch the suite onto a live provider. The
+
+guarantee rests on Decision 3 instead: the live adapter is constructed
+
+only when the mode resolves to the live provider *and* a non-empty key
+
+exists, and every unit test that builds one injects its own `fetch`. A
+
+blanket block on Node's http/https was deliberately NOT installed, because
+
+supertest and Prisma both need real sockets and it would have broken every
+
+existing e2e suite. The residual gap is honest: a future test that
+
+constructs the live adapter with the real `fetch` would reach the network,
+
+and nothing mechanically stops it.
 
 
 
@@ -2683,23 +2729,59 @@ express it, because it is arithmetic between two columns of one row.
 
 
 
-Two things stop the SQL and the TypeScript disagreeing, which would make a
+What stops the SQL disagreeing with the per-ticket read model — which
 
-dashboard total contradict the badge on the very tickets it counts. The
+would make a dashboard total contradict the badge on the very tickets it
 
-TypeScript predicates are composed from the same primitives
+counts — needs stating precisely, because an earlier draft of this ADR
 
-`SlaService.toTicketSlaResponse` uses, so they cannot drift by
+overstated it and the Phases 10–12 senior review caught that.
 
-construction, and a scenario table pins them against `deriveResponseState`
+The honest account is this. The SQL in `analytics.at-risk.ts` is the
 
-/`deriveResolutionState`. The e2e suite then pins the *SQL* against the
+production path and it is a **separate, hand-written implementation** of
 
-live per-ticket API: it drives one ticket's SLA row to an at-risk
+the at-risk rule. It is not generated from, and does not call, the
 
-position, asserts `GET /tickets/:id` reports `AtRisk`, and asserts the
+TypeScript SLA primitives, so nothing prevents it drifting "by
 
-aggregate moved by exactly one.
+construction". The earlier claim that it could not was describing a pair
+
+of TypeScript predicates that had no production caller at all.
+
+Those predicates still exist and still earn their place, but as what they
+
+actually are: a **test oracle**, now living in `analytics.at-risk.spec.ts`
+
+as `isResponseAtRiskOracle`/`isResolutionAtRiskOracle`. Being composed
+
+from the same primitives `SlaService.toTicketSlaResponse` uses, they are a
+
+trustworthy statement of what the rule *is*, and a scenario table pins
+
+them against `deriveResponseState`/`deriveResolutionState`. That proves
+
+the rule. It does not prove the SQL.
+
+The SQL is pinned separately, and only by tests. An e2e case drives one
+
+ticket's SLA row to an at-risk position, asserts `GET /tickets/:id`
+
+reports `AtRisk`, and asserts the aggregate agrees. A second e2e case
+
+calls the service with a fixed `now` and exercises the boundaries the
+
+rounding was designed around — the exact threshold, the 12m29.999s/12m30s
+
+rounding step, `due == now` (at risk, *not* breached, because `isBreached`
+
+is strictly `now > dueAt`), and `due == now - 1ms` (breached, not at
+
+risk). Those tests are the only thing standing between the two
+
+implementations, which is precisely why they are enumerated here rather
+
+than left implicit.
 
 
 
@@ -2742,6 +2824,58 @@ The consequence to be aware of when reading a dashboard: `opened` and
 reconcile. That is correct, and it is why they are labelled as distinct
 
 figures rather than presented as a balance.
+
+
+
+Three clarifications added after the Phases 10–12 review, which found the
+
+original wording incomplete in ways a reader could be misled by:
+
+
+
+First, the **at-risk and in-flight-breach counts are exempt from the
+
+window**, exactly as `total` and `backlog` are, and for the same reason:
+
+they describe what is true *now*, not what happened during a period. The
+
+first implementation filtered them by creation date, so narrowing the
+
+window to seven days silently dropped a live, genuinely at-risk ticket
+
+created eight days ago — a wrong number rather than a debatable one. They
+
+still honour the caller's visibility and the priority, category and
+
+assignee filters; only the window does not apply. The completed-clock
+
+met/breached figures remain window-scoped, because those *are* statements
+
+about a period.
+
+
+
+Second, **"resolved" does not mean the same thing on every tab.** The
+
+tickets tab counts tickets whose `resolvedAt` falls in the window. The
+
+category and agent tables count resolved tickets *among those created in
+
+the window*, which is a different cohort and will not reconcile with it.
+
+Both are defensible; being silently different is not, so those columns are
+
+labelled "Resolved (of tickets created in window)" in the UI rather than
+
+left to be misread.
+
+
+
+Third, the category table's `slaBreaches` likewise counts in-flight
+
+breaches only among tickets created in the window, so it is the created
+
+cohort and not a statement about now. This is noted rather than changed.
 
 
 
