@@ -17,11 +17,26 @@ create a worktree" does NOT work either — the harness isolates it anyway.
 Plan for adoption from the start.
 
 If the agent stops early (rate limit, error), its work is usually
-UNCOMMITTED in its worktree. Recover it by copying the changed and untracked
-paths into the primary directory, then `git worktree remove --force <path>`
-and `git branch -D worktree-agent-<id>`. Commit that checkpoint before
-delegating the remainder: a new agent's worktree is created from the primary
-repo's current HEAD, so anything uncommitted is invisible to it.
+UNCOMMITTED in its worktree. You do NOT have to copy it out: an engineering-
+lead working in the primary checkout can `cd` into the stalled worktree,
+verify the work (typecheck), commit it there, and then `git merge --ff-only
+<that branch>` in the primary checkout. That preserves authorship and
+history and is far less error-prone than copying files across (no CRLF
+noise). Do this FIRST, before delegating the remainder — anything left
+uncommitted is invisible to the next agent.
+
+**A new agent's worktree is NOT reliably created from current HEAD.** In the
+Phases 9–12 milestone every single delegated agent landed on a stale commit
+(often several phases behind) and had to run `git merge --ff-only <HEAD>` to
+catch up. Always state the expected HEAD sha in the brief and tell the agent
+to ff-merge to it if it lands elsewhere — otherwise it will build against
+missing files and "recreate" work that already exists.
+
+Corollary: agents branch from stale points, so their branches usually will
+NOT fast-forward back into the milestone branch once you have made any
+commit of your own. Either merge each agent branch in before committing your
+own docs/ADRs, or just accept `--no-ff` merge commits (rebasing is forbidden
+by `.claude/rules/git.md`).
 
 **Why:** during Phase 8a I created `.claude/worktrees/phase-8a` and briefed
 the fullstack-engineer to use it. The real work landed in the agent's own
