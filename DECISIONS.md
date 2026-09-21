@@ -462,7 +462,17 @@ type checking, testing and builds before deployment.
 
 
 
-Status: Planned
+Status: Superseded by ADR-023
+
+
+
+ADR-011 recorded the intent and the candidate capabilities but decided
+
+none of the architecture. ADR-023 supersedes it with the provider
+
+boundary, grounding, failure and configuration model actually built in
+
+Phase 12.
 
 
 
@@ -2145,3 +2155,381 @@ visibility, an accidental publish is an immediate disclosure to every
 Employee — which is precisely why the status transition is restricted to
 
 the editorial roles rather than to whoever wrote the article.
+
+
+\---
+
+
+
+\## ADR-023 — AI Ticket Assistant: Provider Boundary, Grounding and Failure Model
+
+
+
+Status: Accepted
+
+
+
+Supersedes the "Planned" intent recorded in ADR-011, which named the
+
+capabilities but decided none of the architecture.
+
+
+
+Context:
+
+
+
+Phase 12 adds the first dependency in this project on a system outside our
+
+own database: a large language model. That makes it unlike every phase
+
+before it in three ways, and the design is driven by those three facts
+
+rather than by the feature list.
+
+
+
+First, the feature must be absent by default. This is a portfolio
+
+application that is cloned and run by people who have no API key, and a
+
+build that will not boot, or a UI that offers a button which always fails,
+
+is a worse outcome than no feature at all.
+
+
+
+Second, the model's input is attacker-controllable. An Employee writes a
+
+ticket's subject and description, and those strings are exactly what the
+
+prompt is built from. Prompt injection is therefore not a theoretical
+
+concern here; it is the expected case.
+
+
+
+Third, the model's output is untrusted. It is a string produced by a
+
+remote system, and nothing about it may be believed — not that it is JSON,
+
+not that a category id it names exists, and above all not that an article
+
+it recommends is one the caller is allowed to read.
+
+
+
+Decisions:
+
+
+
+1. The AI module is a read-only side car. `backend/src/ai/` imports
+
+`PrismaModule` and `KnowledgeBaseModule`; no ticket route ever calls it,
+
+and it never calls `TicketsService`. The dependency direction is one-way,
+
+as it already is for `tickets -> sla` and `tickets -> knowledge-base`. The
+
+consequence that matters is structural rather than stylistic: because no
+
+ticket route is on a path that reaches a provider, an AI outage, timeout
+
+or rate limit cannot make ticket creation, update or assignment fail.
+
+
+
+2. The provider abstraction is a narrow transport, not a set of task
+
+methods. `AiProvider` exposes a single `generate(req)` and a `mode`, and
+
+every piece of logic that matters for safety — prompt assembly, output
+
+parsing, grounding and validation — lives in vendor-neutral modules
+
+(`ai.prompts.ts`, `ai.output.ts`, `AiAssistantService`) above it. The
+
+rejected alternative, giving the provider `suggestCategory()` and
+
+`draftReply()` methods, was rejected precisely because it would push the
+
+prompts and the validators down into each vendor implementation: the
+
+safety code would then be duplicated per provider, and the copy exercised
+
+by the test suite would be the mock's, not the real one. With a narrow
+
+transport, every unit test of validation runs the production code path
+
+against a fake transport.
+
+
+
+3. Disabled and mock are two distinct implementations, and the default
+
+with no key is disabled, never mock. `DisabledAiProvider.generate()`
+
+throws `AiProviderError('disabled')`; `MockAiProvider` returns canned,
+
+clearly-marked output and is selected only by an explicit
+
+`AI_PROVIDER=mock`, which Joi rejects outright when `NODE_ENV=production`.
+
+The distinction is the whole point: if an unconfigured install quietly
+
+served mock output, a support agent would be shown fabricated category and
+
+priority advice presented as a model's analysis. In a tool people use to
+
+triage other people's problems, inventing plausible advice is worse than
+
+offering none, so the default had to be honest rather than convenient.
+
+Mock exists separately because a portfolio needs a demonstrable success
+
+path and the e2e suite needs one too.
+
+
+
+4. No new npm dependency. The live adapter is written against `fetch` with
+
+an `AbortController` timeout, not `@anthropic-ai/sdk`. The architect
+
+recommended the SDK for its typed errors and structured-output helpers,
+
+and that recommendation is reasonable in general — it was declined here on
+
+this project's own scope-control rule (CLAUDE.md, ADR-017) for a specific
+
+reason: the live path is off in every default install and in CI, so the
+
+SDK would be a dependency that the default build ships, audits and
+
+upgrades while never executing it. What it buys us is error typing we can
+
+reproduce in about ten lines by mapping HTTP status to our own
+
+`AiFailureReason`. The adapter is confined to one file behind
+
+`AiProvider`, so if a later phase needs streaming, retries with jitter, or
+
+richer structured-output support, the SDK can be adopted there without any
+
+other file changing. This is a reversible decision and is recorded as one.
+
+
+
+5. Suggestions are advisory by construction, not by convention. Nothing
+
+the model produces may mutate a ticket. There is no "apply suggestion"
+
+endpoint; an accepted suggestion is applied by the human through the
+
+existing `PATCH /tickets/:id`, which already performs its own validation,
+
+role checks, SLA recalculation and history write. `AiAssistantService`
+
+receives Prisma for reads only, and the e2e spec asserts that a ticket's
+
+`priority`, `categoryId`, `status`, `updatedAt`, history count and comment
+
+count are byte-identical before and after every AI route is called.
+
+
+
+6. Model output is grounded against closed sets drawn from the caller's
+
+own visibility. A suggested category id must be a member of the active
+
+category list sent in the request, or the field degrades to `null`; a
+
+priority must be a real `TicketPriority` member; recommended articles must
+
+be members of the candidate set, which is assembled through
+
+`KnowledgeBaseService` under `knowledgeArticleVisibilityWhere(user)` — the
+
+same single rule ADR-022 established, never a second one — and are then
+
+re-read under that rule before they reach the response, so a visibility
+
+change between assembly and response is honoured. Category and article
+
+names in the response come from the database row, never from the model's
+
+text. Field-level validation failures degrade to a partial 200; wholesale
+
+unparseable output is `invalid_output` and becomes a 503.
+
+
+
+7. Prompt injection is mitigated structurally, and the residual risk is
+
+stated rather than papered over. Delimiters are used — a per-request
+
+random nonce wraps the untrusted block, and the delimiter string is
+
+stripped from the data — but they are not treated as the defence. The
+
+defences that actually hold are that the model has no tools and can take
+
+no action, that its output can only ever name something already inside a
+
+closed set the caller could see, and that context is visibility-scoped
+
+before assembly so an injection cannot extract what was never supplied.
+
+Internal comments, requester and assignee identity, other tickets, Draft
+
+and soft-deleted articles, and all credentials are excluded from every
+
+prompt. For a draft response the KB context is restricted to `Published`
+
+articles *regardless of the caller's staff role*, because the draft is
+
+written to be sent to the requester and a staff-visible Draft article must
+
+not become quotable into an employee-facing reply. What remains, and is
+
+not eliminated: a crafted ticket can still bias the wording of a draft or
+
+the choice among legitimate categories. That is mitigated by the fact that
+
+a human reviews and sends every draft, and by labelling AI output as such
+
+in any future UI — not by the prompt.
+
+
+
+8. Failures are a 503 carrying a reason enum, with no retries. The caller
+
+receives `{ statusCode: 503, code: 'AI_UNAVAILABLE', reason }` where
+
+reason is one of `disabled`, `timeout`, `rate_limited`, `provider_error`,
+
+`invalid_output`, `busy`. Retries are deliberately zero: every call is
+
+human-triggered, so the person clicks again, and automatic retries would
+
+both multiply latency and make a rate-limit condition worse. A 15-second
+
+timeout and a small in-process in-flight cap of five bound the cost. The
+
+rejected alternative — a 200 carrying `{ status: 'unavailable' }` — was
+
+rejected because it misuses HTTP semantics and a client that forgot to
+
+check the discriminator would render a failure as a result.
+
+
+
+9. Nothing about a prompt, a completion or a key is ever logged. Log lines
+
+carry structured fields only: task, mode, outcome or reason, latency,
+
+user id, ticket id, model id and token counts. `AiProviderError` carries a
+
+reason and nothing else — the vendor's message, body and cause are
+
+discarded at the adapter boundary specifically because vendor errors
+
+routinely echo fragments of the request back. A unit test spies on the
+
+Logger and asserts that sentinel prompt and key strings never appear in
+
+any call.
+
+
+
+10. Configuration is environment-only and optional. `AI_PROVIDER`,
+
+`AI_API_KEY`, `AI_MODEL` and `AI_TIMEOUT_MS` join the existing Joi schema,
+
+all optional, so validation passes with none of them set. The key is read
+
+only through `ConfigService`. It is named `AI_API_KEY` rather than
+
+`ANTHROPIC_API_KEY` on purpose: a developer or CI machine with an ambient
+
+vendor key in its shell must not silently flip this application into
+
+calling a live provider. `AI_MODEL` has a default constant, and the model
+
+id is verified against current provider guidance at implementation time
+
+rather than hard-coded from memory.
+
+
+
+11. No AI output is persisted and no migration is added. The Phase 2
+
+schema has no AI table, tickets and comments are untouched, and an
+
+accepted draft becomes an ordinary human-authored comment through the
+
+existing route. What this costs is real and is accepted for this scope:
+
+suggestions are not auditable after the fact, there is no acceptance-rate
+
+analytics, no token or cost accounting beyond log lines, no caching (so
+
+repeated clicks re-bill), and a draft is lost on refresh. Adding an
+
+`ai_suggestions` table would be its own ADR if that analytics ever earns
+
+its keep.
+
+
+
+12. Phase 12 is backend-only. TASKS.md's Phase 12 list contains no
+
+frontend items, unlike Phases 10 and 11 which name their UI explicitly, so
+
+building one would be scope the phase was not given. `GET /v1/ai/status`
+
+still ships, returning `{ enabled, mode }`, because it is the contract a
+
+UI will need and because `enabled` deliberately folds the role check in so
+
+a future frontend needs no role logic of its own. An Employee always sees
+
+`enabled: false`; the three POST routes are staff-only, and a ticket
+
+outside the caller's scope is a 404, not a 403, per ADR-019.
+
+
+
+Consequences:
+
+
+
+The key, the vendor's wire format and its failure modes are confined to a
+
+single file that the default build never executes. Every safety-relevant
+
+line — grounding, validation, redaction, role gating — runs in the test
+
+suite against a fake transport, with network access blocked at the Jest
+
+setup level so no test can reach a real endpoint even by mistake.
+
+
+
+The costs are accepted and worth naming. Staff must re-click after a
+
+failure, because nothing retries. The in-process concurrency cap is
+
+per-instance and would not hold behind more than one replica. Vendor-
+
+specific prompt tuning is harder when prompt construction is vendor-
+
+neutral. And the honest one: when the feature is switched on, ticket text
+
+and knowledge-base excerpts leave this system and are sent to a third
+
+party. The feature being off unless a key is deliberately supplied is what
+
+makes that a decision the operator takes, rather than one this
+
+architecture takes for them.
+
