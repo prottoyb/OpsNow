@@ -649,4 +649,117 @@ export const FIELD_LIMITS = {
   articleFeedbackComment: 1000,
 } as const;
 
+/* ------------------------------ analytics ------------------------------ */
+
+/**
+ * Mirrors `ANALYTICS_AGENT_ROLES` in `backend/src/analytics/analytics.constants.ts`.
+ * `GET /analytics/agents` ranks named colleagues, so it is narrower than the
+ * staff-only rest of the analytics API. This only decides what the UI offers;
+ * the backend guard is the enforcement.
+ */
+export const ANALYTICS_AGENT_ROLES: readonly Role[] = [
+  'TeamLead',
+  'Administrator',
+];
+
+export function isAnalyticsAgentRole(role: Role): boolean {
+  return ANALYTICS_AGENT_ROLES.includes(role);
+}
+
+/** Mirrors `MAX_WINDOW_DAYS`; a wider window is a 400 from the backend. */
+export const ANALYTICS_MAX_WINDOW_DAYS = 366;
+
+/** Shared query of the four `GET /analytics/*` routes. All optional. */
+export interface AnalyticsQuery {
+  /** ISO-8601 instant. */
+  from?: string;
+  /** ISO-8601 instant. */
+  to?: string;
+  priority?: TicketPriority;
+  categoryId?: string;
+  assigneeId?: string;
+}
+
+export interface AnalyticsWindow {
+  /** ISO-8601 string over the wire. */
+  from: string;
+  /** ISO-8601 string over the wire. */
+  to: string;
+}
+
+export interface ResolutionMetrics {
+  resolvedCount: number;
+  /** null (not 0) when nothing was resolved in the window. */
+  meanMinutes: number | null;
+  /** null (not 0) when nothing was resolved in the window. */
+  medianMinutes: number | null;
+}
+
+/** `GET /analytics/tickets`. */
+export interface TicketAnalytics {
+  window: AnalyticsWindow;
+  total: number;
+  opened: number;
+  resolved: number;
+  /** Snapshot at request time, independent of the window. */
+  backlog: number;
+  byStatus: Record<TicketStatus, number>;
+  byPriority: Record<TicketPriority, number>;
+  resolution: ResolutionMetrics;
+}
+
+export interface SlaClockAnalytics {
+  met: number;
+  breached: number;
+  /** 0..1, or null when no clock completed. null is NOT 0. */
+  complianceRate: number | null;
+  inFlightBreached: number;
+  atRisk: number;
+}
+
+/** `GET /analytics/sla`. */
+export interface SlaAnalytics {
+  window: AnalyticsWindow;
+  ticketsWithSla: number;
+  response: SlaClockAnalytics;
+  resolution: SlaClockAnalytics;
+}
+
+export interface CategoryStat {
+  /** null groups uncategorised tickets. */
+  categoryId: string | null;
+  categoryName: string | null;
+  volume: number;
+  resolved: number;
+  avgResolutionMinutes: number | null;
+  slaBreaches: number;
+}
+
+/** `GET /analytics/categories`. */
+export interface CategoryAnalytics {
+  window: AnalyticsWindow;
+  categories: CategoryStat[];
+  /** True when the smallest groups were dropped by the backend's cap. */
+  truncated: boolean;
+}
+
+export interface AgentStat {
+  agentId: string;
+  agentName: string;
+  assigned: number;
+  resolved: number;
+  avgResolutionMinutes: number | null;
+  resolutionMet: number;
+  resolutionBreached: number;
+  /** 0..1, or null when nothing was resolved. null is NOT 0. */
+  slaComplianceRate: number | null;
+}
+
+/** `GET /analytics/agents` — TeamLead and Administrator only. */
+export interface AgentAnalytics {
+  window: AnalyticsWindow;
+  agents: AgentStat[];
+  truncated: boolean;
+}
+
 export const PAGE_SIZE = 20;
