@@ -16,10 +16,12 @@ import { TicketAssetResponseDto } from '../assets/dto/ticket-asset-response.dto'
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
+import { TicketKnowledgeArticleResponseDto } from '../knowledge-base/dto/ticket-knowledge-article-response.dto';
 import { AssignTicketDto } from './dto/assign-ticket.dto';
 import { CreateTicketCommentDto } from './dto/create-ticket-comment.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { LinkTicketAssetDto } from './dto/link-ticket-asset.dto';
+import { LinkTicketKnowledgeArticleDto } from './dto/link-ticket-knowledge-article.dto';
 import { ListTicketCommentsQueryDto } from './dto/list-ticket-comments-query.dto';
 import { ListTicketHistoryQueryDto } from './dto/list-ticket-history-query.dto';
 import { ListTicketsQueryDto } from './dto/list-tickets-query.dto';
@@ -165,5 +167,40 @@ export class TicketsController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<void> {
     return this.ticketsService.unlinkAsset(id, assetId, user);
+  }
+
+  /** Readable by anyone who can already see the ticket, but the ARTICLES
+   * are additionally scoped to the caller's article visibility — an
+   * Employee never learns that a Draft is attached to their ticket. */
+  @Get(':id/knowledge-articles')
+  async findKnowledgeArticles(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<TicketKnowledgeArticleResponseDto[]> {
+    return this.ticketsService.findKnowledgeArticles(id, user);
+  }
+
+  /** Idempotent: re-linking an already-linked article returns the
+   * existing link rather than failing. */
+  @Roles(...STAFF_ROLES)
+  @Post(':id/knowledge-articles')
+  async linkKnowledgeArticle(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: LinkTicketKnowledgeArticleDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<TicketKnowledgeArticleResponseDto> {
+    return this.ticketsService.linkKnowledgeArticle(id, dto, user);
+  }
+
+  /** Idempotent: unlinking an article that is not linked succeeds. */
+  @Roles(...STAFF_ROLES)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Delete(':id/knowledge-articles/:articleId')
+  async unlinkKnowledgeArticle(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('articleId', ParseUUIDPipe) articleId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.ticketsService.unlinkKnowledgeArticle(id, articleId, user);
   }
 }

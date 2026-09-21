@@ -9,6 +9,8 @@ import { TicketCategoriesModule } from './ticket-categories/ticket-categories.mo
 import { TicketsModule } from './tickets/tickets.module';
 import { AssetTypesModule } from './asset-types/asset-types.module';
 import { AssetsModule } from './assets/assets.module';
+import { KnowledgeBaseCategoriesModule } from './knowledge-base-categories/knowledge-base-categories.module';
+import { KnowledgeBaseModule } from './knowledge-base/knowledge-base.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { AssetsModule } from './assets/assets.module';
     TicketsModule,
     AssetTypesModule,
     AssetsModule,
+    KnowledgeBaseCategoriesModule,
+    KnowledgeBaseModule,
   ],
 })
 export class AppModule {}

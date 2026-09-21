@@ -7,6 +7,7 @@ import {
 import { CommentVisibility, Role, TicketPriority, TicketStatus } from '@prisma/client';
 import { AssetsService } from '../assets/assets.service';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
+import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlaService } from '../sla/sla.service';
 import { TicketCategoriesService } from '../ticket-categories/ticket-categories.service';
@@ -102,6 +103,11 @@ describe('TicketsService', () => {
     linkToTicket: jest.Mock;
     unlinkFromTicket: jest.Mock;
   };
+  let knowledgeBaseService: {
+    findForTicket: jest.Mock;
+    linkToTicket: jest.Mock;
+    unlinkFromTicket: jest.Mock;
+  };
 
   beforeEach(() => {
     prisma = {
@@ -138,6 +144,11 @@ describe('TicketsService', () => {
       linkToTicket: jest.fn(),
       unlinkFromTicket: jest.fn(),
     };
+    knowledgeBaseService = {
+      findForTicket: jest.fn().mockResolvedValue([]),
+      linkToTicket: jest.fn(),
+      unlinkFromTicket: jest.fn(),
+    };
 
     service = new TicketsService(
       prisma as unknown as PrismaService,
@@ -145,6 +156,7 @@ describe('TicketsService', () => {
       ticketCategoriesService as unknown as TicketCategoriesService,
       slaService as unknown as SlaService,
       assetsService as unknown as AssetsService,
+      knowledgeBaseService as unknown as KnowledgeBaseService,
     );
   });
 

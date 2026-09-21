@@ -16,6 +16,8 @@ import { AssetsService } from '../assets/assets.service';
 import { TicketAssetResponseDto } from '../assets/dto/ticket-asset-response.dto';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { ticketVisibilityWhere as buildTicketVisibilityWhere } from '../common/ticket-visibility';
+import { TicketKnowledgeArticleResponseDto } from '../knowledge-base/dto/ticket-knowledge-article-response.dto';
+import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlaService } from '../sla/sla.service';
 import { TicketSlaResponseDto } from '../sla/dto/ticket-sla-response.dto';
@@ -30,6 +32,7 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { ListTicketCommentsQueryDto } from './dto/list-ticket-comments-query.dto';
 import { ListTicketHistoryQueryDto } from './dto/list-ticket-history-query.dto';
 import { LinkTicketAssetDto } from './dto/link-ticket-asset.dto';
+import { LinkTicketKnowledgeArticleDto } from './dto/link-ticket-knowledge-article.dto';
 import { ListTicketsQueryDto } from './dto/list-tickets-query.dto';
 import {
   TicketCommentListResponseDto,
@@ -125,6 +128,7 @@ export class TicketsService {
     private readonly ticketCategoriesService: TicketCategoriesService,
     private readonly slaService: SlaService,
     private readonly assetsService: AssetsService,
+    private readonly knowledgeBaseService: KnowledgeBaseService,
   ) {}
 
   async create(
@@ -567,6 +571,55 @@ export class TicketsService {
     await this.getVisibleTicketOrThrow(id, user);
 
     await this.assetsService.unlinkFromTicket(id, assetId, user);
+  }
+
+  /**
+   * Knowledge articles linked to a ticket. The ticket lookup is routed
+   * through the visibility helper FIRST, exactly as findAssets does, so a
+   * ticket the caller cannot see is a 404 that reveals nothing about what
+   * is linked to it.
+   *
+   * Unlike findAssets, the caller is then passed on to the knowledge-base
+   * service: the linked ARTICLES are scoped a second time, because a
+   * Draft article's existence is itself staff information (see
+   * KnowledgeBaseService.findForTicket).
+   */
+  async findKnowledgeArticles(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<TicketKnowledgeArticleResponseDto[]> {
+    await this.getVisibleTicketOrThrow(id, user);
+    return this.knowledgeBaseService.findForTicket(id, user);
+  }
+
+  async linkKnowledgeArticle(
+    id: string,
+    dto: LinkTicketKnowledgeArticleDto,
+    user: AuthenticatedUser,
+  ): Promise<TicketKnowledgeArticleResponseDto> {
+    this.assertStaff(
+      user,
+      'Only staff can link a knowledge article to a ticket',
+    );
+
+    await this.getVisibleTicketOrThrow(id, user);
+
+    return this.knowledgeBaseService.linkToTicket(id, dto.articleId, user);
+  }
+
+  async unlinkKnowledgeArticle(
+    id: string,
+    articleId: string,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    this.assertStaff(
+      user,
+      'Only staff can unlink a knowledge article from a ticket',
+    );
+
+    await this.getVisibleTicketOrThrow(id, user);
+
+    await this.knowledgeBaseService.unlinkFromTicket(id, articleId, user);
   }
 
   /**
