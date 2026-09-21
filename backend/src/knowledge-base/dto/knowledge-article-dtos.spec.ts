@@ -82,7 +82,7 @@ describe('CreateKnowledgeArticleDto', () => {
   });
 
   it('rejects other C0 control characters in content', () => {
-    expect(failedProperties(createDto({ content: 'bellhere' }))).toContain(
+    expect(failedProperties(createDto({ content: 'bell\u0007here' }))).toContain(
       'content',
     );
   });
@@ -194,6 +194,18 @@ describe('ListKnowledgeArticlesQueryDto', () => {
       expect(
         failedProperties(plainToInstance(ListKnowledgeArticlesQueryDto, { q })),
       ).toEqual([]);
+    }
+  });
+
+  it('rejects a q containing a control character', () => {
+    // `q` is bound as a parameter into a raw websearch_to_tsquery
+    // call, so a NUL byte is not an injection risk - but Postgres
+    // cannot represent it in text at all and answers SQLSTATE 22021,
+    // which surfaced as a 500. It must be a 400 at the DTO boundary.
+    for (const q of ['vpn\u0000', '\u0000', 'a\u001Bb']) {
+      expect(
+        failedProperties(plainToInstance(ListKnowledgeArticlesQueryDto, { q })),
+      ).toContain('q');
     }
   });
 

@@ -4,6 +4,7 @@ import { Transform } from 'class-transformer';
 import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { trim } from '../../common/transforms/trim.transform';
+import { NoControlCharacters } from '../../common/validators/no-control-characters.validator';
 
 export class ListAssetsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: AssetStatus })
@@ -30,5 +31,6 @@ export class ListAssetsQueryDto extends PaginationQueryDto {
   @Transform(trim)
   @IsString()
   @MaxLength(100)
+  @NoControlCharacters()
   q?: string;
 }

@@ -1,5 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { trim } from '../../common/transforms/trim.transform';
+import { NoControlCharacters } from '../../common/validators/no-control-characters.validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'jane.doe@opsnow.local' })
@@ -17,14 +20,18 @@ export class RegisterDto {
   password!: string;
 
   @ApiProperty({ maxLength: 100 })
+  @Transform(trim)
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @NoControlCharacters()
   firstName!: string;
 
   @ApiProperty({ maxLength: 100 })
+  @Transform(trim)
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @NoControlCharacters()
   lastName!: string;
 }

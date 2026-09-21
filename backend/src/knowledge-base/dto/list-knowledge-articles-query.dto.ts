@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 import { trim } from '../../common/transforms/trim.transform';
+import { NoControlCharacters } from '../../common/validators/no-control-characters.validator';
 
 /**
  * `status` and `authorId` are documented as staff-oriented filters, but
@@ -35,6 +36,7 @@ export class ListKnowledgeArticlesQueryDto extends PaginationQueryDto {
   @Transform(trim)
   @IsString()
   @MaxLength(200)
+  @NoControlCharacters()
   q?: string;
 
   @ApiPropertyOptional({ format: 'uuid' })

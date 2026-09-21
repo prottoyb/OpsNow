@@ -3,6 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { AssignAssetDto } from './assign-asset.dto';
 import { CreateAssetDto } from './create-asset.dto';
+import { ListAssetsQueryDto } from './list-assets-query.dto';
 import { UpdateAssetDto } from './update-asset.dto';
 
 /**
@@ -229,5 +230,73 @@ describe('AssignAssetDto', () => {
       notes: 'Issued\u0000at onboarding',
     });
     expect(failedProperties(dto)).toContain('notes');
+  });
+});
+
+describe('ListAssetsQueryDto', () => {
+  function queryDto(overrides: Record<string, unknown> = {}): ListAssetsQueryDto {
+    return plainToInstance(ListAssetsQueryDto, overrides);
+  }
+
+  it('defaults limit and offset', () => {
+    const dto = queryDto();
+    expect(failedProperties(dto)).toEqual([]);
+    expect(dto.limit).toBe(20);
+    expect(dto.offset).toBe(0);
+  });
+
+  it('accepts the documented filters', () => {
+    expect(
+      failedProperties(
+        queryDto({
+          status: AssetStatus.InStock,
+          assetTypeId: '11111111-1111-4111-8111-111111111111',
+          assigneeId: '22222222-2222-4222-8222-222222222222',
+          q: 'latitude',
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('trims q', () => {
+    const dto = queryDto({ q: '  latitude  ' });
+    expect(failedProperties(dto)).toEqual([]);
+    expect(dto.q).toBe('latitude');
+  });
+
+  it('accepts LIKE metacharacters in q', () => {
+    // `q` reaches Prisma's `contains`, which parameterises the value,
+    // so these are matched literally rather than as wildcards. The DTO
+    // must not be the thing that rejects them.
+    for (const q of ['100%', 'a_b', "o'brien", '\\']) {
+      expect(failedProperties(queryDto({ q }))).toEqual([]);
+    }
+  });
+
+  it('rejects a q containing a control character', () => {
+    for (const q of ['latitude\u0000', 'a\u001Bb']) {
+      expect(failedProperties(queryDto({ q }))).toContain('q');
+    }
+  });
+
+  it('rejects an oversized q', () => {
+    expect(failedProperties(queryDto({ q: 'x'.repeat(101) }))).toContain('q');
+  });
+
+  it.each([
+    ['limit', { limit: 0 }],
+    ['limit', { limit: 101 }],
+    ['offset', { offset: -1 }],
+    ['offset', { offset: 99999999999999999999 }],
+  ])('rejects an out-of-range %s', (property, overrides) => {
+    expect(failedProperties(queryDto(overrides))).toContain(property);
+  });
+
+  it.each([
+    ['status', { status: 'Broken' }],
+    ['assetTypeId', { assetTypeId: 'nope' }],
+    ['assigneeId', { assigneeId: 'me' }],
+  ])('rejects an invalid %s', (property, overrides) => {
+    expect(failedProperties(queryDto(overrides))).toContain(property);
   });
 });

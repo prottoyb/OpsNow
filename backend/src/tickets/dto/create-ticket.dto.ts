@@ -10,6 +10,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { trim } from '../../common/transforms/trim.transform';
+import { NoControlCharacters } from '../../common/validators/no-control-characters.validator';
 
 export class CreateTicketDto {
   @ApiProperty({ maxLength: 255 })
@@ -17,6 +18,7 @@ export class CreateTicketDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
+  @NoControlCharacters()
   subject!: string;
 
   @ApiProperty({ maxLength: 10000 })
@@ -24,6 +26,7 @@ export class CreateTicketDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(10000)
+  @NoControlCharacters()
   description!: string;
 
   @ApiPropertyOptional({ format: 'uuid' })
