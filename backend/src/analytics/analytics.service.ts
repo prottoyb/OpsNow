@@ -187,21 +187,27 @@ export class AnalyticsService {
     this.assertStaff(user);
     const window = resolveWindow(query, now);
 
+    // The completed-clock figures (met/breached) describe tickets CREATED in
+    // the window, so each carries `inWindow`. The at-risk and in-flight-breach
+    // counts are statements about NOW, like `total` and `backlog` (ADR-024
+    // Decision 7): a live ticket created before the window is still at risk
+    // today, so they are exempt from the window and keep only the request's
+    // other filters and the caller's visibility.
+    const inWindow = createdInWindowSql(window);
     const rows = await this.prisma.$queryRaw<SlaRow[]>(Prisma.sql`
       SELECT
-        count(*)::int AS tickets_with_sla,
-        (count(*) FILTER (WHERE s.response_at IS NOT NULL AND NOT s.response_breached))::int AS response_met,
-        (count(*) FILTER (WHERE s.response_at IS NOT NULL AND s.response_breached))::int AS response_breached,
+        (count(*) FILTER (WHERE ${inWindow}))::int AS tickets_with_sla,
+        (count(*) FILTER (WHERE ${inWindow} AND s.response_at IS NOT NULL AND NOT s.response_breached))::int AS response_met,
+        (count(*) FILTER (WHERE ${inWindow} AND s.response_at IS NOT NULL AND s.response_breached))::int AS response_breached,
         (count(*) FILTER (WHERE ${liveClockSql} AND ${responseInFlightBreachedSql(now)}))::int AS response_in_flight,
         (count(*) FILTER (WHERE ${liveClockSql} AND ${responseAtRiskSql(now)}))::int AS response_at_risk,
-        (count(*) FILTER (WHERE t.resolved_at IS NOT NULL AND NOT s.resolution_breached))::int AS resolution_met,
-        (count(*) FILTER (WHERE t.resolved_at IS NOT NULL AND s.resolution_breached))::int AS resolution_breached,
+        (count(*) FILTER (WHERE ${inWindow} AND t.resolved_at IS NOT NULL AND NOT s.resolution_breached))::int AS resolution_met,
+        (count(*) FILTER (WHERE ${inWindow} AND t.resolved_at IS NOT NULL AND s.resolution_breached))::int AS resolution_breached,
         (count(*) FILTER (WHERE ${liveClockSql} AND ${resolutionInFlightBreachedSql(now)}))::int AS resolution_in_flight,
         (count(*) FILTER (WHERE ${liveClockSql} AND ${resolutionAtRiskSql(now)}))::int AS resolution_at_risk
       FROM tickets t
       JOIN ticket_sla s ON s.ticket_id = t.id
       WHERE ${analyticsTicketSql(user, query)}
-        AND ${createdInWindowSql(window)}
     `);
 
     const row = rows[0];
