@@ -1,16 +1,20 @@
 import type {
+  AgentAnalytics,
   ArticleFeedbackEntry,
   Asset,
   AssetAssignment,
   AssetType,
   AuthenticatedUser,
+  CategoryAnalytics,
   KnowledgeArticle,
   KnowledgeArticleSummary,
   KnowledgeBaseCategory,
   Role,
+  SlaAnalytics,
   SlaMetrics,
   SlaPolicy,
   Ticket,
+  TicketAnalytics,
   TicketAsset,
   TicketCategory,
   TicketComment,
@@ -184,6 +188,108 @@ export const slaMetrics: SlaMetrics = {
   respondedLate: 4,
   responseOverdueOutstanding: 2,
   neverResponded: 1,
+};
+
+/* ------------------------------ analytics ------------------------------ */
+
+const ANALYTICS_WINDOW = {
+  from: '2026-08-22T00:00:00.000Z',
+  to: '2026-09-21T12:00:00.000Z',
+};
+
+export const ticketAnalytics: TicketAnalytics = {
+  window: ANALYTICS_WINDOW,
+  total: 140,
+  opened: 48,
+  resolved: 41,
+  backlog: 17,
+  byStatus: {
+    New: 4,
+    Open: 9,
+    InProgress: 6,
+    OnHold: 2,
+    Resolved: 20,
+    Closed: 7,
+  },
+  byPriority: { Low: 10, Medium: 20, High: 12, Critical: 6 },
+  resolution: { resolvedCount: 41, meanMinutes: 185.5, medianMinutes: 120 },
+};
+
+export const slaAnalytics: SlaAnalytics = {
+  window: ANALYTICS_WINDOW,
+  ticketsWithSla: 46,
+  response: {
+    met: 30,
+    breached: 10,
+    complianceRate: 0.75,
+    inFlightBreached: 2,
+    atRisk: 3,
+  },
+  resolution: {
+    met: 25,
+    breached: 5,
+    complianceRate: 0.8333,
+    inFlightBreached: 4,
+    atRisk: 1,
+  },
+};
+
+export const categoryAnalytics: CategoryAnalytics = {
+  window: ANALYTICS_WINDOW,
+  truncated: false,
+  categories: [
+    {
+      categoryId: IDS.categoryNetwork,
+      categoryName: 'Network',
+      volume: 20,
+      resolved: 15,
+      avgResolutionMinutes: 95,
+      slaBreaches: 2,
+    },
+    {
+      categoryId: IDS.categorySoftware,
+      categoryName: 'Software',
+      volume: 10,
+      resolved: 0,
+      avgResolutionMinutes: null,
+      slaBreaches: 0,
+    },
+    {
+      categoryId: null,
+      categoryName: null,
+      volume: 4,
+      resolved: 1,
+      avgResolutionMinutes: 30,
+      slaBreaches: 1,
+    },
+  ],
+};
+
+export const agentAnalytics: AgentAnalytics = {
+  window: ANALYTICS_WINDOW,
+  truncated: false,
+  agents: [
+    {
+      agentId: IDS.agent,
+      agentName: 'Priya Shah',
+      assigned: 22,
+      resolved: 18,
+      avgResolutionMinutes: 140,
+      resolutionMet: 15,
+      resolutionBreached: 3,
+      slaComplianceRate: 0.8333,
+    },
+    {
+      agentId: IDS.otherAgent,
+      agentName: 'Marco Rossi',
+      assigned: 9,
+      resolved: 0,
+      avgResolutionMinutes: null,
+      resolutionMet: 0,
+      resolutionBreached: 0,
+      slaComplianceRate: null,
+    },
+  ],
 };
 
 export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {

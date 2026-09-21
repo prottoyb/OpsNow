@@ -1,36 +1,44 @@
 import { HttpResponse, http } from 'msw';
 import type {
+  AgentAnalytics,
   ArticleFeedbackSummary,
   Asset,
   AssetAssignment,
   AssetStatus,
   AssetType,
   AuthenticatedUser,
+  CategoryAnalytics,
   KnowledgeArticle,
   KnowledgeArticleStatus,
   KnowledgeBaseCategory,
+  SlaAnalytics,
   SlaMetrics,
   SlaPolicy,
   Ticket,
+  TicketAnalytics,
   TicketAsset,
   TicketCategory,
   TicketComment,
   TicketHistoryEntry,
   TicketKnowledgeArticle,
 } from '../types/api';
-import { isStaffRole } from '../types/api';
+import { isAnalyticsAgentRole, isStaffRole } from '../types/api';
 import type { MockArticleFeedback } from './fixtures';
 import {
+  agentAnalytics as defaultAgentAnalytics,
   agentUser,
   assetTypes as defaultAssetTypes,
   categories as defaultCategories,
+  categoryAnalytics as defaultCategoryAnalytics,
   employeeUser,
   kbCategories as defaultKbCategories,
   makeArticle,
   makeAsset,
   makeTicket,
+  slaAnalytics as defaultSlaAnalytics,
   slaMetrics as defaultSlaMetrics,
   slaPolicies as defaultSlaPolicies,
+  ticketAnalytics as defaultTicketAnalytics,
   toArticleSummary,
 } from './fixtures';
 
@@ -82,6 +90,16 @@ export interface MockState {
   /** Every stored vote, across every article. */
   articleFeedback: MockArticleFeedback[];
   ticketArticles: TicketKnowledgeArticle[];
+  ticketAnalytics: TicketAnalytics;
+  slaAnalytics: SlaAnalytics;
+  categoryAnalytics: CategoryAnalytics;
+  agentAnalytics: AgentAnalytics;
+  /**
+   * Every `GET /analytics/*` request the mock served, in order, with its
+   * query string. Lets a test assert what the UI actually asked for — and,
+   * for a role that must not ask, that nothing was requested at all.
+   */
+  analyticsRequests: { route: string; params: URLSearchParams }[];
 }
 
 export const mockState: MockState = createInitialState();
@@ -106,6 +124,11 @@ function createInitialState(): MockState {
     kbCategories: [...defaultKbCategories],
     articleFeedback: [],
     ticketArticles: [],
+    ticketAnalytics: structuredClone(defaultTicketAnalytics),
+    slaAnalytics: structuredClone(defaultSlaAnalytics),
+    categoryAnalytics: structuredClone(defaultCategoryAnalytics),
+    agentAnalytics: structuredClone(defaultAgentAnalytics),
+    analyticsRequests: [],
   };
 }
 
@@ -1429,9 +1452,66 @@ export const slaHandlers = [
   }),
 ];
 
+/* ---------------------------- analytics ---------------------------- */
+
+const MAX_WINDOW_DAYS = 366;
+
+/**
+ * Reproduces the backend's window validation (`resolveWindow`) so a hand-made
+ * request the UI would never send still gets the real 400. The UI must not
+ * originate one; the mock keeps that honest.
+ */
+function analyticsWindowError(params: URLSearchParams): string | null {
+  const from = params.get('from');
+  const to = params.get('to');
+  if (!from || !to) return null;
+  const start = Date.parse(from);
+  const end = Date.parse(to);
+  if (start > end) return 'to must be the same as or later than from';
+  if ((end - start) / 86_400_000 > MAX_WINDOW_DAYS) {
+    return `The reporting window may span at most ${MAX_WINDOW_DAYS} days`;
+  }
+  return null;
+}
+
+function analyticsHandler(
+  route: 'tickets' | 'sla' | 'categories' | 'agents',
+  body: () => object,
+) {
+  const path = `/api/v1/analytics/${route}`;
+  return http.get(`${BASE}/analytics/${route}`, ({ request }) => {
+    const user = requireUser(request);
+    if (!user) return errorResponse(401, 'Unauthorized', path);
+    const allowed =
+      route === 'agents'
+        ? isAnalyticsAgentRole(user.role)
+        : isStaffRole(user.role);
+    if (!allowed) {
+      return errorResponse(
+        403,
+        'You are not allowed to view these analytics',
+        path,
+      );
+    }
+    const params = new URL(request.url).searchParams;
+    mockState.analyticsRequests.push({ route, params });
+    const windowError = analyticsWindowError(params);
+    if (windowError) return badRequest(windowError, path);
+    return HttpResponse.json(body());
+  });
+}
+
+export const analyticsHandlers = [
+  analyticsHandler('tickets', () => mockState.ticketAnalytics),
+  analyticsHandler('sla', () => mockState.slaAnalytics),
+  analyticsHandler('categories', () => mockState.categoryAnalytics),
+  analyticsHandler('agents', () => mockState.agentAnalytics),
+];
+
 export const handlers = [
   ...coreHandlers,
   ...assetHandlers,
   ...knowledgeBaseHandlers,
   ...slaHandlers,
+  ...analyticsHandlers,
 ];
