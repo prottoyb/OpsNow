@@ -144,4 +144,23 @@ describe('sanitizeIp / sanitizeUserAgent', () => {
     expect(sanitizeUserAgent('   ')).toBeNull();
     expect(sanitizeUserAgent(undefined)).toBeNull();
   });
+
+  it.each([
+    ['a leading Bearer credential', SENTINEL_BEARER],
+    ['a Bearer credential mid-string', `e2eqa ${SENTINEL_BEARER} Authorization`],
+    ['a JWT mid-string', `curl/8 ${SENTINEL_JWT} extra`],
+    ['a bare JWT', SENTINEL_JWT],
+    ['a long hex run', `agent ${SENTINEL_REFRESH}`],
+  ])('redacts a user agent carrying %s', (_label, ua) => {
+    const out = sanitizeUserAgent(ua);
+    expect(out).toBe(REDACTED);
+    expect(String(out)).not.toContain('sentinel-access-token');
+    expect(String(out)).not.toContain('eyJ');
+  });
+
+  it('keeps an ordinary browser user agent verbatim', () => {
+    const ua =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+    expect(sanitizeUserAgent(ua)).toBe(ua);
+  });
 });
