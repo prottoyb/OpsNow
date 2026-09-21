@@ -7,7 +7,7 @@ import {
   AUDIT_ENTITY_TYPES,
   AUDIT_OUTCOMES,
 } from '../../../types/api';
-import { todayUtcDay } from '../../analytics/analyticsRange';
+import { todayUtcDay } from '../../../lib/utcDays';
 import { isUuid } from '../useAuditParams';
 import type { AuditFilters } from '../useAuditParams';
 

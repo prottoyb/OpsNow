@@ -4,7 +4,7 @@ import { Select } from '../../../components/ui/Select';
 import type { TicketCategory } from '../../../types/api';
 import { TICKET_PRIORITIES } from '../../../types/api';
 import { CategorySelect } from '../../tickets/components/CategorySelect';
-import { todayUtcDay } from '../analyticsRange';
+import { todayUtcDay } from '../../../lib/utcDays';
 import type { AnalyticsFilters } from '../useAnalyticsParams';
 
 export interface AnalyticsFilterBarProps {
