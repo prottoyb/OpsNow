@@ -20,3 +20,29 @@ export function ticketVisibilityWhere(
     ...(user.role === Role.Employee ? { requesterId: user.id } : {}),
   };
 }
+
+/**
+ * The SAME rule expressed as a raw-SQL predicate, for the Phase 10 analytics
+ * aggregates — a median (`percentile_cont`), a per-group average duration and
+ * the pause-aware at-risk count are all things Prisma's query API cannot
+ * express, so those paths drop to `$queryRaw` and cannot reuse the `where`
+ * object above.
+ *
+ * It is deliberately defined here, immediately beside its Prisma twin, for
+ * exactly the reason `knowledge-article-visibility.ts` gives for doing the
+ * same: a raw query whose visibility clause silently drifts weaker than the
+ * ORM path's is the highest-risk failure mode this helper exists to prevent,
+ * and keeping the two definitions adjacent is what makes that drift visible
+ * to a reviewer in one glance.
+ *
+ * The user id is interpolated through a `Prisma.sql` tagged template, so it
+ * is a bound parameter and never concatenated into the statement text.
+ *
+ * Assumes the `tickets` table is aliased `t`.
+ */
+export function ticketVisibilitySql(user: AuthenticatedUser): Prisma.Sql {
+  if (user.role === Role.Employee) {
+    return Prisma.sql`t.deleted_at IS NULL AND t.requester_id = ${user.id}::uuid`;
+  }
+  return Prisma.sql`t.deleted_at IS NULL`;
+}
