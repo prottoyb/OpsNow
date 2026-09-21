@@ -1,6 +1,11 @@
 import { HttpResponse, http } from 'msw';
 import type {
   AgentAnalytics,
+  AiDraftResponse,
+  AiFailureReason,
+  AiResolutionSummary,
+  AiStatus,
+  AiTriage,
   ArticleFeedbackSummary,
   Asset,
   AssetAssignment,
@@ -35,11 +40,15 @@ import type { MockArticleFeedback } from './fixtures';
 import {
   agentAnalytics as defaultAgentAnalytics,
   agentUser,
+  aiStatusEnabled as defaultAiStatusEnabled,
   assetTypes as defaultAssetTypes,
   categories as defaultCategories,
   categoryAnalytics as defaultCategoryAnalytics,
   employeeUser,
   kbCategories as defaultKbCategories,
+  makeAiDraft,
+  makeAiResolutionSummary,
+  makeAiTriage,
   makeArticle,
   makeAsset,
   makeTicket,
@@ -112,6 +121,25 @@ export interface MockState {
   auditLogs: AuditLogEntry[];
   /** Every `GET /audit-logs` request served, with its query string. */
   auditRequests: { params: URLSearchParams }[];
+  /** What `GET /ai/status` reports to STAFF. An Employee is always told
+   * `disabled`, exactly as the backend does, whatever this says. */
+  aiStatus: AiStatus;
+  aiTriage: AiTriage;
+  aiDraft: AiDraftResponse;
+  aiResolutionSummary: AiResolutionSummary;
+  /**
+   * When set, every AI task route answers the real 503 instead of a result.
+   * A plain string is accepted as well as a reason, so a test can prove the
+   * UI survives a `reason` the frontend does not recognise.
+   */
+  aiFailure: { reason: AiFailureReason | string } | null;
+  /**
+   * Every AI request the mock served, in order. The load-bearing assertion
+   * this supports is the negative one: that mounting the page, or mounting it
+   * as an Employee, issues NO AI call. `onUnhandledRequest: 'error'` cannot
+   * catch that, because these routes ARE handled.
+   */
+  aiRequests: { route: string }[];
 }
 
 export const mockState: MockState = createInitialState();
@@ -143,6 +171,12 @@ function createInitialState(): MockState {
     analyticsRequests: [],
     auditLogs: [],
     auditRequests: [],
+    aiStatus: { ...defaultAiStatusEnabled },
+    aiTriage: makeAiTriage(),
+    aiDraft: makeAiDraft(),
+    aiResolutionSummary: makeAiResolutionSummary(),
+    aiFailure: null,
+    aiRequests: [],
   };
 }
 
@@ -1587,6 +1621,72 @@ export const auditHandlers = [
   }),
 ];
 
+/* ---------------------------- AI assistant ---------------------------- */
+
+/**
+ * The AI failure envelope, which is NOT the shape `errorResponse` produces:
+ * `AiUnavailableException` adds `code` and `reason` to the body, and the
+ * frontend reads the reason off exactly those fields. Emitting a plain 503
+ * here would let a UI bug that ignores `code` pass the test suite.
+ */
+function aiUnavailable(reason: AiFailureReason | string, path: string) {
+  return HttpResponse.json(
+    {
+      statusCode: 503,
+      timestamp: new Date().toISOString(),
+      path,
+      code: 'AI_UNAVAILABLE',
+      reason,
+      message: 'The AI assistant is unavailable',
+    },
+    { status: 503 },
+  );
+}
+
+/**
+ * The three task routes are identical in everything but their payload:
+ * staff-only, 404 for a ticket the caller cannot see, 503 when the test has
+ * armed a failure. Sharing one builder keeps them from drifting apart.
+ */
+function aiTaskHandler(route: string, body: () => object) {
+  const path = `/api/v1/tickets/:id/ai/${route}`;
+  return http.post(`${BASE}/tickets/:id/ai/${route}`, ({ request, params }) => {
+    mockState.aiRequests.push({ route });
+    const user = requireUser(request);
+    if (!user) return errorResponse(401, 'Unauthorized', path);
+    if (!isStaffRole(user.role)) {
+      return errorResponse(403, 'You are not allowed to use the AI assistant', path);
+    }
+    // 404 rather than 403 for a ticket outside the caller's scope, per
+    // ADR-019 — the AI routes must not become a way to confirm a ticket
+    // exists.
+    if (!findVisibleTicket(user, String(params.id))) {
+      return errorResponse(404, 'Ticket not found', path);
+    }
+    if (mockState.aiFailure) {
+      return aiUnavailable(mockState.aiFailure.reason, path);
+    }
+    return HttpResponse.json(body());
+  });
+}
+
+export const aiHandlers = [
+  http.get(`${BASE}/ai/status`, ({ request }) => {
+    mockState.aiRequests.push({ route: 'status' });
+    const user = requireUser(request);
+    if (!user) return errorResponse(401, 'Unauthorized', '/api/v1/ai/status');
+    // `enabled` folds the role check in, and an Employee is never told what
+    // is really configured — the same disclosure rule the backend applies.
+    if (!isStaffRole(user.role)) {
+      return HttpResponse.json({ enabled: false, mode: 'disabled' });
+    }
+    return HttpResponse.json(mockState.aiStatus);
+  }),
+  aiTaskHandler('triage', () => mockState.aiTriage),
+  aiTaskHandler('draft-response', () => mockState.aiDraft),
+  aiTaskHandler('resolution-summary', () => mockState.aiResolutionSummary),
+];
+
 export const handlers = [
   ...coreHandlers,
   ...assetHandlers,
@@ -1594,4 +1694,5 @@ export const handlers = [
   ...slaHandlers,
   ...analyticsHandlers,
   ...auditHandlers,
+  ...aiHandlers,
 ];

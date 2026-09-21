@@ -1,5 +1,9 @@
 import type {
   AgentAnalytics,
+  AiDraftResponse,
+  AiResolutionSummary,
+  AiStatus,
+  AiTriage,
   ArticleFeedbackEntry,
   Asset,
   AssetAssignment,
@@ -532,6 +536,64 @@ export function makeTicketAsset(
       status: asset.status,
       assetType: asset.assetType,
     },
+    ...overrides,
+  };
+}
+
+/* ---------------------------- AI assistant ---------------------------- */
+
+/**
+ * The assistant as a configured server reports it to staff. The default in the
+ * real application is `{ enabled: false, mode: 'disabled' }` — it ships with
+ * no provider — but tests overwhelmingly exercise the working path, so the
+ * fixture is the enabled one and the off cases are stated explicitly by the
+ * tests that are about them.
+ */
+export const aiStatusEnabled: AiStatus = { enabled: true, mode: 'anthropic' };
+export const aiStatusDisabled: AiStatus = { enabled: false, mode: 'disabled' };
+
+export function makeAiTriage(overrides: Partial<AiTriage> = {}): AiTriage {
+  return {
+    suggestedCategory: {
+      id: IDS.categorySoftware,
+      name: 'Software',
+    },
+    // Deliberately different from `makeTicket()`'s 'Medium', so the default
+    // fixture exercises the Apply path rather than the "already set" one.
+    suggestedPriority: 'High',
+    rationale:
+      'The description mentions a black screen after the login sound, which usually points at a failed display driver rather than hardware.',
+    relatedArticles: [
+      {
+        id: IDS.articleA,
+        title: 'How to reset your password',
+        slug: 'how-to-reset-your-password',
+      },
+    ],
+    mode: 'anthropic',
+    ...overrides,
+  };
+}
+
+export function makeAiDraft(
+  overrides: Partial<AiDraftResponse> = {},
+): AiDraftResponse {
+  return {
+    draft:
+      'Hello,\n\nThanks for reporting this. Please try booting in safe mode and let us know whether the screen comes up.',
+    referencedArticles: [],
+    mode: 'anthropic',
+    ...overrides,
+  };
+}
+
+export function makeAiResolutionSummary(
+  overrides: Partial<AiResolutionSummary> = {},
+): AiResolutionSummary {
+  return {
+    summary:
+      'Display driver rolled back to the previous version; the laptop now boots normally.',
+    mode: 'anthropic',
     ...overrides,
   };
 }
