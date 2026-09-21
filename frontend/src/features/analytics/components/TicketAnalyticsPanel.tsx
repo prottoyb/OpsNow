@@ -17,7 +17,10 @@ export interface AnalyticsPanelProps {
 
 /** "InProgress" -> "In progress", for display only. */
 function statusLabel(status: string): string {
-  return status.replace(/([a-z])([A-Z])/g, '$1 $2');
+  return status.replace(
+    /([a-z])([A-Z])/g,
+    (_match, lower: string, upper: string) => `${lower} ${upper.toLowerCase()}`,
+  );
 }
 
 export function TicketAnalyticsPanel({
