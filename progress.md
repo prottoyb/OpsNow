@@ -10,35 +10,29 @@ Project status: In Progress
 
 
 
-Current phase: Phase 13 — Testing & Quality (not started)
+Current phase: Phase 14 — Docker (in progress)
 
 
 
-Current task: none — Phases 0–12 are complete
+Current task: Phase 14 — containerisation
 
 
 
-Last completed task: Phase 12 — AI Ticket Assistant, backend API and
+Last completed task: Phase 13 — Testing & Quality Hardening (input
 
-frontend UI (a read-only provider side car with grounded, advisory-only
+validation, auth rate limiting and proxy trust, a backend linter, a
 
-triage, response-draft and resolution-summary tasks, off by default and
+frontend render error boundary, a field-limit drift guard and browser
 
-failing closed in the UI — implemented, tested and verified; no new
+coverage for authentication and RBAC — implemented, tested and verified;
 
-migration and no new dependency, recorded as ADR-023)
-
-
-
-Next task: Begin Phase 13 — Testing & Quality
+no migration, recorded as ADR-026)
 
 
 
-Note: this header had been left reporting Phase 9 while Phases 10, 11 and
+Next task: Phase 14 — Docker, then Phase 15 — CI/CD and Phase 16 —
 
-12 were completed; their own log entries below were written at the time.
-
-It is corrected here as part of closing Phase 12.
+Deployment
 
 
 
@@ -3314,6 +3308,290 @@ Next:
 
 
 \- Begin Phase 13 — Testing & Quality.
+
+
+
+\### 2026-09-22 — Phase 13 Testing & Quality Hardening
+
+
+
+Phase 13 adds no features. It closes correctness, security and
+
+test-coverage debt that earlier phases recorded and moved past, and puts
+
+the two static gates the project was missing in place. Nothing was
+
+refactored for taste.
+
+
+
+Implemented:
+
+
+
+\- Control-character validation now covers the fields it had not reached.
+
+The `NoControlCharacters` validator existed since Phase 8a but was
+
+applied only to the asset and knowledge-base write DTOs. A NUL byte in a
+
+ticket subject, description or comment body, in a registration name, or
+
+in either free-text search term (`GET /assets?q=`, `GET /kb-articles?q=`)
+
+therefore reached Postgres, which cannot represent `0x00` in text
+
+(SQLSTATE 22021); Prisma raises `PrismaClientUnknownRequestError`, which
+
+no service's `mapPrismaError` handles, so the request became an unhandled
+
+500. That quietly defeated the "no raw driver error reaches a client"
+
+property the services otherwise hold. The registration name fields also
+
+gained the `trim` transform every other text DTO already had.
+
+
+
+\- Auth endpoint rate limiting (ADR-026), closing the brute-force gap
+
+deferred since Phase 4. `@nestjs/throttler` on `/auth/login`,
+
+`/auth/register` and `/auth/refresh` only — ten attempts per sixty
+
+seconds per client by default, each route on its own counter. It is
+
+deliberately not an `APP_GUARD`: a global limit on an authenticated ITSM
+
+API would eventually rate-limit an agent's ordinary work in order to
+
+protect endpoints the limit was never about. `GET /auth/me` is excluded
+
+because an SPA polls it, and `POST /auth/logout` because throttling it
+
+could strand a user in a session they are trying to end.
+
+
+
+\- `TRUST_PROXY_HOPS`, because the throttle is only as good as `req.ip` —
+
+which is also what every audit row records (ADR-025), with `trust proxy`
+
+never configured (deferred from Phase 11). It is a hop COUNT, never
+
+Express' boolean `true`: `true` believes the left-most `X-Forwarded-For`
+
+entry, which any client can set, so it would hand an attacker both a
+
+fresh throttle bucket per forged header and a chosen address in the
+
+audit log. The default of 0 trusts nothing, so a deployment that forgets
+
+to set it fails safe. Applied in `configureApp`, so the e2e bootstrap
+
+cannot drift from `main.ts`.
+
+
+
+\- Backend ESLint. Until now `tsc --noEmit` was the only static gate on
+
+the backend, and the frontend was the only half of the project with a
+
+linter. Type-aware rules are on; the promise family
+
+(`no-floating-promises`, `await-thenable`, `no-misused-promises`,
+
+`require-await`) are errors, because nearly every service method is async
+
+and talks to Prisma, where an unawaited write is a silent data bug rather
+
+than a type error. The first run found 39 problems across roughly 190
+
+files, all minor — mostly redundant assertions in specs. `npm run lint`
+
+runs at `--max-warnings 0`.
+
+
+
+\- A frontend render error boundary. There was none, so any uncaught
+
+throw during render unmounted the whole tree: the user lost the
+
+navigation, the sign-out control and anything typed into a form, and saw
+
+a blank page. One boundary is scoped to the routed page so the shell
+
+survives, keyed on the pathname so navigating away clears it; a second
+
+backstops the shell itself. Neither renders the thrown message or stack,
+
+because a thrown value can carry whatever the failing code was holding.
+
+
+
+\- A drift guard tying `FIELD_LIMITS` to the backend DTO caps, using the
+
+same technique the Phase 11 audit-action guard uses. All ten agreed
+
+already; nothing had been holding them together.
+
+
+
+\- Playwright coverage for authentication and role-based access, which
+
+the suite had never had — it had only ever signed in as a prerequisite
+
+for testing something else. Eight tests: identical error text for a wrong
+
+password and a non-existent account (so the form is not an enumeration
+
+oracle), deep-link bounce and return, session survival across a reload
+
+(which is what proves the `SameSite=Strict`, path-scoped refresh cookie
+
+round-trips through the Vite proxy — a combination that breaks silently),
+
+sign-out, per-role navigation as one table, and gated URLs typed directly
+
+giving the ordinary "page not found" with no error alert.
+
+
+
+Decisions:
+
+
+
+\- ADR-026 records the rate-limiting and proxy-trust design, including
+
+why account lockout and a global throttle were both rejected, and why
+
+each throttled route keeps its own counter.
+
+
+
+On tests and the throttle, which deserves stating plainly: every existing
+
+e2e suite authenticates several role accounts back to back, well inside a
+
+sixty-second window, so a production-sized limit would have produced 429s
+
+that looked like defects in unrelated code. `test/support/jest-env.ts`
+
+therefore raises `AUTH_THROTTLE_LIMIT` for the suites. That is a raised
+
+threshold, not a disabled control: the guard still executes on every auth
+
+route in every suite, and `test/auth-throttle.e2e-spec.ts` boots its own
+
+application with a limit of 3 and asserts the 429 fires, keeps firing,
+
+leaks nothing, spares `/auth/me` and `/auth/logout`, and creates no
+
+account or session. That spec has to import `AppModule` dynamically —
+
+`ConfigModule.forRoot()` validates `process.env` while `app.module.ts` is
+
+being evaluated, so a top-level import would pin the configuration before
+
+the spec could lower the limit and the suite would pass for the wrong
+
+reason.
+
+
+
+Verification:
+
+
+
+\- Backend: typecheck clean, lint clean at `--max-warnings 0`, 814 unit
+
+tests across 42 suites (up from 731/39), 349 e2e tests across 12 suites
+
+(up from 342/11), `nest build` clean, `prisma validate` clean.
+
+
+
+\- Frontend: typecheck clean, eslint clean, 481 vitest tests across 39
+
+files (up from 459/37), production build clean, 11 Playwright tests
+
+against a live local stack (up from 3).
+
+
+
+\- Database left as found: 7 users, 5 tickets, 4 SLA policies, 5 ticket
+
+SLA rows, 3 comments, 5 assets, 3 articles — identical before and after.
+
+Playwright teardown removed exactly the 3 tickets and 1 asset the run
+
+created. `audit_logs` and `refresh_tokens` grew, which is the known
+
+append-only behaviour tracked from Phase 11.
+
+
+
+Not done, deliberately:
+
+
+
+\- No broad accessibility rework. The audit found the existing UI already
+
+carries real labels, `aria-describedby`, `aria-invalid`, `role="alert"`
+
+error regions, an accessible spinner name and a skip link, so there was
+
+nothing worth churning. Two genuinely missing things were added instead
+
+(the error boundary and the drift guard).
+
+
+
+\- The Phase 7 SLA clock-domain finding (`resolvedAt` is set from the app
+
+clock while the SLA due dates it is compared against are DB-clock) is
+
+still open. It is a real design flaw but needs a change to
+
+`applyStatusTransition`'s timestamp source and a re-reading of the pause
+
+ledger, which is Phase 6a/7a territory rather than hardening.
+
+
+
+Deferred (also recorded in TASKS.md):
+
+
+
+\- The throttle counter is per process, so more than one replica
+
+multiplies the effective limit.
+
+
+
+\- A 429 writes no audit row, so blocked attempts are invisible in the
+
+one place an operator would look for an attack.
+
+
+
+\- The local Playwright suite needs the backend started with a raised
+
+`AUTH_THROTTLE_LIMIT`; `global-setup.ts` prints the command but it is a
+
+manual step.
+
+
+
+\- `refresh_tokens` and `audit_logs` keep growing across e2e runs.
+
+
+
+Next:
+
+
+
+\- Phase 14 — Docker.
 
 
 

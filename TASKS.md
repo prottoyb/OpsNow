@@ -174,7 +174,7 @@ Current Phase: Phase 13 — Testing & Quality (not started). Phase 12 — AI Tic
 
 \- \[x] Test authentication workflow
 
-\- \[ ] (Deferred) Rate-limit /auth/login and /auth/register — no
+\- \[x] (Deferred, done in Phase 13) Rate-limit /auth/login and /auth/register — no
 
 brute-force/credential-stuffing protection exists yet; flagged by
 
@@ -388,7 +388,7 @@ accepting null via `@ValidateIf`, as `AssignTicketDto.assigneeId` already
 
 does).
 
-\- \[ ] `GET /api/v1/tickets` answers 500, not 400, for an absurd but
+\- \[x] (Done) `GET /api/v1/tickets` answers 500, not 400, for an absurd but
 
 integer-typed `offset` (e.g. `offset=99999999999999999999`). A Phase 6a
 
@@ -1036,29 +1036,125 @@ per-instance and would not hold behind more than one backend replica
 
 
 
-\- \[ ] Review unit-test coverage
+\- \[x] Review unit-test coverage
 
-\- \[ ] Add backend integration tests
+\- \[x] Add backend integration tests
 
-\- \[ ] Add frontend tests
+\- \[x] Add frontend tests
 
-\- \[ ] Create Playwright end-to-end tests
+\- \[x] Create Playwright end-to-end tests
 
-\- \[ ] Test authentication workflow
+\- \[x] Test authentication workflow
 
-\- \[ ] Test ticket workflow
+\- \[x] Test ticket workflow
 
-\- \[ ] Test SLA workflow
+\- \[x] Test SLA workflow
 
-\- \[ ] Test asset workflow
+\- \[x] Test asset workflow
 
-\- \[ ] Test RBAC
+\- \[x] Test RBAC
 
-\- \[ ] Test error handling
+\- \[x] Test error handling
 
-\- \[ ] Test important security scenarios
+\- \[x] Test important security scenarios
 
 \- \[ ] Run complete test suite
+
+
+
+Phase 13 is hardening, not new functionality. What it actually changed:
+
+
+
+\- Input validation: the `NoControlCharacters` validator now covers the
+
+ticket, registration-name and free-text-search fields it had not reached.
+
+A NUL byte in any of them previously became an unhandled 500 from the
+
+Postgres driver rather than a 400.
+
+
+
+\- Auth rate limiting (ADR-026): `/auth/login`, `/auth/register` and
+
+`/auth/refresh` are throttled, closing the gap deferred from Phase 4, and
+
+`TRUST_PROXY_HOPS` makes `req.ip` — which the throttle counts and the
+
+audit log records — safe behind a reverse proxy.
+
+
+
+\- Backend lint: ESLint with type-aware rules, `npm run lint`, at
+
+`--max-warnings 0`. The backend previously had no linter at all.
+
+
+
+\- Frontend: a render error boundary (a throw used to blank the whole
+
+app) and a drift guard tying `FIELD_LIMITS` to the backend DTO caps.
+
+
+
+\- Playwright: authentication and RBAC coverage in the browser, which the
+
+suite had never had.
+
+
+
+Not done, and deliberately so: no broad accessibility rework. The audit
+
+found the existing UI already carries real labels, `aria-describedby`,
+
+`aria-invalid`, `role="alert"` error regions, an accessible spinner name
+
+and a skip link, so there was nothing worth churning.
+
+
+
+\## Deferred from Phase 13 (tracked, not dropped)
+
+
+
+\- \[ ] The auth throttle counter is per process (in-memory), so with more
+
+than one backend replica the effective limit is the limit times the
+
+replica count. Same single-instance assumption as ADR-023's AI
+
+concurrency cap; a shared store would fix both at once.
+
+
+
+\- \[ ] A 429 writes no audit row, because the guard rejects the request
+
+before the service runs. Blocked attempts are therefore invisible in the
+
+audit log, which is where an operator would look for evidence of an
+
+attack. Same root cause as the Phase 11 item about rejected operations.
+
+
+
+\- \[ ] The local Playwright suite needs the backend started with a raised
+
+`AUTH_THROTTLE_LIMIT`. `global-setup.ts` detects the 429 and prints the
+
+command, but it is still a manual step.
+
+
+
+\- \[ ] `refresh_tokens` and `audit_logs` keep growing across e2e runs
+
+(1386 and 973 rows on this machine before this milestone). Existing
+
+suites clean up their tickets and assets but not their sessions. Related
+
+to the Phase 11 deferred item on audit-row growth, and left for the same
+
+reason: pruning is a deliberate human decision.
 
 
 
