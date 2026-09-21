@@ -2869,3 +2869,309 @@ Decision 3 and the role matrix in the e2e suite are the controls; neither
 
 is optional maintenance.
 
+
+
+\---
+
+
+
+\## ADR-025 — Audit Logging: Redaction, Write Semantics and Who May Read It
+
+
+
+Status: Accepted
+
+
+
+Context:
+
+
+
+Phase 11 turns the `AuditLog` model that has sat unused in the schema since
+
+Phase 2 into a working audit trail across authentication, ticket changes,
+
+assignment changes and permission denials. No migration is added.
+
+
+
+An audit log is an unusual feature in one specific way: it is the one table
+
+in the application whose *purpose* is to accumulate a record of what people
+
+did, which means it is also the one table most likely to end up holding
+
+something it must never hold. Every authentication event passes within
+
+inches of a password; every ticket update passes within inches of free-text
+
+a user wrote. The design is therefore organised around making the wrong
+
+thing hard to write rather than around making the right thing easy.
+
+
+
+Decisions:
+
+
+
+1. Secrets are excluded structurally, at three independent layers, not by
+
+remembering to be careful at each call site.
+
+
+
+The first layer is the shape of the API. Callers do not hand the audit
+
+service a request body, a DTO or a loose object; they call a typed event
+
+builder. `loginFailed(email, reason, targetUserId, request)` has no
+
+password parameter at all, so the most dangerous possible audit bug is not
+
+merely discouraged, it is unrepresentable.
+
+
+
+The second layer is an allow-list. Every write passes through
+
+`sanitizeMetadata`, which keeps only fifteen named keys and drops
+
+everything else, so a key called `password`, `token` or `authorization`
+
+never survives. Values are restricted to strings, numbers, booleans, null
+
+and flat arrays of those — nested objects are dropped, so a whole request
+
+body cannot be smuggled in underneath an allowed key.
+
+
+
+The third layer is value inspection, for the case where a secret arrives
+
+inside a permitted field. Bearer and Basic credentials, JWT-shaped strings,
+
+`$argon2` hashes and hex runs of forty or more characters are replaced with
+
+`[redacted]`; control characters are stripped and strings are capped.
+
+
+
+Each layer is independently tested with sentinel values, and the e2e suite
+
+scans every row the run produced, and the API's own output, for the
+
+sentinel passwords, the argon2 hash, the access and refresh tokens and the
+
+stored token hashes.
+
+
+
+2. A failed login records the submitted identifier but never the submitted
+
+password — not the password, not a hash of it, not its length. The
+
+identifier is kept because brute-force and credential-stuffing
+
+investigation is the main reason this event exists at all, and an attempt
+
+with no subject is nearly useless. It is lower-cased, capped at 254
+
+characters, and stored only when it is email-shaped with a dotted domain
+
+and does not match the secret patterns, so a password typed into the email
+
+box is discarded rather than preserved. `actorId` is null, because nobody
+
+authenticated and attributing a failed attempt to the targeted account
+
+would blame the victim.
+
+
+
+The residual hole is stated rather than hidden: a password that happens to
+
+be a syntactically valid dotted email would pass this gate. That is judged
+
+acceptable against the alternative of recording no identifier at all.
+
+
+
+3. Ticket audit rows record what changed, not the content that changed.
+
+Identifiers, ticket number, priority, category, the names of the fields
+
+touched, and old/new values for scalar fields like status, priority,
+
+category and assignee. Subject and description text is never copied,
+
+because it already lives in `ticket_history` and duplicating user free-text
+
+into a second table doubles the disclosure surface for no investigative
+
+gain. Asset assignment notes are likewise not copied.
+
+
+
+4. An audit write is best-effort, made after the primary operation has
+
+committed and outside its transaction. It is awaited, so the row exists by
+
+the time the response is returned, but `AuditService.record()` never
+
+rejects.
+
+
+
+The alternative — enrolling the audit write in the operation's transaction
+
+— was rejected because it inverts the failure mode: an audit-store problem
+
+would then roll back valid logins and ticket updates, so a logging
+
+subsystem could take down the application it exists to observe. A failed
+
+write is logged instead, and the log line carries the action name plus the
+
+error class and Prisma error code only, deliberately omitting the error
+
+message, because Prisma embeds query arguments in its messages and that is
+
+exactly the payload this ADR spends three layers keeping out of the record.
+
+
+
+What this costs, stated plainly rather than discovered later: an event is
+
+lost if the insert fails, and an event is lost if the process dies between
+
+the primary commit and the audit write. An outbox pattern would close the
+
+second gap and is not built (ADR-017). Rejected operations are not recorded
+
+— a 400 or 409 writes nothing — nor are unauthenticated 401s, refresh
+
+attempts bearing an unknown token, or logouts with an already-revoked
+
+cookie, all of which are anonymous noise.
+
+
+
+5. `GET /api/v1/audit-logs` is Administrator-only, which is deliberately
+
+narrower than the staff-only gate used everywhere else in this codebase.
+
+The log records every user's actions, including authentication events, so
+
+it is the classic who-watches-the-watchers surface and a TeamLead has no
+
+operational need for it. The route carries `@Roles(Administrator)` plus a
+
+service-level assertion as defence in depth, following the pattern
+
+`SlaController` and `AnalyticsController` already use. The actor is exposed
+
+as a user summary only — never an email or a hash.
+
+
+
+6. The log is append-only. There is no update route and no delete route,
+
+and an e2e test asserts their absence. A record that its own subjects could
+
+edit would not be an audit trail.
+
+
+
+7. `outcome` is stored inside `metadata` and filtered by JSON-path
+
+equality, rather than being promoted to its own column. This is the one
+
+place where avoiding a migration shaped the data model, so the trade-off is
+
+recorded: the outcome filter is not indexed. At this scale that is
+
+irrelevant, and it is the kind of thing a later migration can fix cheaply
+
+if the table ever grows enough to care.
+
+
+
+8. Permission denials are recorded by `RolesGuard`, which is now async and
+
+takes `AuditService`. It stores the actor's role, the required roles, the
+
+HTTP method and the route *pattern* — never the concrete URL or its query
+
+string, because a URL can carry identifiers and search terms that have no
+
+business in an audit row.
+
+
+
+9. IP and user-agent are recorded where the request is already in hand —
+
+the authentication events and permission denials — and are null for ticket
+
+and asset events, whose services receive only the user. Chasing them into
+
+the service layer would mean new middleware or request-scoped plumbing, and
+
+that was judged a worse trade than an honest null. Note also that `req.ip`
+
+is the proxy's address behind a reverse proxy, because `trust proxy` is not
+
+configured; that is a pre-existing property of the application, not
+
+something this phase introduced, and it matters here because an audit row
+
+is exactly where someone would later trust that value.
+
+
+
+Consequences:
+
+
+
+The application now writes to a table on nearly every authenticated
+
+request. One visible side effect: the existing e2e suites — tickets,
+
+assets, authentication — now generate audit rows as a by-product of logging
+
+in and acting, and they know nothing about cleaning them up. The audit
+
+suite cleans up after itself, but the others leave rows behind in a
+
+developer's database. This is arguably correct behaviour for an append-only
+
+audit table rather than a defect, but it means the table grows in
+
+development, and pruning it is a deliberate human decision rather than
+
+something a test run should do on its own.
+
+
+
+`RolesGuard` becoming async and depending on `AuditService` puts the audit
+
+module on the path of every guarded request. `AuditService.record()` never
+
+rejecting is what keeps that from being a new failure mode, which makes
+
+that property load-bearing rather than merely defensive.
+
+
+
+Comment events, knowledge-article link events and asset-to-ticket link
+
+events are not instrumented, so the trail is complete for authentication,
+
+ticket lifecycle, assignment and denials, and silent elsewhere. That
+
+boundary is worth knowing before anyone relies on the log as a complete
+
+account of a ticket's history — `ticket_history` remains the authority for
+
+that.
+
