@@ -1,0 +1,138 @@
+# ---------------------------------------------------------------------------
+# OpsNow — full-stack local run (Phase 14)
+#
+#   cp .env.docker.example .env
+#   # edit .env: set POSTGRES_PASSWORD and JWT_ACCESS_SECRET to real values
+#   docker compose up --build
+#   # then open http://localhost:8080
+#
+# This stack is SELF-CONTAINED and does not touch the host's development
+# setup. Specifically:
+#
+#   - Postgres runs in its own container with its own named volume, and the
+#     database is called `opsnow` — not `opsnow_dev`. Nothing here can read,
+#     migrate or drop the database a developer runs `npm run start:dev`
+#     against.
+#   - It publishes 5433, not 5432, so it cannot collide with a Postgres
+#     already running on the host.
+#   - It seeds nothing. `prisma db seed` deletes every table before inserting,
+#     so it is never run automatically; the schema arrives via
+#     `prisma migrate deploy` and the database starts empty. Seeding is a
+#     deliberate, manual act — see docs/docker.md.
+#
+# The API is deliberately NOT published to the host. The browser reaches it
+# only through the frontend's nginx proxy, which is the only same-origin path
+# and therefore the only one in which the SameSite=Strict refresh cookie
+# works at all. Exposing 3000 would add a second route that cannot
+# authenticate and would only ever confuse.
+# ---------------------------------------------------------------------------
+
+name: opsnow
+
+services:
+  # --- database -------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-opsnow}
+      # No default. Compose fails with a clear message if it is unset, which
+      # is the right outcome — a defaulted database password is how a
+      # throwaway credential ends up in production.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-opsnow}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      # Host 5433 on purpose — see the header. Bound to loopback so the
+      # database is not reachable from the network.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    healthcheck:
+      # `-d` and `-U` are required: without them pg_isready checks the default
+      # database and reports ready before the configured one exists.
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-opsnow} -d ${POSTGRES_DB:-opsnow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # --- schema migration -----------------------------------------------------
+  # A one-shot job, not a step inside the API's start-up. Two reasons:
+  # migrations then run exactly once no matter how many API replicas start,
+  # and a failed migration fails visibly as its own unit rather than looking
+  # like a crash-looping API.
+  migrate:
+    build:
+      context: ./backend
+      target: migrator
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-opsnow}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-opsnow}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- API ------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      target: runtime
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-opsnow}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-opsnow}?schema=public
+      # No default, for the same reason as the database password. Joi also
+      # refuses anything shorter than 32 characters, so the container will
+      # not start with a placeholder.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      REFRESH_TOKEN_TTL_SECONDS: ${REFRESH_TOKEN_TTL_SECONDS:-604800}
+      AUTH_THROTTLE_TTL_SECONDS: ${AUTH_THROTTLE_TTL_SECONDS:-60}
+      AUTH_THROTTLE_LIMIT: ${AUTH_THROTTLE_LIMIT:-10}
+      # Exactly one proxy — the frontend's nginx — sits in front of this
+      # process, so one hop of X-Forwarded-For is trustworthy and no more
+      # (ADR-026).
+      TRUST_PROXY_HOPS: "1"
+      # Off unless the operator opts in. The mock provider is rejected
+      # outright when NODE_ENV=production, so this can only ever be
+      # `disabled` or `anthropic` here.
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        # The API never starts against an un-migrated database.
+        condition: service_completed_successfully
+    healthcheck:
+      # Declared in the Dockerfile; repeated here only so `depends_on` below
+      # has something to wait on if the image's own check is ever changed.
+      test:
+        ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # --- web ------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_HOST_PORT:-8080}:80"
+    depends_on:
+      backend:
+        # nginx resolves `backend` at start-up and fails to boot if the name
+        # does not resolve, so waiting for health here is not fussiness.
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+    # Named, so `docker compose down` leaves the data alone. Removing it is
+    # `docker compose down -v`, which is destructive and is never something
+    # this project's tooling does on your behalf.
+    name: opsnow-postgres-data

@@ -1,0 +1,25 @@
+# Keep the build context small and local artefacts out of the image.
+
+node_modules
+dist
+coverage
+playwright-report
+test-results
+*.tsbuildinfo
+
+# Tests are not part of the bundle. `tsconfig.json` includes `e2e/`, so the
+# build stage copies only the files it names rather than the whole tree —
+# these entries are belt and braces.
+e2e
+**/*.test.ts
+**/*.test.tsx
+
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+Dockerfile
+.dockerignore
+*.log
