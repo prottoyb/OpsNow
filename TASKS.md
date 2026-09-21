@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 11 — Audit Logging (in progress). Phase 10 — Dashboard & Analytics (backend API and frontend UI) — complete; Phase 9 — Knowledge Base (backend API and frontend UI) — complete; Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
+Current Phase: Phase 12 — AI Ticket Assistant (in progress). Phase 11 — Audit Logging (backend and UI) — complete; Phase 10 — Dashboard & Analytics (backend API and frontend UI) — complete; Phase 9 — Knowledge Base (backend API and frontend UI) — complete; Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
 
 
 
@@ -820,23 +820,117 @@ rather than a hermetic assertion.
 
 
 
-\- \[ ] Create audit log entity
+\- \[x] Create audit log entity
 
-\- \[ ] Implement audit event service
+\- \[x] Implement audit event service
 
-\- \[ ] Record authentication events
+\- \[x] Record authentication events
 
-\- \[ ] Record ticket changes
+\- \[x] Record ticket changes
 
-\- \[ ] Record assignment changes
+\- \[x] Record assignment changes
 
-\- \[ ] Record permission-sensitive actions
+\- \[x] Record permission-sensitive actions
 
-\- \[ ] Build audit log interface
+\- \[x] Build audit log interface
 
-\- \[ ] Add audit log filtering
+\- \[x] Add audit log filtering
 
-\- \[ ] Test audit logging
+\- \[x] Test audit logging
+
+`AuditLog` was already part of the Phase 2 schema/migration — Phase 11 adds
+
+no new migration. As in Phases 6a/8a/9a there is no separate
+
+entity/repository layer: the Prisma model is the entity, so "Create audit
+
+log entity" is satisfied by the existing model plus the typed event
+
+builders in `audit.events.ts`.
+
+See DECISIONS.md ADR-025 for the redaction model, the write semantics and
+
+the reasoning behind the read gate.
+
+Note: `GET /api/v1/audit-logs` is **Administrator-only**, deliberately
+
+narrower than the staff-only gate used elsewhere — the log records every
+
+user's actions including authentication events, so a TeamLead has no
+
+operational need for it. The log is append-only: there is no update or
+
+delete route, and an e2e test asserts their absence.
+
+Note: the frontend cannot import backend code, so the closed action list
+
+is mirrored in `frontend/src/types/api.ts`. A drift guard test,
+
+`frontend/src/features/audit/auditActions.test.ts`, reads
+
+`backend/src/audit/audit.constants.ts` and fails if the two diverge.
+
+\## Deferred from Phase 11 (tracked, not dropped)
+
+\- \[ ] Existing e2e suites (tickets, assets, auth) now generate audit rows
+
+as a by-product of logging in and acting, and do not clean them up, so the
+
+`audit_logs` table grows in a developer's database. The audit suite cleans
+
+up after itself. Options are a per-suite `afterAll` that removes each
+
+run's own audit rows, or accepting growth as correct for an append-only
+
+table. Left for the project owner to decide — pruning an audit table is a
+
+deliberate human decision, not something a test run should do on its own.
+
+\- \[ ] An audit event can be lost silently if the insert fails, or if the
+
+process dies between the primary commit and the audit write (writes are
+
+best-effort after commit, never enrolled in the operation's transaction —
+
+see ADR-025). An outbox pattern would close the second gap.
+
+\- \[ ] Rejected operations are not recorded: a 400 or 409 writes no audit
+
+row, and unauthenticated 401s are not recorded.
+
+\- \[ ] Ticket comment events, knowledge-article link events and
+
+asset-to-ticket link/unlink events are not instrumented. `ticket_history`
+
+remains the authority for a ticket's full change history.
+
+\- \[ ] IP and user-agent are null on ticket and asset events, because
+
+those services receive only the user and not the request. Also, `req.ip`
+
+is the proxy's address behind a reverse proxy, because `trust proxy` is
+
+not configured — a pre-existing property, but one that matters more now
+
+that the value is persisted into an audit row.
+
+\- \[ ] The `outcome` filter is unindexed: `outcome` lives inside
+
+`metadata` and is filtered by JSON-path equality, which is what avoided a
+
+migration.
+
+\- \[ ] No actor picker on the audit filter bar — a validated UUID box
+
+instead, because `GET /api/v1/users` is Administrator-only and no staff
+
+directory endpoint exists. Same root cause as the deferred items in
+
+Phases 6b, 8b and 10.
+
+\- \[ ] Audit rows do not link through to the ticket or asset they
+
+reference, and there is no export or live refresh.
 
 
 

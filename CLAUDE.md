@@ -316,9 +316,9 @@ Prefer small changes that can be verified independently.
 
 
 
-Phases 0–10 are complete: project foundation, approved architecture (ADR-001
+Phases 0–11 are complete: project foundation, approved architecture (ADR-001
 
-through ADR-024 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, the
+through ADR-025 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, the
 
 NestJS backend foundation, authentication and RBAC, ticket management
 
@@ -326,16 +326,14 @@ NestJS backend foundation, authentication and RBAC, ticket management
 
 asset management (backend API and frontend UI), the knowledge base
 
-(backend API and frontend UI), and dashboard analytics (backend API and
+(backend API and frontend UI), dashboard analytics (backend API and
 
-frontend UI).
+frontend UI), and audit logging (backend and Administrator-only UI).
 
 
 
-Phase 11 — Audit Logging is next, followed by Phase 12 — AI Ticket
+Phase 12 — AI Ticket Assistant is next; its architecture is already
 
-Assistant, whose architecture is already recorded as ADR-023. See
+recorded as ADR-023 and it is scoped backend-only. See `TASKS.md` for the
 
-`TASKS.md` for the current task list and `progress.md` for the full
-
-development log.
+current task list and `progress.md` for the full development log.

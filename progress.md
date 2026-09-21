@@ -2873,6 +2873,222 @@ Next:
 
 
 
+\### 2026-09-21 — Phase 11 Audit Logging Implemented (backend and UI)
+
+
+
+Phase 11 activates the `AuditLog` model that had sat unused in the schema
+
+since Phase 2. No migration was added. The backend and the UI were built as
+
+two separate efforts, the UI against the merged backend contract.
+
+
+
+Implemented (backend):
+
+
+
+\- `audit/` with an allow-list sanitiser, typed event builders, the event
+
+service, filter construction, and an Administrator-only read API.
+
+
+
+\- Authentication events: login succeeded/failed, logout, token refreshed,
+
+token refresh failed (reuse detected, expired, user inactive), and
+
+registration.
+
+
+
+\- Ticket events: created, updated, status changed, priority changed,
+
+assigned, unassigned. Asset assigned and returned, which fell out of the
+
+same service cheaply.
+
+
+
+\- `access.denied`, recorded by `RolesGuard` — now async — for an
+
+authenticated caller refused on a `@Roles` route. It stores the actor
+
+role, required roles, method and route *pattern*, never the concrete URL
+
+or query string.
+
+
+
+\- `GET /api/v1/audit-logs`, Administrator-only, filtering by actor,
+
+action, entity type, entity id, outcome and date range, using the
+
+standard pagination envelope and exposing the actor as a user summary
+
+with no email.
+
+
+
+\- `IsNotBeforeFrom` was lifted out of the analytics DTO into
+
+`common/validators/` so both DTOs share one implementation.
+
+
+
+Implemented (UI):
+
+
+
+\- `/audit`, Administrator-only, with a readable table, a details expander
+
+carrying metadata plus IP and user-agent, URL-backed filters and
+
+pagination. The nav entry is Administrator-only.
+
+
+
+\- The frontend cannot import backend code, so the closed action list is
+
+mirrored in `types/api.ts` — and `auditActions.test.ts` reads the backend
+
+constants file and fails if the two ever diverge.
+
+
+
+Decisions that shaped it — recorded in full as ADR-025:
+
+
+
+\- Secrets are excluded structurally at three independent layers, not by
+
+care at each call site: typed builders that cannot accept a request body
+
+(`loginFailed` has no password parameter, so the worst bug is
+
+unrepresentable), a fifteen-key allow-list that also rejects nested
+
+objects so a body cannot be smuggled under an allowed key, and
+
+value-pattern redaction for bearer tokens, JWTs, argon2 hashes and long
+
+hex runs arriving inside a permitted field.
+
+
+
+\- A failed login keeps the submitted identifier — brute-force
+
+investigation needs it — but never the password, its hash or its length,
+
+and `actorId` stays null rather than blaming the targeted account.
+
+
+
+\- Audit writes are best-effort, after the primary operation commits and
+
+outside its transaction, and `record()` never rejects. Enrolling them in
+
+the transaction would let a logging problem roll back valid logins.
+
+
+
+\- Ticket rows record which fields changed, never subject or description
+
+text, which already lives in `ticket_history`.
+
+
+
+\- The read API is Administrator-only rather than staff-only, and the log
+
+is append-only with no update or delete route.
+
+
+
+Testing:
+
+
+
+\- Backend: 594 unit tests across 31 suites pass, including sentinel tests
+
+on the sanitiser, the service and the auth service.
+
+
+
+\- Backend e2e: 309 tests across 10 suites pass, 28 of them in
+
+`test/audit.e2e-spec.ts` — the role matrix, filter validation, real login
+
+/failed login/ticket create/update/assignment producing the right rows,
+
+and a scan of every row and of the API output for the sentinel passwords,
+
+the argon2 hash and the access, refresh and stored token hashes.
+
+
+
+\- Frontend: 421 tests across 34 files pass; typecheck, lint and build
+
+clean. A test feeds `<img src=x onerror=…>` through a metadata field and
+
+asserts it renders as text with no element in the DOM.
+
+
+
+Known limitations:
+
+
+
+\- The existing e2e suites now leave audit rows behind in a developer
+
+database, because logging in and acting generates them and those suites
+
+know nothing about audit cleanup. The audit suite cleans up after itself.
+
+Pruning the rest is left as a deliberate human decision.
+
+
+
+\- An event can be lost if the insert fails or if the process dies between
+
+the primary commit and the audit write. Rejected operations (400/409) and
+
+unauthenticated 401s are not recorded.
+
+
+
+\- Comment, knowledge-article link and asset-to-ticket link events are not
+
+instrumented.
+
+
+
+\- IP and user-agent are null on ticket and asset events, and `req.ip` is
+
+the proxy address behind a reverse proxy since `trust proxy` is not set.
+
+
+
+\- The `outcome` filter is unindexed, because outcome lives in `metadata`
+
+to avoid a migration.
+
+
+
+Next:
+
+
+
+\- Begin Phase 12 — AI Ticket Assistant (architecture already recorded as
+
+ADR-023).
+
+
+
+\---
+
+
+
 ## Resume Instructions
 
 
