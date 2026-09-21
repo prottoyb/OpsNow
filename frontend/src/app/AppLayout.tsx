@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
+import { ErrorBoundary } from './ErrorBoundary';
 import { useCanViewAudit } from '../features/audit/useAudit';
 import { useAuth, useIsStaff } from '../features/auth/useAuth';
 
@@ -16,6 +17,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export function AppLayout() {
   const { user, signOut } = useAuth();
+  const { pathname } = useLocation();
   const isStaff = useIsStaff();
   const canViewAudit = useCanViewAudit();
   const [signingOut, setSigningOut] = useState(false);
@@ -203,7 +205,14 @@ export function AppLayout() {
         id="main-content"
         className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6"
       >
-        <Outlet />
+        {/*
+          Scoped to the routed page, not the whole shell, so a page that
+          throws during render leaves the navigation and sign-out working.
+          Keyed on the pathname so navigating away clears the error.
+        */}
+        <ErrorBoundary resetKey={pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );
