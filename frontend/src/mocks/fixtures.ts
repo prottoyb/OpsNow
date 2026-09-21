@@ -4,6 +4,7 @@ import type {
   Asset,
   AssetAssignment,
   AssetType,
+  AuditLogEntry,
   AuthenticatedUser,
   CategoryAnalytics,
   KnowledgeArticle,
@@ -44,6 +45,7 @@ export const IDS = {
   assetB: '72222222-2222-4222-8222-222222222222',
   assignmentA: '81111111-1111-4111-8111-111111111111',
   teamLead: '44444444-4444-4444-8444-444444444444',
+  admin: '55555555-5555-4555-8555-555555555555',
   kbCategoryAccounts: 'd1111111-1111-4111-8111-111111111111',
   kbCategoryPasswords: 'd2222222-2222-4222-8222-222222222222',
   kbCategoryNetwork: 'd3333333-3333-4333-8333-333333333333',
@@ -84,12 +86,20 @@ export const teamLeadUser: AuthenticatedUser = {
   role: 'TeamLead',
 };
 
+/** The audit log is Administrator-only, so it needs its own identity. */
+export const adminUser: AuthenticatedUser = {
+  id: IDS.admin,
+  email: 'admin1@opsnow.local',
+  role: 'Administrator',
+};
+
 export function summaryOf(user: AuthenticatedUser): UserSummary {
   const names: Record<string, [string, string]> = {
     [IDS.employee]: ['Grace', 'Kim'],
     [IDS.agent]: ['Priya', 'Shah'],
     [IDS.otherAgent]: ['Marco', 'Rossi'],
     [IDS.teamLead]: ['Dana', 'Okafor'],
+    [IDS.admin]: ['Ada', 'Admin'],
   };
   const [firstName, lastName] = names[user.id] ?? ['Test', 'User'];
   return { id: user.id, firstName, lastName, role: user.role as Role };
@@ -522,6 +532,24 @@ export function makeTicketAsset(
       status: asset.status,
       assetType: asset.assetType,
     },
+    ...overrides,
+  };
+}
+
+export function makeAuditLog(
+  overrides: Partial<AuditLogEntry> = {},
+): AuditLogEntry {
+  return {
+    id: 'e0000000-0000-4000-8000-000000000001',
+    action: 'ticket.created',
+    outcome: 'success',
+    entityType: 'Ticket',
+    entityId: IDS.ticketA,
+    metadata: { outcome: 'success', ticketNumber: 'TCK-1', priority: 'High' },
+    ipAddress: null,
+    userAgent: null,
+    createdAt: '2026-03-02T10:15:00.000Z',
+    actor: agentSummary,
     ...overrides,
   };
 }
