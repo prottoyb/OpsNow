@@ -1,0 +1,29 @@
+# Line endings for files that are consumed by Linux tooling.
+#
+# This repository is developed on Windows with git's autocrlf behaviour, so
+# text files are checked out with CRLF. That is harmless for TypeScript and
+# for documentation, but not for anything a Linux shell or a container build
+# reads: a trailing \r inside a `run: |` block in a GitHub Actions workflow
+# becomes part of the command and fails with errors like
+# `$'\r': command not found`, and a CRLF shell script fails the same way.
+#
+# Deliberately NOT a blanket `* text=auto`: that would renormalise the entire
+# existing history-worth of files in one commit and bury real changes. Only
+# the files that actually break are pinned.
+
+# Container build inputs.
+Dockerfile          text eol=lf
+*.Dockerfile        text eol=lf
+.dockerignore       text eol=lf
+docker-compose.yml  text eol=lf
+docker-compose.*.yml text eol=lf
+
+# nginx configuration, read inside the container.
+*.conf              text eol=lf
+
+# CI workflows — these contain shell.
+/.github/**/*.yml   text eol=lf
+/.github/**/*.yaml  text eol=lf
+
+# Any shell script, wherever it lives.
+*.sh                text eol=lf
