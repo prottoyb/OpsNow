@@ -1946,3 +1946,202 @@ in `frontend/src/types/api.ts` is a hand-maintained mirror of
 
 two in step.
 
+
+
+\---
+
+
+
+\## ADR-022 — Knowledge Base Access Control, Authoring Model and Search
+
+
+
+Status: Accepted
+
+
+
+Context:
+
+
+
+Phase 9 turns the Phase 2 knowledge-base schema (`KnowledgeBaseCategory`,
+
+`KnowledgeBaseArticle`, `KnowledgeBaseArticleFeedback`,
+
+`TicketKnowledgeArticle`) into a working feature: authenticated users read
+
+and search articles, staff write them, readers rate them, and an agent
+
+links an article to the ticket it helped resolve. No migration is added.
+
+
+
+Unlike a ticket or an asset, an article has no owner-shaped row scope — an
+
+Employee is not "the requester" of an article — so the access rules, the
+
+authoring rules and the search implementation all had to be decided rather
+
+than copied from ADR-019.
+
+
+
+Decisions:
+
+
+
+1. Visibility is status-based, and the boundary is a 404. An Employee sees
+
+only `Published` articles; every staff role sees every non-soft-deleted
+
+article in any status. An article outside the caller's scope is `404`,
+
+never `403`, exactly as ADR-019 established for tickets. The reason is
+
+stronger here than tidiness: a draft is unreviewed internal writing, and
+
+its mere existence discloses what support is currently working on.
+
+
+
+2. The rule is written once, in two dialects, side by side.
+
+`common/knowledge-article-visibility.ts` exports both a Prisma `where`
+
+fragment and the identical predicate as a `Prisma.Sql`. The second exists
+
+because `search_vector` is an `Unsupported("tsvector")` column that Prisma
+
+cannot query, so the search path must drop to `$queryRaw`. A raw query
+
+whose visibility clause drifts weaker than the ORM path's is the
+
+highest-risk failure mode in this module; keeping both definitions
+
+adjacent is what makes that drift visible in review.
+
+
+
+3. Authoring is two-tier: authors versus editors. A SupportAgent may create
+
+articles and edit their own. A TeamLead or Administrator may edit anyone's
+
+article, and is the only role that may change status — publishing is an
+
+editorial act, not an authoring one. An agent editing a colleague's
+
+article gets `403`, not `404`, because they can legitimately read it;
+
+`404` stays reserved strictly for "you cannot see this at all".
+
+
+
+4. Status transitions use an explicit matrix, and nothing is terminal.
+
+`ALLOWED_ARTICLE_TRANSITIONS` mirrors the ticket module's style.
+
+`Archived` is the retire path — there is no DELETE endpoint — and an
+
+archived article returns through `Draft`, never straight back to
+
+`Published`, so retired guidance is re-reviewed before it is authoritative
+
+again. Re-submitting the current status is a no-op rather than an error,
+
+because an article PATCH is a whole-form edit and not a single-field
+
+status route.
+
+
+
+5. Search is PostgreSQL full-text search, not a search service. A stored
+
+generated `tsvector` column, queried with `websearch_to_tsquery('english',
+
+…)` and ordered by `ts_rank`. Introducing Elasticsearch or Meilisearch for
+
+a corpus of this size would breach ADR-017's infrastructure simplicity.
+
+`websearch_to_tsquery` rather than `to_tsquery` is a correctness
+
+requirement, not a preference: the latter parses its input as an
+
+expression, so an unbalanced quote typed into a search box would surface
+
+as a driver error.
+
+
+
+6. Feedback is one vote per user per article, and its raw rows are
+
+staff-only. Submitting again upserts rather than stacking votes, which the
+
+schema's `@@unique([articleId, userId])` enforces. Any user who can see an
+
+article may rate it — rating the guidance you were given is the point —
+
+and gets back only the aggregate counts. The feedback log, which carries
+
+free-text comments and the identity of whoever wrote them, is a separate
+
+staff-only route.
+
+
+
+7. Ticket to article links are staff-only, idempotent, and embed only a
+
+summary. Re-linking returns the existing link rather than a 409, and
+
+unlinking twice is still `204`. A link to an article the caller cannot see
+
+is filtered out of the ticket's list — the same shape the ticket-asset
+
+panel already uses.
+
+
+
+8. `slug` is display data; `id` is the lookup key. Every route is id-based,
+
+matching every other resource here. Slug generation retries a bounded five
+
+times on collision, because the retry exists to survive two articles
+
+genuinely titled "How to Reset Your Password", not to paper over a broken
+
+slug function.
+
+
+
+9. `viewCount` is incremented by a raw, best-effort UPDATE. Prisma writes
+
+`@updatedAt` on every update it issues, so an ORM increment would move
+
+`updated_at` on every read — reordering the list, whose secondary sort key
+
+is `updatedAt`, and firing spurious optimistic-concurrency 409s at anyone
+
+editing the article at the time. Only `Published` articles count views,
+
+and a failed increment never fails the read.
+
+
+
+Consequences:
+
+
+
+Search relevance is whatever `ts_rank` says: there is no synonym
+
+dictionary, fuzzy matching or typo tolerance, and the dictionary is
+
+hard-coded to `english`. `deletedAt` is honoured on every read but written
+
+by nothing, so soft delete is currently a schema capability with no route
+
+behind it. Categories remain read-only seed data. Because status drives
+
+visibility, an accidental publish is an immediate disclosure to every
+
+Employee — which is precisely why the status transition is restricted to
+
+the editorial roles rather than to whoever wrote the article.

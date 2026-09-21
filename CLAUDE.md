@@ -316,19 +316,20 @@ Prefer small changes that can be verified independently.
 
 
 
-Phases 0–8b are complete: project foundation, approved architecture (ADR-001
+Phases 0–9 are complete: project foundation, approved architecture (ADR-001
 
-through ADR-021 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, the
+through ADR-022 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, the
 
 NestJS backend foundation, authentication and RBAC, ticket management
 
 (backend API and frontend UI), SLA management (backend API and frontend UI),
 
-and asset management (backend API and frontend UI).
+asset management (backend API and frontend UI), and the knowledge base
+
+(backend API and frontend UI).
 
 
 
-Phase 9 — Knowledge Base is next. See `TASKS.md` for the current task list
+Phase 10 — Dashboard & Analytics is next. See `TASKS.md` for the current
 
-and `progress.md` for the full development log.
-
+task list and `progress.md` for the full development log.

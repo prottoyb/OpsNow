@@ -10,7 +10,7 @@ Status: In Progress
 
 
 
-Current Phase: Phase 9 — Knowledge Base (not started). Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
+Current Phase: Phase 10 — Dashboard & Analytics (not started). Phase 9 — Knowledge Base (backend API and frontend UI) — complete; Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
 
 
 
@@ -648,25 +648,59 @@ and "Return to stock".
 
 
 
-\- \[ ] Create knowledge article entity
+Split into 9a (backend API) / 9b (frontend UI) following the Phase 6a/6b,
+7a/7b and 8a/8b precedent. Both halves are complete.
 
-\- \[ ] Create knowledge categories
+\## Phase 9a — Knowledge Base (Backend API)
 
-\- \[ ] Create article API
+\- \[x] Create knowledge article entity
 
-\- \[ ] Build article list
+\- \[x] Create knowledge categories
 
-\- \[ ] Build article detail page
+\- \[x] Create article API
 
-\- \[ ] Implement article search
+\- \[x] Implement article search
 
-\- \[ ] Implement article filtering
+\- \[x] Implement article filtering
 
-\- \[ ] Implement article feedback
+\- \[x] Implement article feedback
 
-\- \[ ] Link knowledge articles to tickets
+\- \[x] Link knowledge articles to tickets
 
-\- \[ ] Add knowledge base tests
+\- \[x] Add knowledge base backend tests (unit + e2e)
+
+\## Phase 9b — Knowledge Base (Frontend UI)
+
+\- \[x] Build article list
+
+\- \[x] Build article detail page
+
+\- \[x] Add knowledge base frontend tests
+
+`KnowledgeBaseCategory`, `KnowledgeBaseArticle`,
+`KnowledgeBaseArticleFeedback` and `TicketKnowledgeArticle` were already
+part of the Phase 2 schema/migration — Phase 9 adds no new migration.
+See DECISIONS.md ADR-022 for the access-control, authoring/editorial,
+search and feedback model.
+
+Note: as in Phases 6a/8a, there is no separate entity/repository layer —
+the Prisma model is the entity and the service talks to `PrismaService`
+directly. "Create knowledge categories" means the seeded category tree is
+exposed read-only via `GET /api/v1/kb-categories`; there is no category
+CRUD API, matching `ticket-categories` and `asset-types`.
+
+\## Deferred from Phase 9 (tracked, not dropped)
+
+\- \[ ] No article DELETE endpoint — `status: Archived` is the retire path,
+and `deletedAt` exists in the schema but is never written by the API.
+A soft-delete route would need its own role rules.
+
+\- \[ ] No knowledge-base category CRUD UI or API; categories stay seed
+data, like ticket categories and asset types.
+
+\- \[ ] Article search ranking is PostgreSQL `ts_rank` over the generated
+`search_vector` only; there is no synonym dictionary, fuzzy matching or
+"did you mean" handling.
 
 
 

@@ -10,27 +10,25 @@ Project status: In Progress
 
 
 
-Current phase: Phase 9 — Knowledge Base (not started)
+Current phase: Phase 10 — Dashboard & Analytics (not started)
 
 
 
-Current task: none — Phase 8b is complete
+Current task: none — Phase 9 is complete
 
 
 
-Last completed task: Phase 8b — Asset Management Frontend UI (asset list,
+Last completed task: Phase 9 — Knowledge Base, backend API and
 
-detail, create/edit, staff-only status and assignment controls, the
+frontend UI (articles, categories, full-text search, filtering, reader
 
-staff-only assignment ledger, and ticket <-> asset linking — implemented,
+feedback and ticket <-> article links — implemented, tested and verified;
 
-independently reviewed by QA/Security and Senior Review, tested and
-
-verified; no backend change, no new ADR and no dependency added)
+no new migration, recorded as ADR-022)
 
 
 
-Next task: Begin Phase 9 — Knowledge Base
+Next task: Begin Phase 10 — Dashboard & Analytics
 
 
 
@@ -2455,7 +2453,193 @@ Next:
 
 
 
-\## Resume Instructions
+\### 2026-09-21 — Phase 9 Knowledge Base Implemented (backend API and frontend UI)
+
+
+
+Phase 9 was built in the two halves the previous phases established — 9a the
+
+backend API, 9b the frontend UI — and was interrupted twice by session
+
+limits. Both halves were recovered from the interrupted agents' worktrees,
+
+re-verified from scratch against the repository rather than from
+
+conversation memory, and only then marked complete.
+
+
+
+Implemented (9a — backend):
+
+
+
+\- `GET /api/v1/kb-categories` exposing the seeded category tree read-only,
+
+alongside `ticket-categories` and `asset-types`.
+
+
+
+\- `POST|GET|PATCH /api/v1/kb-articles` and `GET /api/v1/kb-articles/:id`,
+
+with list filtering by status, category, author and free-text search, and
+
+the usual pagination envelope.
+
+
+
+\- `POST /api/v1/kb-articles/:id/feedback` (any reader who can see the
+
+article) returning only the aggregate counts, and a staff-only
+
+`GET /api/v1/kb-articles/:id/feedback` returning the raw log.
+
+
+
+\- `GET|POST /api/v1/tickets/:id/knowledge-articles` and
+
+`DELETE /api/v1/tickets/:id/knowledge-articles/:articleId`, the write
+
+routes staff-only and idempotent in both directions.
+
+
+
+\- `common/knowledge-article-visibility.ts`, a sibling of
+
+`ticket-visibility.ts` and `asset-visibility.ts`, exporting the same
+
+visibility rule twice: as a Prisma `where` and as a `Prisma.Sql`
+
+predicate for the raw full-text-search path.
+
+
+
+Implemented (9b — frontend):
+
+
+
+\- `/kb`, `/kb/new` and `/kb/:id`, plus a nav entry, reusing the Phase
+
+6b/8b patterns throughout: URL-backed list filters, per-user query keys,
+
+`apiFetch` + `toApiError`, the shared `components/ui` primitives.
+
+
+
+\- Article detail with staff-only inline editing, a status control visible
+
+only to the editorial roles, a feedback widget for every reader, and the
+
+staff-only feedback log.
+
+
+
+\- A knowledge-articles panel on ticket detail: staff can search, link and
+
+unlink; an Employee sees the linked published articles as plain text.
+
+
+
+Decisions that shaped it — recorded in full as ADR-022:
+
+
+
+\- Status is the visibility rule (an Employee sees only `Published`), the
+
+boundary is a 404, and the rule is defined once in two dialects because
+
+`search_vector` is a tsvector column Prisma cannot query.
+
+
+
+\- Authoring is two-tier: a SupportAgent writes and edits their own
+
+articles; only a TeamLead or Administrator edits someone else's or
+
+changes status. Editing a colleague's article is a 403, not a 404,
+
+because the agent can legitimately read it.
+
+
+
+\- There is no DELETE. `Archived` is the retire path, and an archived
+
+article comes back through `Draft`, never straight to `Published`.
+
+
+
+\- Search is PostgreSQL `websearch_to_tsquery` + `ts_rank` over a stored
+
+generated column — no search service, per ADR-017.
+
+
+
+\- `viewCount` is a raw best-effort UPDATE, because an ORM increment would
+
+move `updated_at` on every read and fire spurious 409s at an editor.
+
+
+
+Testing:
+
+
+
+\- Backend: 474 unit tests across 23 suites pass, including the
+
+knowledge-base service, controller, DTO validation, slug/excerpt text
+
+helpers and the transition matrix.
+
+
+
+\- Backend e2e: `test/kb.e2e-spec.ts`, 91 tests, covering every role
+
+against every route — including that a Draft is a 404 for an Employee
+
+through the search path as well as the ORM path, that the feedback log
+
+never reaches a non-staff caller, and that linking leaks nothing about a
+
+ticket outside the caller's scope. It ends by asserting the three seeded
+
+articles are still present and untouched.
+
+
+
+\- Frontend: 358 tests across 30 files pass; typecheck and lint are clean.
+
+
+
+Known limitations:
+
+
+
+\- No category CRUD, no soft-delete route (`deletedAt` is read but never
+
+written), and no ranking beyond `ts_rank` — no synonyms, fuzzy matching
+
+or typo tolerance, and the dictionary is hard-coded to `english`.
+
+
+
+\- No Playwright journey for the knowledge base yet; the e2e directory
+
+covers tickets, SLA and assets. Phase 13 owns end-to-end coverage.
+
+
+
+Next:
+
+
+
+\- Begin Phase 10 — Dashboard & Analytics.
+
+
+
+\---
+
+
+
+## Resume Instructions
 
 
 
