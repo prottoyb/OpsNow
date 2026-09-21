@@ -1166,19 +1166,145 @@ reason: pruning is a deliberate human decision.
 
 
 
-\- \[ ] Create frontend Dockerfile
+\- \[x] Create frontend Dockerfile
 
-\- \[ ] Create backend Dockerfile
+\- \[x] Create backend Dockerfile
 
-\- \[ ] Configure PostgreSQL container
+\- \[x] Configure PostgreSQL container
 
-\- \[ ] Create docker-compose configuration
+\- \[x] Create docker-compose configuration
 
-\- \[ ] Configure environment variables
+\- \[x] Configure environment variables
 
-\- \[ ] Verify complete local environment
+\- \[ ] Verify complete local environment — NOT DONE. Docker is not
 
-\- \[ ] Document Docker setup
+installed on the development machine (`docker` is not on PATH and Docker
+
+Desktop is not present), so no image has been built and the stack has
+
+never been started. See the Phase 14 note below for what was verified
+
+instead. This task is the single remaining Phase 14 item.
+
+\- \[x] Document Docker setup
+
+
+
+Phase 14 produces a production-SHAPED local stack: multi-stage images
+
+for both halves, a non-root API process, no secret in any layer, health
+
+checks, and schema migration as its own one-shot `prisma migrate deploy`
+
+job rather than a step inside the API's start-up.
+
+
+
+The API is deliberately not published to the host. OpsNow's refresh
+
+cookie is `SameSite=Strict` and path-scoped, the backend enables no CORS
+
+and rejects a cross-origin refresh, so the browser must see the API as
+
+same-origin — which means through the frontend's nginx proxy. A second,
+
+published route could not authenticate and would only confuse.
+
+
+
+The stack cannot touch the host's development database: its own
+
+container, its own named volume, database `opsnow` rather than
+
+`opsnow_dev`, host port 5433 rather than 5432, no automatic seeding
+
+(`prisma db seed` wipes every table, so it stays a deliberate manual
+
+act), and `docker compose down` leaves the volume alone.
+
+
+
+\### Verification status — read this before trusting the images
+
+
+
+Docker is not available on this machine, so **the images have never been
+
+built and the stack has never been started**. What was verified instead:
+
+
+
+\- `docker-compose.yml` parses as YAML and its service graph, ports,
+
+health checks and `depends_on` conditions were inspected.
+
+
+
+\- argon2's shipped prebuilt binaries were checked (`linux-x64` and
+
+`linux-arm64`, glibc and musl), confirming the images need no compiler
+
+toolchain.
+
+
+
+\- Both production bundles build (`nest build`, `tsc --noEmit && vite
+
+build`).
+
+
+
+\- The compiled backend was booted with `NODE_ENV=production` and
+
+exercised: `/api/v1/health` reported the database up, and the auth
+
+throttle answered 401/401/401/429 against a limit of 3.
+
+
+
+\- `frontend/nginx.conf` has NOT been run through `nginx -t`.
+
+
+
+`docs/docker.md` states this at the top and lists what to suspect if the
+
+first build fails.
+
+
+
+\## Deferred from Phase 14 (tracked, not dropped)
+
+
+
+\- \[ ] Build and start the stack on a machine that has Docker, and fix
+
+whatever the first run surfaces.
+
+
+
+\- \[ ] `nginx:1.27-alpine` runs its master process as root (workers run
+
+as `nginx`, the stock posture). `nginxinc/nginx-unprivileged` would run
+
+everything unprivileged; it was not used because it could not be pulled
+
+and tested here. The change is one base image plus moving the listener
+
+from 80 to 8080.
+
+
+
+\- \[ ] No image is published to a registry, and there is no tagging or
+
+versioning scheme for them.
+
+
+
+\- \[ ] Single replica of everything. The auth throttle (ADR-026) and the
+
+AI concurrency cap (ADR-023) are both per-process, so a second API
+
+replica multiplies both limits.
 
 
 

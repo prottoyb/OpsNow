@@ -10,29 +10,27 @@ Project status: In Progress
 
 
 
-Current phase: Phase 14 — Docker (in progress)
+Current phase: Phase 15 — CI/CD (in progress)
 
 
 
-Current task: Phase 14 — containerisation
+Current task: Phase 15 — GitHub Actions pipeline
 
 
 
-Last completed task: Phase 13 — Testing & Quality Hardening (input
+Last completed task: Phase 14 — Docker (multi-stage production-oriented
 
-validation, auth rate limiting and proxy trust, a backend linter, a
+images for both halves, a self-contained Compose stack with a one-shot
 
-frontend render error boundary, a field-limit drift guard and browser
+migration job, env-driven configuration and no baked secrets — WRITTEN
 
-coverage for authentication and RBAC — implemented, tested and verified;
+AND STATICALLY CHECKED BUT NEVER BUILT, because Docker is not installed
 
-no migration, recorded as ADR-026)
+on this machine)
 
 
 
-Next task: Phase 14 — Docker, then Phase 15 — CI/CD and Phase 16 —
-
-Deployment
+Next task: Phase 15 — CI/CD, then Phase 16 — Deployment
 
 
 
@@ -3592,6 +3590,238 @@ Next:
 
 
 \- Phase 14 — Docker.
+
+
+
+\### 2026-09-22 — Phase 14 Docker
+
+
+
+Containerisation of both halves plus a Compose stack that runs the whole
+
+application locally. No application code changed.
+
+
+
+Implemented:
+
+
+
+\- `backend/Dockerfile`: `deps` → `build` → `prod-deps` → `runtime`, plus
+
+a separate `migrator` target. Debian slim rather than Alpine, because
+
+Prisma ships a different query engine for musl and the Alpine variant is
+
+the one that fails at runtime with a missing-engine error that does not
+
+reproduce on a developer's machine. `prisma generate` runs in the build
+
+stage and the generated client is copied onto a production-only
+
+dependency tree, so the Prisma CLI — a devDependency — never ships. The
+
+process runs as the image's `node` user, which owns none of the
+
+application files, and `CMD` is exec-form `node dist/main` so it is PID 1
+
+and receives SIGTERM; that is what `enableShutdownHooks()` needs to close
+
+the Prisma pool, and `npm start` would swallow it. Its health check calls
+
+the real `/api/v1/health`, which pings the database, so an API that is up
+
+but cannot reach Postgres reports unhealthy rather than ready.
+
+
+
+\- `frontend/Dockerfile`: Vite build, then nginx. `npm run build` runs
+
+`tsc --noEmit` first, so a type error fails the image rather than
+
+shipping — the image must not become a way around a gate CI enforces.
+
+There is no build argument for an API base URL, because the client calls
+
+a hardcoded relative `/api/v1` and an absolute origin would reintroduce
+
+every cross-origin failure the proxy exists to avoid.
+
+
+
+\- `frontend/nginx.conf`: serves the SPA with a history fallback and
+
+proxies `/api` to the backend. Three lines are load-bearing and each is
+
+commented in place — `proxy_set_header Host $http_host` (not `$host`,
+
+which drops the port, and not nginx's default, which rewrites it to the
+
+upstream name; the backend compares `Origin` against `Host`),
+
+`proxy_pass` with no URI part and no rewrite (the refresh cookie is
+
+scoped to `path=/api/v1/auth` and the browser matches that against the
+
+URL it sees), and `index.html` served `no-store` so a stale copy cannot
+
+pin a browser to a deleted fingerprinted asset. These are the same three
+
+traps `vite.config.ts` already documents for the dev proxy. It also sends
+
+nosniff, Referrer-Policy, X-Frame-Options and a CSP that permits no
+
+inline script.
+
+
+
+\- `docker-compose.yml`: postgres, a one-shot `migrate`, backend,
+
+frontend, ordered by Compose conditions rather than sleeps. Migration is
+
+its own service running `prisma migrate deploy` — never `migrate dev` or
+
+`db push`, both of which can drop and recreate a schema to make it match
+
+— so it runs once regardless of replica count and a failure looks like a
+
+failed migration rather than a crash-looping API.
+
+
+
+\- `.env.docker.example` plus a `.gitignore` exception for it.
+
+`POSTGRES_PASSWORD` and `JWT_ACCESS_SECRET` have no defaults, so Compose
+
+refuses to start rather than run on a placeholder. `.dockerignore` on
+
+both sides excludes `.env`, so a local secrets file cannot reach a layer.
+
+
+
+\- `.gitattributes` pinning Dockerfiles, `.dockerignore`,
+
+`docker-compose.yml`, `*.conf`, workflow YAML and `*.sh` to LF. This
+
+repository is developed on Windows with autocrlf, and a trailing carriage
+
+return inside a GitHub Actions `run: |` block becomes part of the command
+
+and fails with `$'\r': command not found`. Deliberately not a blanket
+
+`* text=auto`, which would renormalise every file in one commit and bury
+
+real changes.
+
+
+
+Decisions:
+
+
+
+\- No ADR. Nothing here re-decides an architectural question: the images
+
+follow the application's existing shape, and the one genuinely
+
+consequential constraint — that the API must be same-origin — was already
+
+decided in Phases 4 and 6b and is documented in `vite.config.ts`. The
+
+Compose file and `docs/docker.md` restate it where an operator will meet
+
+it.
+
+
+
+Verification — and the honest limits of it:
+
+
+
+Docker is NOT installed on this machine (`docker` is not on PATH and
+
+Docker Desktop is not present), so no image has been built and the stack
+
+has never been started. Nothing below should be read as "it works".
+
+
+
+What was actually checked:
+
+
+
+\- `docker-compose.yml` parses as YAML; its services, published ports,
+
+health-check forms and `depends_on` conditions were inspected
+
+programmatically.
+
+
+
+\- argon2 is the only native dependency, and it ships prebuilt N-API
+
+binaries for `linux-x64` and `linux-arm64` in both glibc and musl
+
+flavours — so the images correctly need no compiler toolchain.
+
+
+
+\- Both production bundles build cleanly.
+
+
+
+\- The compiled backend was booted with `NODE_ENV=production` and probed:
+
+`/api/v1/health` reported the database up, and the auth throttle answered
+
+401/401/401/429 against a limit of 3. The probe's three failed-login
+
+audit rows were deleted afterwards; seed data untouched.
+
+
+
+\- `frontend/nginx.conf` has NOT been syntax-checked by nginx.
+
+
+
+That production boot also surfaced something for Phase 16: Swagger is
+
+served at `/api/docs` with `NODE_ENV=production` and answers 200, which
+
+publishes the entire API surface. That is a deployment policy question,
+
+so it is being fixed in Phase 16 rather than here.
+
+
+
+Deferred (also recorded in TASKS.md):
+
+
+
+\- Build and start the stack on a machine with Docker.
+
+
+
+\- `nginxinc/nginx-unprivileged` instead of `nginx:alpine`, so no process
+
+runs as root.
+
+
+
+\- No registry, tagging or versioning scheme for the images.
+
+
+
+\- Single replica of everything; the auth throttle and the AI concurrency
+
+cap are both per-process.
+
+
+
+Next:
+
+
+
+\- Phase 15 — CI/CD.
 
 
 
