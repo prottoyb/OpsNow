@@ -4,6 +4,9 @@ import { AssetDetailPage } from '../features/assets/pages/AssetDetailPage';
 import { AssetListPage } from '../features/assets/pages/AssetListPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { useIsStaff } from '../features/auth/useAuth';
+import { ArticleCreatePage } from '../features/knowledge-base/pages/ArticleCreatePage';
+import { ArticleDetailPage } from '../features/knowledge-base/pages/ArticleDetailPage';
+import { ArticleListPage } from '../features/knowledge-base/pages/ArticleListPage';
 import { SlaDashboardPage } from '../features/sla/pages/SlaDashboardPage';
 import { TicketCreatePage } from '../features/tickets/pages/TicketCreatePage';
 import { TicketDetailPage } from '../features/tickets/pages/TicketDetailPage';
@@ -54,6 +57,25 @@ function AssetCreateRoute() {
   return useIsStaff() ? <AssetCreatePage /> : <NotFoundPage />;
 }
 
+/**
+ * Keyed by article id for the same reason as `TicketDetailRoute`: the page
+ * holds local UI state (open edit form, active tab, last notice, an unsent
+ * feedback comment) that belongs to one article.
+ */
+function ArticleDetailRoute() {
+  const { id = '' } = useParams<{ id: string }>();
+  return <ArticleDetailPage key={id} />;
+}
+
+/**
+ * Article creation is staff-only on the backend (`POST /kb-articles`). Same
+ * precedent as `AssetCreateRoute`: an Employee gets the ordinary "page not
+ * found" rather than a page that mounts and then fails.
+ */
+function ArticleCreateRoute() {
+  return useIsStaff() ? <ArticleCreatePage /> : <NotFoundPage />;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -72,6 +94,11 @@ export function AppRoutes() {
         <Route path="/assets" element={<AssetListPage />} />
         <Route path="/assets/new" element={<AssetCreateRoute />} />
         <Route path="/assets/:id" element={<AssetDetailRoute />} />
+        {/* Open to every role: self-service search is the half of the
+            knowledge base that exists for Employees. */}
+        <Route path="/kb" element={<ArticleListPage />} />
+        <Route path="/kb/new" element={<ArticleCreateRoute />} />
+        <Route path="/kb/:id" element={<ArticleDetailRoute />} />
         <Route path="/sla" element={<SlaDashboardRoute />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>

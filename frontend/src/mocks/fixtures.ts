@@ -1,8 +1,12 @@
 import type {
+  ArticleFeedbackEntry,
   Asset,
   AssetAssignment,
   AssetType,
   AuthenticatedUser,
+  KnowledgeArticle,
+  KnowledgeArticleSummary,
+  KnowledgeBaseCategory,
   Role,
   SlaMetrics,
   SlaPolicy,
@@ -11,6 +15,7 @@ import type {
   TicketCategory,
   TicketComment,
   TicketHistoryEntry,
+  TicketKnowledgeArticle,
   TicketSla,
   UserSummary,
 } from '../types/api';
@@ -34,6 +39,13 @@ export const IDS = {
   assetA: '71111111-1111-4111-8111-111111111111',
   assetB: '72222222-2222-4222-8222-222222222222',
   assignmentA: '81111111-1111-4111-8111-111111111111',
+  teamLead: '44444444-4444-4444-8444-444444444444',
+  kbCategoryAccounts: 'd1111111-1111-4111-8111-111111111111',
+  kbCategoryPasswords: 'd2222222-2222-4222-8222-222222222222',
+  kbCategoryNetwork: 'd3333333-3333-4333-8333-333333333333',
+  articleA: '61111111-1111-4111-8111-111111111111',
+  articleB: '62222222-2222-4222-8222-222222222222',
+  feedbackA: '51111111-1111-4111-8111-111111111111',
 } as const;
 
 export const employeeUser: AuthenticatedUser = {
@@ -48,11 +60,32 @@ export const agentUser: AuthenticatedUser = {
   role: 'SupportAgent',
 };
 
+/**
+ * A second SupportAgent, used to exercise the knowledge base's authorship
+ * rule: an agent may edit their own articles but not a colleague's.
+ */
+export const otherAgentUser: AuthenticatedUser = {
+  id: IDS.otherAgent,
+  email: 'agent2@opsnow.local',
+  role: 'SupportAgent',
+};
+
+/**
+ * Publishing is restricted to TeamLead/Administrator, so the knowledge base
+ * is the first feature that needs a non-agent staff identity in tests.
+ */
+export const teamLeadUser: AuthenticatedUser = {
+  id: IDS.teamLead,
+  email: 'lead1@opsnow.local',
+  role: 'TeamLead',
+};
+
 export function summaryOf(user: AuthenticatedUser): UserSummary {
   const names: Record<string, [string, string]> = {
     [IDS.employee]: ['Grace', 'Kim'],
     [IDS.agent]: ['Priya', 'Shah'],
     [IDS.otherAgent]: ['Marco', 'Rossi'],
+    [IDS.teamLead]: ['Dana', 'Okafor'],
   };
   const [firstName, lastName] = names[user.id] ?? ['Test', 'User'];
   return { id: user.id, firstName, lastName, role: user.role as Role };
@@ -60,6 +93,8 @@ export function summaryOf(user: AuthenticatedUser): UserSummary {
 
 export const employeeSummary = summaryOf(employeeUser);
 export const agentSummary = summaryOf(agentUser);
+export const otherAgentSummary = summaryOf(otherAgentUser);
+export const teamLeadSummary = summaryOf(teamLeadUser);
 
 /**
  * Deliberately flat and alphabetical, exactly as `GET /ticket-categories`
@@ -238,6 +273,130 @@ export function makeAssignment(
     notes: null,
     assignedTo: employeeSummary,
     assignedBy: agentSummary,
+    ...overrides,
+  };
+}
+
+/**
+ * Deliberately flat, exactly as `GET /kb-categories` returns it — active
+ * categories only, and the same shape as `TicketCategory`.
+ */
+export const kbCategories: KnowledgeBaseCategory[] = [
+  {
+    id: IDS.kbCategoryAccounts,
+    name: 'Accounts',
+    parentId: null,
+    isActive: true,
+  },
+  {
+    id: IDS.kbCategoryPasswords,
+    name: 'Passwords',
+    parentId: IDS.kbCategoryAccounts,
+    isActive: true,
+  },
+  {
+    id: IDS.kbCategoryNetwork,
+    name: 'Network',
+    parentId: null,
+    isActive: true,
+  },
+];
+
+/**
+ * The FULL article, as `GET /kb-articles/:id` returns it. Published and
+ * authored by the agent by default; every other case is produced by
+ * overriding, so each test states exactly the situation it is about.
+ *
+ * `mockState.articles` holds these full records and the handlers derive the
+ * summary projection from them — the same way the backend does — so a test
+ * can never accidentally assert against a list row carrying `content`.
+ *
+ * `feedback` here is only a placeholder: the handlers DERIVE the two counts
+ * and `myFeedback` from `mockState.articleFeedback`, so a test that wants
+ * non-zero counts seeds feedback rows rather than overriding this field.
+ */
+export function makeArticle(
+  overrides: Partial<KnowledgeArticle> = {},
+): KnowledgeArticle {
+  return {
+    id: IDS.articleA,
+    title: 'How to reset your password',
+    slug: 'how-to-reset-your-password',
+    content:
+      'Open the self-service portal.\nChoose "Forgotten password".\nFollow the emailed link within 15 minutes.',
+    status: 'Published',
+    category: kbCategories[1],
+    author: agentSummary,
+    publishedAt: '2026-01-04T09:00:00.000Z',
+    viewCount: 42,
+    createdAt: '2026-01-03T09:00:00.000Z',
+    updatedAt: '2026-01-04T09:00:00.000Z',
+    feedback: { helpfulCount: 0, notHelpfulCount: 0, myFeedback: null },
+    ...overrides,
+  };
+}
+
+/** The summary projection of a full article — no `content`, plus `excerpt`
+ * and the two aggregate counts. Mirrors what the backend list route emits. */
+export function toArticleSummary(
+  article: KnowledgeArticle,
+): KnowledgeArticleSummary {
+  return {
+    id: article.id,
+    title: article.title,
+    slug: article.slug,
+    status: article.status,
+    excerpt: excerptOf(article.content),
+    category: article.category,
+    author: article.author,
+    publishedAt: article.publishedAt,
+    viewCount: article.viewCount,
+    updatedAt: article.updatedAt,
+    helpfulCount: article.feedback.helpfulCount,
+    notHelpfulCount: article.feedback.notHelpfulCount,
+  };
+}
+
+/** Mirrors `backend/src/knowledge-base/knowledge-base.text.ts`: the body
+ * flattened to one line and capped at 200 characters. */
+const EXCERPT_LENGTH = 200;
+
+function excerptOf(content: string): string {
+  const flattened = content.replace(/\s+/g, ' ').trim();
+  return flattened.length <= EXCERPT_LENGTH
+    ? flattened
+    : `${flattened.slice(0, EXCERPT_LENGTH).trimEnd()}...`;
+}
+
+/**
+ * One stored vote. `articleId` is mock-only bookkeeping: the wire shape
+ * (`ArticleFeedbackEntry`) carries no article id because every route that
+ * returns one is already scoped to a single article.
+ */
+export type MockArticleFeedback = ArticleFeedbackEntry & { articleId: string };
+
+export function makeArticleFeedback(
+  overrides: Partial<MockArticleFeedback> = {},
+): MockArticleFeedback {
+  return {
+    id: IDS.feedbackA,
+    articleId: IDS.articleA,
+    isHelpful: true,
+    comment: 'Clearer than the old runbook.',
+    createdAt: '2026-01-06T09:00:00.000Z',
+    user: employeeSummary,
+    ...overrides,
+  };
+}
+
+export function makeTicketKnowledgeArticle(
+  overrides: Partial<TicketKnowledgeArticle> = {},
+): TicketKnowledgeArticle {
+  return {
+    ticketId: IDS.ticketA,
+    linkedAt: '2026-01-05T09:30:00.000Z',
+    linkedBy: agentSummary,
+    article: toArticleSummary(makeArticle()),
     ...overrides,
   };
 }

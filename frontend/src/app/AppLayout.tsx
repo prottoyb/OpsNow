@@ -93,6 +93,26 @@ export function AppLayout() {
                     {isStaff ? 'Assets' : 'My assets'}
                   </NavLink>
                 </li>
+                <li>
+                  <NavLink
+                    to="/kb"
+                    className={({ isActive }) =>
+                      `${NAV_LINK_CLASSES} ${
+                        isActive
+                          ? 'font-semibold text-slate-900 underline'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    {/* Visible to every role, unlike SLA: an Employee needs
+                        the knowledge base most of all — searching it is the
+                        self-service half of the product. The label does not
+                        change by role because the list itself does not: what
+                        differs is only that an Employee sees Published
+                        articles. */}
+                    Knowledge base
+                  </NavLink>
+                </li>
                 {/* The SLA dashboard is staff-only; the route itself renders
                     "page not found" for anyone else. */}
                 {isStaff ? (

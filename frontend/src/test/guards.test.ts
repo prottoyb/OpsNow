@@ -134,9 +134,16 @@ describe('comment stripper', () => {
 describe('XSS guard', () => {
   /**
    * All user-generated content (ticket subjects, descriptions, comment
-   * bodies, category names) is rendered as React text nodes, which escape by
-   * construction. The APIs below are the only realistic way to lose that
-   * guarantee, so their absence is asserted rather than assumed.
+   * bodies, category names, knowledge article bodies and feedback comments)
+   * is rendered as React text nodes, which escape by construction. The APIs
+   * below are the only realistic way to lose that guarantee, so their absence
+   * is asserted rather than assumed.
+   *
+   * `dangerouslySetInnerHTML` is the load-bearing one for the knowledge base:
+   * an article body is author-written text that every Employee reads, so
+   * rendering it as HTML or Markdown would let any staff author plant script
+   * that runs in an Administrator's session. See `ArticleBody` in
+   * `features/knowledge-base/pages/ArticleDetailPage.tsx`.
    */
   const FORBIDDEN_PATTERNS: ReadonlyArray<{ label: string; pattern: RegExp }> = [
     { label: 'dangerouslySetInnerHTML', pattern: /dangerouslySetInnerHTML/ },
@@ -168,6 +175,23 @@ describe('XSS guard', () => {
     expect(
       offendersFor(ALL_SOURCE_FILES, /href\s*=\s*\{/),
       'href must be a string literal; use <Link to=...> for navigation',
+    ).toEqual([]);
+  });
+
+  /**
+   * The complement of the `dangerouslySetInnerHTML` ban: a Markdown or HTML
+   * renderer would reintroduce exactly the surface that ban exists to close,
+   * whether or not it happened to be wired up through `innerHTML`. Rich
+   * formatting is not a requirement anywhere in this app, so pulling one in
+   * is a decision that must be taken deliberately — and not by an import.
+   */
+  it('renders no user content through a markdown or HTML renderer', () => {
+    expect(
+      offendersFor(
+        ALL_SOURCE_FILES,
+        /from\s+['"](react-)?(markdown|marked|remark|rehype|showdown|snarkdown|micromark|html-react-parser|dompurify)[^'"]*['"]/i,
+      ),
+      'article bodies and comments are plain text; adding a markdown/HTML renderer reopens the stored-XSS surface',
     ).toEqual([]);
   });
 });

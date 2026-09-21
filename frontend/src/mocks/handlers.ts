@@ -1,10 +1,14 @@
 import { HttpResponse, http } from 'msw';
 import type {
+  ArticleFeedbackSummary,
   Asset,
   AssetAssignment,
   AssetStatus,
   AssetType,
   AuthenticatedUser,
+  KnowledgeArticle,
+  KnowledgeArticleStatus,
+  KnowledgeBaseCategory,
   SlaMetrics,
   SlaPolicy,
   Ticket,
@@ -12,17 +16,22 @@ import type {
   TicketCategory,
   TicketComment,
   TicketHistoryEntry,
+  TicketKnowledgeArticle,
 } from '../types/api';
 import { isStaffRole } from '../types/api';
+import type { MockArticleFeedback } from './fixtures';
 import {
   agentUser,
   assetTypes as defaultAssetTypes,
   categories as defaultCategories,
   employeeUser,
+  kbCategories as defaultKbCategories,
+  makeArticle,
   makeAsset,
   makeTicket,
   slaMetrics as defaultSlaMetrics,
   slaPolicies as defaultSlaPolicies,
+  toArticleSummary,
 } from './fixtures';
 
 /**
@@ -67,6 +76,12 @@ export interface MockState {
   assetTypes: AssetType[];
   assetAssignments: AssetAssignment[];
   ticketAssets: TicketAsset[];
+  /** Full articles; the list/link routes derive the summary projection. */
+  articles: KnowledgeArticle[];
+  kbCategories: KnowledgeBaseCategory[];
+  /** Every stored vote, across every article. */
+  articleFeedback: MockArticleFeedback[];
+  ticketArticles: TicketKnowledgeArticle[];
 }
 
 export const mockState: MockState = createInitialState();
@@ -87,6 +102,10 @@ function createInitialState(): MockState {
     assetTypes: [...defaultAssetTypes],
     assetAssignments: [],
     ticketAssets: [],
+    articles: [makeArticle()],
+    kbCategories: [...defaultKbCategories],
+    articleFeedback: [],
+    ticketArticles: [],
   };
 }
 
@@ -888,6 +907,484 @@ export const assetHandlers = [
   }),
 ];
 
+/* --------------------------- knowledge base --------------------------- */
+
+/**
+ * Mirrors `knowledgeArticleVisibilityWhere` — an Employee only ever sees
+ * PUBLISHED articles; staff see every article in any status. An out-of-scope
+ * article is a 404 and never a 403: a draft's mere existence is information
+ * about what the support team is working on.
+ */
+function visibleArticles(user: AuthenticatedUser): KnowledgeArticle[] {
+  if (isStaffRole(user.role)) {
+    return mockState.articles;
+  }
+  return mockState.articles.filter((a) => a.status === 'Published');
+}
+
+function findVisibleArticle(
+  user: AuthenticatedUser,
+  id: string,
+): KnowledgeArticle | null {
+  return visibleArticles(user).find((a) => a.id === id) ?? null;
+}
+
+/**
+ * The two aggregate counts plus the CALLER'S OWN vote — never anyone else's
+ * comment. Derived from the stored votes so a vote and the counts can never
+ * drift apart in a test.
+ */
+function feedbackSummaryFor(
+  articleId: string,
+  user: AuthenticatedUser,
+): ArticleFeedbackSummary {
+  const rows = mockState.articleFeedback.filter(
+    (f) => f.articleId === articleId,
+  );
+  const mine = rows.find((f) => f.user.id === user.id);
+  return {
+    helpfulCount: rows.filter((f) => f.isHelpful).length,
+    notHelpfulCount: rows.filter((f) => !f.isHelpful).length,
+    myFeedback: mine
+      ? {
+          isHelpful: mine.isHelpful,
+          comment: mine.comment,
+          createdAt: mine.createdAt,
+        }
+      : null,
+  };
+}
+
+function articleDetail(
+  article: KnowledgeArticle,
+  user: AuthenticatedUser,
+): KnowledgeArticle {
+  return { ...article, feedback: feedbackSummaryFor(article.id, user) };
+}
+
+/** Summary projection with the derived counts folded in. */
+function articleSummary(article: KnowledgeArticle, user: AuthenticatedUser) {
+  return toArticleSummary(articleDetail(article, user));
+}
+
+/** Mirrors `ALLOWED_ARTICLE_TRANSITIONS`; same status is an accepted no-op. */
+const ALLOWED_ARTICLE_TRANSITIONS: Record<
+  KnowledgeArticleStatus,
+  readonly KnowledgeArticleStatus[]
+> = {
+  Draft: ['Published', 'Archived'],
+  Published: ['Draft', 'Archived'],
+  Archived: ['Draft'],
+};
+
+function canChangeStatus(user: AuthenticatedUser): boolean {
+  return user.role === 'TeamLead' || user.role === 'Administrator';
+}
+
+function canEditAny(user: AuthenticatedUser): boolean {
+  return user.role === 'TeamLead' || user.role === 'Administrator';
+}
+
+/**
+ * Read routes are open to any authenticated user but row-scoped. Authoring is
+ * staff-only, with the finer-grained rules `@Roles` cannot express reproduced
+ * here purely to exercise the UI — the real boundary is
+ * `backend/src/knowledge-base/knowledge-base.service.ts`.
+ */
+export const knowledgeBaseHandlers = [
+  http.get(`${BASE}/kb-categories`, ({ request }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/kb-categories');
+    }
+    // Bare array, not a {data,total} envelope.
+    return HttpResponse.json(mockState.kbCategories.filter((c) => c.isActive));
+  }),
+
+  http.get(`${BASE}/kb-articles`, ({ request }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/kb-articles');
+    }
+
+    const url = new URL(request.url);
+    const q = url.searchParams.get('q')?.toLowerCase() ?? '';
+    const categoryId = url.searchParams.get('categoryId');
+    const status = url.searchParams.get('status');
+    const authorId = url.searchParams.get('authorId');
+    const limit = Number(url.searchParams.get('limit') ?? '20');
+    const offset = Number(url.searchParams.get('offset') ?? '0');
+
+    // Every filter only ever NARROWS the visibility-scoped set, exactly as
+    // the backend ANDs its visibility clause in: an Employee asking for
+    // `status=Draft` gets an empty page rather than a 403.
+    const filtered = visibleArticles(user).filter(
+      (a) =>
+        (!categoryId || a.category?.id === categoryId) &&
+        (!status || a.status === status) &&
+        (!authorId || a.author.id === authorId) &&
+        (!q ||
+          a.title.toLowerCase().includes(q) ||
+          a.content.toLowerCase().includes(q)),
+    );
+
+    return HttpResponse.json({
+      data: filtered
+        .slice(offset, offset + limit)
+        .map((a) => articleSummary(a, user)),
+      total: filtered.length,
+    });
+  }),
+
+  http.post(`${BASE}/kb-articles`, async ({ request }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/kb-articles');
+    }
+    if (!isStaffRole(user.role)) {
+      return errorResponse(
+        403,
+        'Only staff can create a knowledge article',
+        '/api/v1/kb-articles',
+      );
+    }
+
+    const body = (await request.json()) as Record<string, unknown>;
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+
+    const messages: string[] = [];
+    if (title === '') messages.push('title should not be empty');
+    if (content === '') messages.push('content should not be empty');
+    let category: KnowledgeBaseCategory | null = null;
+    if (typeof body.categoryId === 'string') {
+      category =
+        mockState.kbCategories.find(
+          (c) => c.id === body.categoryId && c.isActive,
+        ) ?? null;
+      if (!category) {
+        messages.push(
+          'categoryId does not refer to an active knowledge base category',
+        );
+      }
+    }
+    if (messages.length > 0) {
+      return badRequest(messages, '/api/v1/kb-articles');
+    }
+
+    const now = new Date().toISOString();
+    // Always born Draft, authored by the caller, with a server-derived slug.
+    const article = makeArticle({
+      id: `6${String(mockState.articles.length + 1).padStart(7, '0')}-1111-4111-8111-111111111111`,
+      title,
+      slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+      content,
+      status: 'Draft',
+      category,
+      author: {
+        id: user.id,
+        firstName: 'Test',
+        lastName: 'User',
+        role: user.role,
+      },
+      publishedAt: null,
+      viewCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    mockState.articles = [article, ...mockState.articles];
+    return HttpResponse.json(articleDetail(article, user), { status: 201 });
+  }),
+
+  http.get(`${BASE}/kb-articles/:id`, ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/kb-articles');
+    }
+    const id = String(params.id);
+    if (!UUID_RE.test(id)) {
+      // ParseUUIDPipe rejects before the handler runs: 400, not 404.
+      return badRequest(
+        'Validation failed (uuid is expected)',
+        `/api/v1/kb-articles/${id}`,
+      );
+    }
+    const article = findVisibleArticle(user, id);
+    if (!article) {
+      return errorResponse(
+        404,
+        'Knowledge article not found',
+        `/api/v1/kb-articles/${id}`,
+      );
+    }
+    return HttpResponse.json(articleDetail(article, user));
+  }),
+
+  http.patch(`${BASE}/kb-articles/:id`, async ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/kb-articles');
+    }
+    const id = String(params.id);
+    const path = `/api/v1/kb-articles/${id}`;
+    if (!isStaffRole(user.role)) {
+      return errorResponse(
+        403,
+        'Only staff can update a knowledge article',
+        path,
+      );
+    }
+    const article = findVisibleArticle(user, id);
+    if (!article) {
+      return errorResponse(404, 'Knowledge article not found', path);
+    }
+
+    const body = (await request.json()) as Record<string, unknown>;
+
+    // A SupportAgent owns what they wrote; editorial roles may correct
+    // anyone's. 403, not 404 — staff can legitimately READ this article.
+    if (!canEditAny(user) && article.author.id !== user.id) {
+      return errorResponse(
+        403,
+        'You can only edit knowledge articles you authored',
+        path,
+      );
+    }
+
+    let status = article.status;
+    let publishedAt = article.publishedAt;
+    if ('status' in body) {
+      if (!canChangeStatus(user)) {
+        return errorResponse(
+          403,
+          'Only a TeamLead or Administrator can publish, unpublish or archive a knowledge article',
+          path,
+        );
+      }
+      const next = body.status as KnowledgeArticleStatus;
+      // Submitting the CURRENT status is an accepted no-op here, unlike a
+      // ticket status change.
+      if (
+        next !== article.status &&
+        !ALLOWED_ARTICLE_TRANSITIONS[article.status].includes(next)
+      ) {
+        return badRequest(
+          `A knowledge article cannot move from ${article.status} to ${next}`,
+          path,
+        );
+      }
+      status = next;
+      if (next === 'Published') publishedAt = new Date().toISOString();
+    }
+
+    let category = article.category;
+    if ('categoryId' in body) {
+      // An explicit null is how an article leaves its category.
+      category =
+        body.categoryId === null
+          ? null
+          : (mockState.kbCategories.find((c) => c.id === body.categoryId) ??
+            article.category);
+    }
+
+    const updated: KnowledgeArticle = {
+      ...article,
+      title: typeof body.title === 'string' ? body.title : article.title,
+      content: typeof body.content === 'string' ? body.content : article.content,
+      category,
+      status,
+      publishedAt,
+      updatedAt: new Date().toISOString(),
+    };
+    mockState.articles = mockState.articles.map((a) =>
+      a.id === id ? updated : a,
+    );
+    return HttpResponse.json(articleDetail(updated, user));
+  }),
+
+  http.post(`${BASE}/kb-articles/:id/feedback`, async ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/kb-articles');
+    }
+    const id = String(params.id);
+    const path = `/api/v1/kb-articles/${id}/feedback`;
+    // Open to anyone who can SEE the article — including an Employee.
+    const article = findVisibleArticle(user, id);
+    if (!article) {
+      return errorResponse(
+        404,
+        'Knowledge article not found',
+        `/api/v1/kb-articles/${id}`,
+      );
+    }
+
+    const body = (await request.json()) as {
+      isHelpful?: unknown;
+      comment?: unknown;
+    };
+    if (typeof body.isHelpful !== 'boolean') {
+      return badRequest('isHelpful must be a boolean value', path);
+    }
+    const comment =
+      typeof body.comment === 'string' ? body.comment.trim() : null;
+
+    // Upsert: a re-vote REPLACES the previous one, and an omitted comment
+    // clears whatever note was there.
+    const existing = mockState.articleFeedback.find(
+      (f) => f.articleId === id && f.user.id === user.id,
+    );
+    const row: MockArticleFeedback = {
+      id:
+        existing?.id ??
+        `5${String(mockState.articleFeedback.length + 1).padStart(7, '0')}-1111-4111-8111-111111111111`,
+      articleId: id,
+      isHelpful: body.isHelpful,
+      comment,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+      user: {
+        id: user.id,
+        firstName: 'Test',
+        lastName: 'User',
+        role: user.role,
+      },
+    };
+    mockState.articleFeedback = existing
+      ? mockState.articleFeedback.map((f) => (f === existing ? row : f))
+      : [...mockState.articleFeedback, row];
+
+    return HttpResponse.json(feedbackSummaryFor(id, user), { status: 201 });
+  }),
+
+  http.get(`${BASE}/kb-articles/:id/feedback`, ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/kb-articles');
+    }
+    const id = String(params.id);
+    const path = `/api/v1/kb-articles/${id}/feedback`;
+    // Staff-only: the rows pair free text with the identity of whoever wrote
+    // it. The app is built never to ask as an Employee (the query is
+    // disabled), and `onUnhandledRequest: 'error'` would catch a slip.
+    if (!isStaffRole(user.role)) {
+      return errorResponse(403, 'Forbidden resource', path);
+    }
+    const article = findVisibleArticle(user, id);
+    if (!article) {
+      return errorResponse(
+        404,
+        'Knowledge article not found',
+        `/api/v1/kb-articles/${id}`,
+      );
+    }
+    const rows = mockState.articleFeedback
+      .filter((f) => f.articleId === id)
+      .map(({ articleId: _articleId, ...entry }) => entry);
+    return HttpResponse.json({ data: rows, total: rows.length });
+  }),
+
+  /* ------------------ ticket <-> knowledge-article links ----------------- */
+
+  http.get(`${BASE}/tickets/:id/knowledge-articles`, ({ request, params }) => {
+    const user = requireUser(request);
+    if (!user) {
+      return errorResponse(401, 'Unauthorized', '/api/v1/tickets');
+    }
+    const id = String(params.id);
+    const ticket = findVisibleTicket(user, id);
+    if (!ticket) {
+      return errorResponse(404, 'Ticket not found', `/api/v1/tickets/${id}`);
+    }
+    // Bare, unpaginated array, additionally scoped to the caller's ARTICLE
+    // visibility — an Employee never learns a Draft is attached.
+    const visibleIds = new Set(visibleArticles(user).map((a) => a.id));
+    return HttpResponse.json(
+      mockState.ticketArticles.filter(
+        (link) => link.ticketId === id && visibleIds.has(link.article.id),
+      ),
+    );
+  }),
+
+  http.post(
+    `${BASE}/tickets/:id/knowledge-articles`,
+    async ({ request, params }) => {
+      const user = requireUser(request);
+      if (!user) {
+        return errorResponse(401, 'Unauthorized', '/api/v1/tickets');
+      }
+      const id = String(params.id);
+      const path = `/api/v1/tickets/${id}/knowledge-articles`;
+      if (!isStaffRole(user.role)) {
+        return errorResponse(
+          403,
+          'Only staff can link a knowledge article to a ticket',
+          path,
+        );
+      }
+      const ticket = findVisibleTicket(user, id);
+      if (!ticket) {
+        return errorResponse(404, 'Ticket not found', `/api/v1/tickets/${id}`);
+      }
+      const body = (await request.json()) as { articleId?: string };
+      // Deliberately not the visibility clause: only staff reach this, and
+      // linking a Draft is a legitimate "we are writing this up" action.
+      const article = mockState.articles.find((a) => a.id === body.articleId);
+      if (!article) {
+        return badRequest(
+          'articleId does not refer to an existing knowledge article',
+          path,
+        );
+      }
+
+      const existing = mockState.ticketArticles.find(
+        (link) => link.ticketId === id && link.article.id === article.id,
+      );
+      if (existing) {
+        // Idempotent: re-linking returns the existing link.
+        return HttpResponse.json(existing, { status: 201 });
+      }
+
+      const link: TicketKnowledgeArticle = {
+        ticketId: id,
+        linkedAt: new Date().toISOString(),
+        linkedBy: {
+          id: user.id,
+          firstName: 'Test',
+          lastName: 'User',
+          role: user.role,
+        },
+        article: articleSummary(article, user),
+      };
+      mockState.ticketArticles = [link, ...mockState.ticketArticles];
+      return HttpResponse.json(link, { status: 201 });
+    },
+  ),
+
+  http.delete(
+    `${BASE}/tickets/:id/knowledge-articles/:articleId`,
+    ({ request, params }) => {
+      const user = requireUser(request);
+      if (!user) {
+        return errorResponse(401, 'Unauthorized', '/api/v1/tickets');
+      }
+      const id = String(params.id);
+      if (!isStaffRole(user.role)) {
+        return errorResponse(
+          403,
+          'Only staff can unlink a knowledge article from a ticket',
+          `/api/v1/tickets/${id}/knowledge-articles`,
+        );
+      }
+      const articleId = String(params.articleId);
+      // Idempotent: unlinking something that is not linked still succeeds.
+      mockState.ticketArticles = mockState.ticketArticles.filter(
+        (link) => !(link.ticketId === id && link.article.id === articleId),
+      );
+      return new HttpResponse(null, { status: 204 });
+    },
+  ),
+];
+
 /* ------------------------------- sla ------------------------------- */
 
 export const slaHandlers = [
@@ -932,4 +1429,9 @@ export const slaHandlers = [
   }),
 ];
 
-export const handlers = [...coreHandlers, ...assetHandlers, ...slaHandlers];
+export const handlers = [
+  ...coreHandlers,
+  ...assetHandlers,
+  ...knowledgeBaseHandlers,
+  ...slaHandlers,
+];

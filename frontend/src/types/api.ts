@@ -385,6 +385,223 @@ export interface AssignAssetInput {
   notes?: string;
 }
 
+/**
+ * Mirrors the `KnowledgeArticleStatus` Prisma enum.
+ *
+ * `Archived` is the retire path — there is no DELETE on an article — and no
+ * status is terminal. The legal moves are defined by
+ * `ALLOWED_ARTICLE_TRANSITIONS` in
+ * `backend/src/knowledge-base/knowledge-base.constants.ts` and mirrored in
+ * `features/knowledge-base/articleStatus.ts`; notably `Archived` may return
+ * to `Draft` but never straight to `Published`.
+ */
+export const KNOWLEDGE_ARTICLE_STATUSES = [
+  'Draft',
+  'Published',
+  'Archived',
+] as const;
+export type KnowledgeArticleStatus =
+  (typeof KNOWLEDGE_ARTICLE_STATUSES)[number];
+
+/**
+ * `GET /kb-categories` returns a BARE ARRAY of these (not `{data,total}`),
+ * active categories only.
+ *
+ * Shaped identically to `TicketCategory` on purpose — the two taxonomies are
+ * separate tables presenting the same flat id/name/parentId/isActive
+ * contract, so `buildCategoryTree` serves both.
+ */
+export interface KnowledgeBaseCategory {
+  id: string;
+  name: string;
+  parentId: string | null;
+  isActive: boolean;
+}
+
+/**
+ * The shape an article takes in a LIST, and wherever it is embedded in
+ * something else (today, a ticket <-> article link).
+ *
+ * It carries `excerpt` and deliberately NOT `content`: a body is capped at
+ * 50,000 characters, so a full page of rows would otherwise be megabytes for
+ * a client rendering one line each. The body is fetched deliberately, one
+ * article at a time, through `GET /kb-articles/:id`.
+ *
+ * `helpfulCount`/`notHelpfulCount` are aggregate and cheap to batch. The
+ * caller's OWN vote is not here — it is only useful on the detail view,
+ * where it arrives inside `KnowledgeArticle.feedback`.
+ */
+export interface KnowledgeArticleSummary {
+  id: string;
+  title: string;
+  /**
+   * Stable URL-safe identifier derived from the title at creation and frozen
+   * thereafter. Display only — every route in this API is id-based, so this
+   * is never used to look an article up.
+   */
+  slug: string;
+  status: KnowledgeArticleStatus;
+  /** Single-line plain-text preview of the body, built by the backend. */
+  excerpt: string;
+  category: KnowledgeBaseCategory | null;
+  author: UserSummary;
+  /**
+   * Instant of the most recent publication; survives a later unpublish or
+   * archive. Null if never published. ISO-8601 string over the wire — see the
+   * file header.
+   */
+  publishedAt: string | null;
+  viewCount: number;
+  /** ISO-8601 string over the wire — see the file header. */
+  updatedAt: string;
+  helpfulCount: number;
+  notHelpfulCount: number;
+}
+
+/** The caller's OWN vote on an article, echoed back so the widget can render
+ * in its current state. Always scoped to the requesting user. */
+export interface MyArticleFeedback {
+  isHelpful: boolean;
+  comment: string | null;
+  /** ISO-8601 string over the wire — see the file header. */
+  createdAt: string;
+}
+
+/**
+ * What EVERY role may know about an article's feedback: the two aggregate
+ * counts plus the caller's own vote. The free-text comments of OTHER readers,
+ * and who wrote them, are deliberately absent — they live behind the
+ * staff-only `GET /kb-articles/:id/feedback`.
+ */
+export interface ArticleFeedbackSummary {
+  helpfulCount: number;
+  notHelpfulCount: number;
+  myFeedback: MyArticleFeedback | null;
+}
+
+/**
+ * One row of the STAFF-ONLY feedback log (`GET /kb-articles/:id/feedback`,
+ * 403 for an Employee). A comment is unsolicited free text a colleague wrote
+ * about somebody's work believing only the support team would read it, so it
+ * is paired with its author's identity and must never be rendered to a
+ * non-staff viewer.
+ */
+export interface ArticleFeedbackEntry {
+  id: string;
+  isHelpful: boolean;
+  comment: string | null;
+  /** ISO-8601 string over the wire — see the file header. */
+  createdAt: string;
+  user: UserSummary;
+}
+
+/**
+ * The full article from `GET /kb-articles/:id` (also echoed by create and
+ * update). This is the only projection that carries `content`.
+ *
+ * `content` is plain, user-authored text and is rendered as a React text node
+ * with `whitespace-pre-wrap`. It is never parsed as Markdown or HTML — see
+ * the comment on `ArticleBody` in `pages/ArticleDetailPage.tsx`.
+ */
+export interface KnowledgeArticle {
+  id: string;
+  title: string;
+  /** See `KnowledgeArticleSummary.slug` — display only, never a lookup key. */
+  slug: string;
+  content: string;
+  status: KnowledgeArticleStatus;
+  category: KnowledgeBaseCategory | null;
+  author: UserSummary;
+  /** See `KnowledgeArticleSummary.publishedAt`. ISO-8601 string, or null. */
+  publishedAt: string | null;
+  /** Includes the read that returned this response, for a Published article.
+   * Staff previewing a Draft or Archived article do not move the counter. */
+  viewCount: number;
+  /** ISO-8601 string over the wire — see the file header. */
+  createdAt: string;
+  /** ISO-8601 string over the wire — see the file header. */
+  updatedAt: string;
+  feedback: ArticleFeedbackSummary;
+}
+
+/**
+ * A ticket <-> knowledge-article link, from
+ * `GET /tickets/:id/knowledge-articles`. Returns a BARE, UNPAGINATED array —
+ * the list is bounded by how many articles one ticket has. Already filtered
+ * to what the caller may see, so an Employee never learns a Draft is attached
+ * to their ticket.
+ */
+export interface TicketKnowledgeArticle {
+  ticketId: string;
+  /** ISO-8601 string over the wire — see the file header. */
+  linkedAt: string;
+  /** Null if the linking user has since been removed. */
+  linkedBy: UserSummary | null;
+  article: KnowledgeArticleSummary;
+}
+
+/**
+ * `status` and `authorId` are staff-oriented filters but are NOT role-gated
+ * by the backend: the caller's visibility clause is ANDed in as its own
+ * top-level clause, so a filter can only ever NARROW a result set. An
+ * Employee asking for `status=Draft` gets an empty page, not an error.
+ */
+export interface ListArticlesQuery {
+  /** Full-text search over title and content (Postgres websearch syntax).
+   * Max 200 chars. */
+  q?: string;
+  categoryId?: string;
+  status?: KnowledgeArticleStatus;
+  authorId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * `status`, `slug`, `authorId`, `publishedAt` and `viewCount` are
+ * deliberately absent. An article is always born `Draft`, authored by the
+ * caller, with a server-derived slug; `forbidNonWhitelisted: true` makes a
+ * client that sends any of them a 400 rather than silently ignoring it.
+ */
+export interface CreateArticleInput {
+  title: string;
+  content: string;
+  categoryId?: string;
+}
+
+/**
+ * The global ValidationPipe runs with `forbidNonWhitelisted: true`, so the
+ * body must contain only the fields being changed — never a whole article
+ * spread into a PATCH. `slug` is frozen at creation and has no field here.
+ *
+ * `categoryId` accepts an explicit `null` to move an article out of its
+ * category. That is a deliberate divergence from `UpdateTicketInput`, whose
+ * `categoryId` is `@IsOptional() @IsUUID()` with no null allowance and so can
+ * be set or changed but never cleared.
+ *
+ * `status` is restricted to TeamLead/Administrator: a SupportAgent sending
+ * this key is a 403 even on an article they wrote themselves, so it must
+ * never be included by the general edit form. Unlike a ticket status change,
+ * submitting the CURRENT status is an accepted no-op rather than an error.
+ */
+export interface UpdateArticleInput {
+  title?: string;
+  content?: string;
+  categoryId?: string | null;
+  status?: KnowledgeArticleStatus;
+}
+
+/**
+ * Upsert semantics: one person holds one current opinion of an article, so a
+ * re-vote REPLACES the previous one — including its comment. Omitting
+ * `comment` therefore CLEARS whatever note was left before, rather than
+ * preserving one written for a vote that no longer stands.
+ */
+export interface CreateArticleFeedbackInput {
+  isHelpful: boolean;
+  comment?: string;
+}
+
 export interface ListTicketsQuery {
   status?: TicketStatus;
   priority?: TicketPriority;
@@ -427,6 +644,9 @@ export const FIELD_LIMITS = {
   assetName: 150,
   serialNumber: 100,
   assetNotes: 5000,
+  articleTitle: 200,
+  articleContent: 50000,
+  articleFeedbackComment: 1000,
 } as const;
 
 export const PAGE_SIZE = 20;

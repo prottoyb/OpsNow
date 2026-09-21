@@ -16,6 +16,7 @@ import type {
 } from '../../../types/api';
 import { useAuth, useIsStaff } from '../../auth/useAuth';
 import { TicketAssetsPanel } from '../../assets/components/TicketAssetsPanel';
+import { TicketKnowledgeArticlesPanel } from '../../knowledge-base/components/TicketKnowledgeArticlesPanel';
 import { TicketSlaPanel } from '../../sla/components/TicketSlaPanel';
 import { AssignmentControl } from '../components/AssignmentControl';
 import { CommentForm } from '../components/CommentForm';
@@ -392,6 +393,15 @@ export function TicketDetailPage() {
             offered on top of the same rows (D4).
           */}
           <TicketAssetsPanel ticketId={ticket.id} requester={ticket.requester} />
+
+          {/*
+            Same construction as the assets panel above:
+            `GET /tickets/:id/knowledge-articles` is readable by anyone who
+            can already see the ticket, and the rows are additionally scoped
+            to the caller's article visibility, so an Employee never learns a
+            Draft is attached to their ticket.
+          */}
+          <TicketKnowledgeArticlesPanel ticketId={ticket.id} />
 
           <TicketMetadata ticket={ticket} />
         </aside>
