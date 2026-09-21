@@ -6,6 +6,7 @@ import type {
   AssetAssignment,
   AssetStatus,
   AssetType,
+  AuditLogEntry,
   AuthenticatedUser,
   CategoryAnalytics,
   KnowledgeArticle,
@@ -22,7 +23,14 @@ import type {
   TicketHistoryEntry,
   TicketKnowledgeArticle,
 } from '../types/api';
-import { isAnalyticsAgentRole, isStaffRole } from '../types/api';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_OUTCOMES,
+  isAnalyticsAgentRole,
+  isAuditReadRole,
+  isStaffRole,
+} from '../types/api';
 import type { MockArticleFeedback } from './fixtures';
 import {
   agentAnalytics as defaultAgentAnalytics,
@@ -100,6 +108,10 @@ export interface MockState {
    * for a role that must not ask, that nothing was requested at all.
    */
   analyticsRequests: { route: string; params: URLSearchParams }[];
+  /** Every stored audit row, in any order; the handler sorts newest first. */
+  auditLogs: AuditLogEntry[];
+  /** Every `GET /audit-logs` request served, with its query string. */
+  auditRequests: { params: URLSearchParams }[];
 }
 
 export const mockState: MockState = createInitialState();
@@ -129,6 +141,8 @@ function createInitialState(): MockState {
     categoryAnalytics: structuredClone(defaultCategoryAnalytics),
     agentAnalytics: structuredClone(defaultAgentAnalytics),
     analyticsRequests: [],
+    auditLogs: [],
+    auditRequests: [],
   };
 }
 
@@ -1508,10 +1522,76 @@ export const analyticsHandlers = [
   analyticsHandler('agents', () => mockState.agentAnalytics),
 ];
 
+/* ---------------------------- audit log ---------------------------- */
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Reproduces the backend's `ListAuditLogsQueryDto` validation (closed action /
+ * outcome / entity-type sets, UUIDs, ordered dates) so a hand-made request
+ * gets the real 400. Administrator-only, like the real route.
+ */
+function auditQueryErrors(params: URLSearchParams): string[] {
+  const errors: string[] = [];
+  const oneOf = (key: string, allowed: readonly string[]) => {
+    const value = params.get(key);
+    if (value !== null && !allowed.includes(value)) {
+      errors.push(`${key} must be one of the following values: ${allowed.join(', ')}`);
+    }
+  };
+  oneOf('action', AUDIT_ACTIONS);
+  oneOf('outcome', AUDIT_OUTCOMES);
+  oneOf('entityType', AUDIT_ENTITY_TYPES);
+  for (const key of ['actorId', 'entityId']) {
+    const value = params.get(key);
+    if (value !== null && !UUID.test(value)) errors.push(`${key} must be a UUID`);
+  }
+  const from = params.get('from');
+  const to = params.get('to');
+  if (from && to && Date.parse(from) > Date.parse(to)) {
+    errors.push('to must not be before from');
+  }
+  return errors;
+}
+
+export const auditHandlers = [
+  http.get(`${BASE}/audit-logs`, ({ request }) => {
+    const path = '/api/v1/audit-logs';
+    const user = requireUser(request);
+    if (!user) return errorResponse(401, 'Unauthorized', path);
+    if (!isAuditReadRole(user.role)) {
+      return errorResponse(403, 'You are not allowed to view the audit log', path);
+    }
+    const params = new URL(request.url).searchParams;
+    mockState.auditRequests.push({ params });
+    const errors = auditQueryErrors(params);
+    if (errors.length > 0) return badRequest(errors, path);
+
+    const from = params.get('from');
+    const to = params.get('to');
+    const filtered = mockState.auditLogs
+      .filter((e) => !params.get('actorId') || e.actor?.id === params.get('actorId'))
+      .filter((e) => !params.get('action') || e.action === params.get('action'))
+      .filter((e) => !params.get('entityType') || e.entityType === params.get('entityType'))
+      .filter((e) => !params.get('entityId') || e.entityId === params.get('entityId'))
+      .filter((e) => !params.get('outcome') || e.outcome === params.get('outcome'))
+      .filter((e) => !from || Date.parse(e.createdAt) >= Date.parse(from))
+      .filter((e) => !to || Date.parse(e.createdAt) <= Date.parse(to))
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const limit = Number(params.get('limit') ?? '20');
+    const offset = Number(params.get('offset') ?? '0');
+    return HttpResponse.json({
+      data: filtered.slice(offset, offset + limit),
+      total: filtered.length,
+    });
+  }),
+];
+
 export const handlers = [
   ...coreHandlers,
   ...assetHandlers,
   ...knowledgeBaseHandlers,
   ...slaHandlers,
   ...analyticsHandlers,
+  ...auditHandlers,
 ];

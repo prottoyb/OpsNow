@@ -3,6 +3,8 @@ import { AssetCreatePage } from '../features/assets/pages/AssetCreatePage';
 import { AssetDetailPage } from '../features/assets/pages/AssetDetailPage';
 import { AssetListPage } from '../features/assets/pages/AssetListPage';
 import { AnalyticsDashboardPage } from '../features/analytics/pages/AnalyticsDashboardPage';
+import { AuditLogPage } from '../features/audit/pages/AuditLogPage';
+import { useCanViewAudit } from '../features/audit/useAudit';
 import { LoginPage } from '../features/auth/LoginPage';
 import { useIsStaff } from '../features/auth/useAuth';
 import { ArticleCreatePage } from '../features/knowledge-base/pages/ArticleCreatePage';
@@ -87,6 +89,15 @@ function AnalyticsDashboardRoute() {
   return useIsStaff() ? <AnalyticsDashboardPage /> : <NotFoundPage />;
 }
 
+/**
+ * The audit log is Administrator-only on the backend (`GET /audit-logs`), a
+ * narrower gate than staff. Anyone else gets the ordinary "page not found"
+ * and the page never mounts, so its query never fires.
+ */
+function AuditLogRoute() {
+  return useCanViewAudit() ? <AuditLogPage /> : <NotFoundPage />;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -112,7 +123,8 @@ export function AppRoutes() {
         <Route path="/kb/:id" element={<ArticleDetailRoute />} />
         <Route path="/sla" element={<SlaDashboardRoute />} />
         <Route path="/dashboard" element={<AnalyticsDashboardRoute />} />
-        <Route path="*" element={<NotFoundPage />} />
+        <Route path="/audit" element={<AuditLogRoute />} />
+        <Route path="*"element={<NotFoundPage />} />
       </Route>
     </Routes>
   );

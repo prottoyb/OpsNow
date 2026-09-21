@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
+import { useCanViewAudit } from '../features/audit/useAudit';
 import { useAuth, useIsStaff } from '../features/auth/useAuth';
 
 const NAV_LINK_CLASSES =
@@ -16,6 +17,7 @@ const ROLE_LABELS: Record<string, string> = {
 export function AppLayout() {
   const { user, signOut } = useAuth();
   const isStaff = useIsStaff();
+  const canViewAudit = useCanViewAudit();
   const [signingOut, setSigningOut] = useState(false);
 
   async function handleSignOut() {
@@ -146,6 +148,24 @@ export function AppLayout() {
                       }
                     >
                       Dashboard
+                    </NavLink>
+                  </li>
+                ) : null}
+                {/* Administrator-only; the route renders "page not found"
+                    for anyone else, and the backend enforces it. */}
+                {canViewAudit ? (
+                  <li>
+                    <NavLink
+                      to="/audit"
+                      className={({ isActive }) =>
+                        `${NAV_LINK_CLASSES} ${
+                          isActive
+                            ? 'font-semibold text-slate-900 underline'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`
+                      }
+                    >
+                      Audit log
                     </NavLink>
                   </li>
                 ) : null}

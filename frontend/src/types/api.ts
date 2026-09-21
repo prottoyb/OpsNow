@@ -763,3 +763,91 @@ export interface AgentAnalytics {
 }
 
 export const PAGE_SIZE = 20;
+
+/* ---------------------------- audit log ---------------------------- */
+
+/**
+ * Mirrors `AUDIT_READ_ROLES` in `backend/src/audit/audit.constants.ts`:
+ * Administrator only, narrower than the staff gate. Decides what is OFFERED;
+ * the backend guard is what enforces it.
+ */
+export const AUDIT_READ_ROLES: readonly Role[] = ['Administrator'];
+
+export function isAuditReadRole(role: Role): boolean {
+  return AUDIT_READ_ROLES.includes(role);
+}
+
+/**
+ * Mirrors `AuditAction` in `backend/src/audit/audit.constants.ts` — a CLOSED
+ * list the read API validates its `action` filter against. A test
+ * (`features/audit/auditActions.test.ts`) parses the backend file and fails
+ * if this list drifts from it.
+ */
+export const AUDIT_ACTIONS = [
+  'auth.login.succeeded',
+  'auth.login.failed',
+  'auth.logout',
+  'auth.token.refreshed',
+  'auth.token.refresh_failed',
+  'auth.registered',
+  'ticket.created',
+  'ticket.updated',
+  'ticket.status_changed',
+  'ticket.priority_changed',
+  'ticket.assigned',
+  'ticket.unassigned',
+  'asset.assigned',
+  'asset.returned',
+  'access.denied',
+] as const;
+export type AuditActionName = (typeof AUDIT_ACTIONS)[number];
+
+/** Mirrors `AuditOutcome`. Stored in `metadata.outcome`, filterable. */
+export const AUDIT_OUTCOMES = ['success', 'failure', 'denied'] as const;
+export type AuditOutcome = (typeof AUDIT_OUTCOMES)[number];
+
+/** Mirrors `AuditEntityType`. */
+export const AUDIT_ENTITY_TYPES = ['User', 'Ticket', 'Asset'] as const;
+export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number];
+
+/**
+ * `AuditLogResponseDto`. Append-only: there is no update or delete route.
+ * `actor` is a user summary (no email) and is null for an event with no
+ * authenticated actor, such as a failed login. `ipAddress` / `userAgent` are
+ * recorded for authentication and permission-denial events only, so they are
+ * null for ticket and asset events. `metadata` is allow-listed by the
+ * backend but may still carry attacker-influenced strings (a submitted login
+ * identifier) — it is only ever rendered as text.
+ */
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  outcome: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  metadata: Record<string, unknown>;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  actor: UserSummary | null;
+}
+
+/** `GET /audit-logs` — the standard `{ data, total }` envelope. */
+export interface AuditLogList {
+  data: AuditLogEntry[];
+  total: number;
+}
+
+export interface ListAuditLogsQuery {
+  actorId?: string;
+  action?: AuditActionName;
+  entityType?: AuditEntityType;
+  entityId?: string;
+  outcome?: AuditOutcome;
+  /** ISO-8601 instant, inclusive. */
+  from?: string;
+  /** ISO-8601 instant, inclusive. Not before `from`. */
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
