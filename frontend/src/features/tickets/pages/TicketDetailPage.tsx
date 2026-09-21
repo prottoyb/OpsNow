@@ -15,6 +15,7 @@ import type {
   UpdateTicketInput,
 } from '../../../types/api';
 import { useAuth, useIsStaff } from '../../auth/useAuth';
+import { TicketAiAssistantPanel } from '../../ai/components/TicketAiAssistantPanel';
 import { TicketAssetsPanel } from '../../assets/components/TicketAssetsPanel';
 import { TicketKnowledgeArticlesPanel } from '../../knowledge-base/components/TicketKnowledgeArticlesPanel';
 import { TicketSlaPanel } from '../../sla/components/TicketSlaPanel';
@@ -191,6 +192,39 @@ export function TicketDetailPage() {
     });
   }
 
+  /*
+   * Applying an AI suggestion.
+   *
+   * These are deliberately the page's own ticket mutations, invoked from the
+   * assistant panel rather than owned by it: an accepted suggestion must go
+   * through exactly the same update path, validation, history write and
+   * 403/409 recovery as a change a human typed (ADR-023 Decision 5). The AI
+   * feature therefore contains no code that can alter a ticket.
+   */
+  function handleApplySuggestedCategory(categoryId: string) {
+    setNotice(null);
+    updateTicket.mutate(
+      { categoryId },
+      {
+        onSuccess: () =>
+          setNotice({
+            tone: 'success',
+            text: 'Suggested category applied.',
+          }),
+        onError: (error) => handleMutationError(error),
+      },
+    );
+  }
+
+  function handleApplySuggestedPriority(priority: TicketPriority) {
+    setNotice(null);
+    updatePriority.mutate(priority, {
+      onSuccess: () =>
+        setNotice({ tone: 'success', text: 'Suggested priority applied.' }),
+      onError: (error) => handleMutationError(error),
+    });
+  }
+
   function handleCommentSubmit(
     body: string,
     visibility: CommentVisibility,
@@ -339,6 +373,21 @@ export function TicketDetailPage() {
               </>
             )}
           </article>
+
+          {/*
+            Staff-only, and mounted here rather than in the aside because the
+            panel is substantial. `GET /ai/status` folds the role check into
+            `enabled`, so the panel needs no role logic of its own — this gate
+            exists so an Employee issues no AI request at all.
+          */}
+          {isStaff ? (
+            <TicketAiAssistantPanel
+              ticket={ticket}
+              applying={updateTicket.isPending || updatePriority.isPending}
+              onApplyCategory={handleApplySuggestedCategory}
+              onApplyPriority={handleApplySuggestedPriority}
+            />
+          ) : null}
 
           <Tabs
             tabs={tabs}
