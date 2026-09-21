@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
@@ -43,6 +44,7 @@ describe('AuthService', () => {
   };
   let jwtService: { sign: jest.Mock };
   let configService: { get: jest.Mock };
+  let audit: { record: jest.Mock };
   let service: AuthService;
 
   beforeEach(() => {
@@ -63,11 +65,14 @@ describe('AuthService', () => {
     jwtService = { sign: jest.fn(() => 'signed.jwt.token') };
     configService = { get: jest.fn((_key: string, def?: unknown) => def) };
 
+    audit = { record: jest.fn().mockResolvedValue(undefined) };
+
     service = new AuthService(
       prisma as unknown as PrismaService,
       usersService as unknown as UsersService,
       jwtService as any,
       configService as any,
+      audit as unknown as AuditService,
     );
   });
 
@@ -327,9 +332,182 @@ describe('AuthService', () => {
     });
   });
 
+  describe('audit events', () => {
+    const SENTINEL_PASSWORD = 'Sentinel-Wrong-P@ss-1';
+
+    function recorded() {
+      return audit.record.mock.calls.map((c) => c[0]);
+    }
+
+    it('records a failed login with the email and reason, and never the password', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+
+      await expect(
+        service.login(
+          { email: 'Ghost@OpsNow.local', password: SENTINEL_PASSWORD },
+          { ipAddress: '203.0.113.9', userAgent: 'jest' },
+        ),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      const [event] = recorded();
+      expect(event.action).toBe('auth.login.failed');
+      expect(event.actorId).toBeNull();
+      expect(event.metadata).toEqual({
+        reason: 'unknown_account',
+        identifier: 'ghost@opsnow.local',
+      });
+      expect(event.request).toEqual({
+        ipAddress: '203.0.113.9',
+        userAgent: 'jest',
+      });
+      expect(JSON.stringify(recorded())).not.toContain(SENTINEL_PASSWORD);
+    });
+
+    it('records bad_password against the targeted account', async () => {
+      const passwordHash = await argon2.hash('correct-password', {
+        type: argon2.argon2id,
+      });
+      usersService.findByEmail.mockResolvedValue(buildUser({ passwordHash }));
+
+      await expect(
+        service.login(
+          { email: 'jane@opsnow.local', password: SENTINEL_PASSWORD },
+          {},
+        ),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      const [event] = recorded();
+      expect(event.metadata.reason).toBe('bad_password');
+      expect(event.entityId).toBe('user-1');
+      expect(JSON.stringify(recorded())).not.toContain(SENTINEL_PASSWORD);
+      expect(JSON.stringify(recorded())).not.toContain(passwordHash);
+    });
+
+    it('records a disabled-account login as a failure', async () => {
+      const passwordHash = await argon2.hash('correct-password', {
+        type: argon2.argon2id,
+      });
+      usersService.findByEmail.mockResolvedValue(
+        buildUser({ passwordHash, isActive: false }),
+      );
+
+      await expect(
+        service.login(
+          { email: 'jane@opsnow.local', password: 'correct-password' },
+          {},
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(recorded()[0].metadata.reason).toBe('account_disabled');
+    });
+
+    it('records a successful login with no token material', async () => {
+      const passwordHash = await argon2.hash('correct-password', {
+        type: argon2.argon2id,
+      });
+      usersService.findByEmail.mockResolvedValue(buildUser({ passwordHash }));
+      prisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.login(
+        { email: 'jane@opsnow.local', password: 'correct-password' },
+        {},
+      );
+
+      const events = recorded();
+      expect(events).toHaveLength(1);
+      expect(events[0].action).toBe('auth.login.succeeded');
+      expect(events[0].actorId).toBe('user-1');
+      const out = JSON.stringify(events);
+      expect(out).not.toContain(result.refreshToken);
+      expect(out).not.toContain(result.accessToken);
+      expect(out).not.toContain('correct-password');
+    });
+
+    it('records token reuse as a refresh failure attributed to the account', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        userId: 'user-1',
+        revokedAt: new Date(),
+        replacedById: 'rt-2',
+        expiresAt: new Date(Date.now() + 100000),
+      });
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 3 });
+
+      await expect(service.refresh('stolen-raw-token', {})).rejects.toThrow();
+
+      const [event] = recorded();
+      expect(event.action).toBe('auth.token.refresh_failed');
+      expect(event.metadata).toEqual({ reason: 'reuse_detected' });
+      expect(JSON.stringify(event)).not.toContain('stolen-raw-token');
+    });
+
+    it('does not record an unknown refresh token (anonymous noise)', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue(null);
+      await expect(service.refresh('nonexistent', {})).rejects.toThrow();
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it('records a successful refresh', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        userId: 'user-1',
+        revokedAt: null,
+        replacedById: null,
+        expiresAt: new Date(Date.now() + 100000),
+      });
+      usersService.findById.mockResolvedValue(buildUser());
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      prisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.refresh('valid-raw-token', {});
+
+      const events = recorded();
+      expect(events).toHaveLength(1);
+      expect(events[0].action).toBe('auth.token.refreshed');
+      expect(JSON.stringify(events)).not.toContain(result.refreshToken);
+    });
+
+    it('records registration without the password or its hash', async () => {
+      usersService.create.mockImplementation(async (input) =>
+        buildUser({ email: input.email, passwordHash: input.passwordHash }),
+      );
+
+      await service.register({
+        email: 'jane@opsnow.local',
+        password: SENTINEL_PASSWORD,
+        firstName: 'Jane',
+        lastName: 'Doe',
+      });
+
+      const events = recorded();
+      expect(events[0].action).toBe('auth.registered');
+      const passedHash = usersService.create.mock.calls[0][0].passwordHash;
+      expect(JSON.stringify(events)).not.toContain(SENTINEL_PASSWORD);
+      expect(JSON.stringify(events)).not.toContain(passedHash);
+    });
+
+    it('records a logout attributed to the token owner, only when a token was revoked', async () => {
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      prisma.refreshToken.findUnique.mockResolvedValue({ userId: 'user-1' });
+
+      await service.logout('raw-cookie-value', { userAgent: 'jest' });
+
+      const [event] = recorded();
+      expect(event.action).toBe('auth.logout');
+      expect(event.actorId).toBe('user-1');
+      expect(JSON.stringify(event)).not.toContain('raw-cookie-value');
+
+      audit.record.mockClear();
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+      await service.logout('unknown-cookie');
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+  });
+
   describe('logout', () => {
     it('revokes only the matching, still-active token', async () => {
       prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      prisma.refreshToken.findUnique.mockResolvedValue({ userId: 'user-1' });
 
       await service.logout('some-raw-token');
 

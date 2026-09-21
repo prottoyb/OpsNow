@@ -11,6 +11,8 @@ import { Prisma, User } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { DEFAULT_REFRESH_TOKEN_TTL_SECONDS } from '../config/env.validation';
+import { AuditService } from '../audit/audit.service';
+import * as auditEvents from '../audit/audit.events';
 import { PrismaService } from '../prisma/prisma.service';
 import { SafeUser, toSafeUser, UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
@@ -41,6 +43,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly audit: AuditService,
   ) {
     this.refreshTtlSeconds = this.configService.get<number>(
       'REFRESH_TOKEN_TTL_SECONDS',
@@ -48,7 +51,10 @@ export class AuthService {
     );
   }
 
-  async register(dto: RegisterDto): Promise<{ user: SafeUser }> {
+  async register(
+    dto: RegisterDto,
+    meta: RequestMeta = {},
+  ): Promise<{ user: SafeUser }> {
     const passwordHash = await argon2.hash(dto.password, {
       type: argon2.argon2id,
     });
@@ -60,6 +66,7 @@ export class AuthService {
         firstName: dto.firstName,
         lastName: dto.lastName,
       });
+      await this.audit.record(auditEvents.registered(user.id, meta));
       return { user: toSafeUser(user) };
     } catch (error) {
       if (
@@ -85,15 +92,26 @@ export class AuthService {
       // same as a known email with the wrong password — otherwise
       // response timing leaks whether the account exists.
       await argon2.verify(await this.getDummyHash(), dto.password);
+      // Only the submitted EMAIL is handed to the audit builder — never the
+      // DTO, never the password.
+      await this.audit.record(
+        auditEvents.loginFailed(dto.email, 'unknown_account', null, meta),
+      );
       throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
     }
 
     const passwordValid = await argon2.verify(user.passwordHash, dto.password);
     if (!passwordValid) {
+      await this.audit.record(
+        auditEvents.loginFailed(dto.email, 'bad_password', user.id, meta),
+      );
       throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
     }
 
     if (!user.isActive) {
+      await this.audit.record(
+        auditEvents.loginFailed(dto.email, 'account_disabled', user.id, meta),
+      );
       // Safe to be specific here: reaching this branch already proves
       // the caller knows the correct password.
       throw new ForbiddenException('This account has been disabled');
@@ -102,6 +120,7 @@ export class AuthService {
     await this.usersService.touchLastLogin(user.id);
 
     const tokens = await this.issueTokens(user, meta);
+    await this.audit.record(auditEvents.loginSucceeded(user.id, meta));
     return { ...tokens, user: toSafeUser(user) };
   }
 
@@ -128,16 +147,25 @@ export class AuthService {
         this.logger.warn(
           `Refresh token reuse detected for user ${existing.userId}; all active refresh tokens revoked`,
         );
+        await this.audit.record(
+          auditEvents.refreshFailed(existing.userId, 'reuse_detected', meta),
+        );
       }
       throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
     }
 
     if (existing.expiresAt.getTime() <= Date.now()) {
+      await this.audit.record(
+        auditEvents.refreshFailed(existing.userId, 'expired', meta),
+      );
       throw new UnauthorizedException('Refresh token expired');
     }
 
     const user = await this.usersService.findById(existing.userId);
     if (!user || !user.isActive) {
+      await this.audit.record(
+        auditEvents.refreshFailed(existing.userId, 'user_inactive', meta),
+      );
       throw new UnauthorizedException(INVALID_REFRESH_TOKEN_MESSAGE);
     }
 
@@ -180,18 +208,36 @@ export class AuthService {
       }
     });
 
+    await this.audit.record(auditEvents.tokenRefreshed(user.id, meta));
+
     return {
       accessToken: this.signAccessToken(user),
       refreshToken: newRawToken,
     };
   }
 
-  async logout(rawToken: string): Promise<void> {
+  async logout(rawToken: string, meta: RequestMeta = {}): Promise<void> {
     const tokenHash = this.hashToken(rawToken);
-    await this.prisma.refreshToken.updateMany({
+    const revoked = await this.prisma.refreshToken.updateMany({
       where: { tokenHash, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    if (revoked.count === 0) {
+      // Unknown or already-revoked cookie: nothing happened, nothing to
+      // attribute, and recording it would let an anonymous caller write
+      // rows at will.
+      return;
+    }
+    // Attribute the logout to the token's owner. Looked up AFTER the
+    // revoke: updateMany returns only a count, and revoking does not
+    // remove the row.
+    const token = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      select: { userId: true },
+    });
+    if (token) {
+      await this.audit.record(auditEvents.loggedOut(token.userId, meta));
+    }
   }
 
   private async issueTokens(
