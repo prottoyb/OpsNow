@@ -70,6 +70,31 @@ export default async function globalSetup(): Promise<void> {
   let accessToken = '';
   for (const [name, account] of Object.entries(ACCOUNTS)) {
     const { status, json } = await postJson('/api/v1/auth/login', account);
+    if (status === 429) {
+      /*
+       * Called out separately because the symptom is misleading: the login
+       * is correct and the account is fine, the API is just refusing to
+       * answer. `POST /auth/login` is rate-limited to 10 attempts a minute
+       * per client by default (ADR-026), and this suite plus its four
+       * precondition logins go well past that against one local backend.
+       */
+      abort(
+        [
+          `The API answered 429 for ${account.email} (${name}) — the auth`,
+          '     throttle is rejecting this suite, not your credentials.',
+          '',
+          '     Start the backend with a raised limit for end-to-end runs, e.g.',
+          '',
+          '       cd backend && AUTH_THROTTLE_LIMIT=1000 npm run start:dev',
+          '',
+          '     (PowerShell: $env:AUTH_THROTTLE_LIMIT=1000; npm run start:dev)',
+          '',
+          '     Do NOT lower the shipped default in .env.example to make this',
+          '     pass — 10/minute is the production setting and is deliberate.',
+          '     If the throttle has already tripped, it clears within a minute.',
+        ].join('\n'),
+      );
+    }
     if (status !== 200) {
       abort(
         `The seeded account ${account.email} (${name}) could not sign in (HTTP ${status}).`,
