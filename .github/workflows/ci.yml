@@ -1,0 +1,368 @@
+name: CI
+
+# Phase 15. Every gate the project enforces locally, enforced here too, so a
+# branch cannot reach main with a check that only ever passed on someone's
+# laptop.
+#
+# There is deliberately no deployment job. No hosting target, registry or
+# credential exists for this project yet, and a workflow that pretends to
+# deploy — or that carries empty secret references waiting to be filled — is
+# worse than no workflow at all. See docs/deployment.md for exactly what has
+# to exist before one can be written.
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'fix/**'
+      - 'refactor/**'
+      - 'test/**'
+      - 'chore/**'
+      - 'docs/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Read-only. Nothing here publishes a package, writes a comment or pushes a
+# commit, so nothing needs more than this. Declared explicitly rather than
+# inherited, because the repository default may be write.
+permissions:
+  contents: read
+
+# A new push to the same branch supersedes the run in flight. `main` is
+# excluded from cancellation so its history of results stays complete.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  NODE_VERSION: '24'
+
+# Note on the literal credentials below: they are written out at each use
+# rather than held here, because GitHub does not expose the `env` context
+# inside a job's `services:` block. They are NOT secrets and must never be
+# reused anywhere. The database is a service container that exists for the
+# length of one job and is destroyed with it, and the JWT value only has to
+# satisfy the application's 32-character minimum. A real deployment supplies
+# both from a secret manager — see docs/deployment.md.
+
+jobs:
+  # ---------------------------------------------------------------- frontend
+  frontend:
+    name: Frontend — typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        # `npm ci`, never `npm install`: the lockfile is the contract, and a
+        # CI run that can resolve a different tree is not verifying the tree
+        # that will ship.
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit and component tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+
+  # ----------------------------------------------------------------- backend
+  backend:
+    name: Backend — prisma, typecheck, lint, unit, e2e, build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: opsnow
+          POSTGRES_PASSWORD: ci-not-a-secret
+          POSTGRES_DB: opsnow_ci
+        ports:
+          - 5432:5432
+        # Without this the job races the database: the container is "started"
+        # long before Postgres accepts connections.
+        options: >-
+          --health-cmd "pg_isready -U opsnow -d opsnow_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://opsnow:ci-not-a-secret@localhost:5432/opsnow_ci?schema=public
+      JWT_ACCESS_SECRET: ci-only-jwt-secret-value-at-least-32-chars
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        working-directory: backend
+        run: npm ci
+
+      - name: Validate the Prisma schema
+        working-directory: backend
+        run: npm run prisma:validate
+
+      - name: Generate the Prisma client
+        working-directory: backend
+        run: npm run prisma:generate
+
+      - name: Apply migrations
+        working-directory: backend
+        # `migrate deploy`, the same command the container image runs. It
+        # applies pending migrations in order and fails on drift; it never
+        # generates or resets, so CI proves the migrations a deployment will
+        # actually run.
+        run: npx prisma migrate deploy
+
+      - name: Confirm the schema is in sync with the migrations
+        working-directory: backend
+        # Catches a schema.prisma edited without a matching migration, which
+        # would otherwise pass every test here and then fail in deployment.
+        run: npx prisma migrate status
+
+      - name: Seed
+        working-directory: backend
+        # Seeding is REQUIRED here and FORBIDDEN locally, and the difference
+        # is the database, not the command. `prisma db seed` calls
+        # resetData(), which deletes every table — unacceptable against a
+        # developer's opsnow_dev, which holds their own work. This database
+        # is a service container created seconds ago and destroyed when the
+        # job ends. The e2e suites sign in as the seeded role accounts, so
+        # without this they cannot run at all.
+        run: npm run prisma:seed
+
+      - name: Typecheck
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: backend
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: backend
+        run: npm test
+
+      - name: End-to-end (API) tests
+        working-directory: backend
+        run: npm run test:e2e
+
+      - name: Production build
+        working-directory: backend
+        run: npm run build
+
+  # ------------------------------------------------------------ browser e2e
+  browser-e2e:
+    name: Playwright — full stack in a browser
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: opsnow
+          POSTGRES_PASSWORD: ci-not-a-secret
+          POSTGRES_DB: opsnow_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opsnow -d opsnow_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://opsnow:ci-not-a-secret@localhost:5432/opsnow_ci?schema=public
+      JWT_ACCESS_SECRET: ci-only-jwt-secret-value-at-least-32-chars
+      # The suite plus its four precondition logins go far past the shipped
+      # limit of 10 per minute (ADR-026). Raised, not disabled — the guard
+      # still runs on every request, and backend/test/auth-throttle.e2e-spec.ts
+      # in the job above is what proves the limit actually fires.
+      AUTH_THROTTLE_LIMIT: '10000'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci
+
+      - name: Prepare the database
+        working-directory: backend
+        run: |
+          npm run prisma:generate
+          npx prisma migrate deploy
+          npm run prisma:seed
+
+      - name: Build the API
+        working-directory: backend
+        run: npm run build
+
+      - name: Start the API and wait for it to be healthy
+        working-directory: backend
+        # The compiled build, not `start:dev`: it is what the container image
+        # runs, and it starts faster and more predictably than a watcher.
+        #
+        # NODE_ENV stays unset (so it defaults to development) on purpose.
+        # Under `production` the refresh cookie is marked Secure, and a
+        # browser will not send a Secure cookie back over plain http — so
+        # every session would die on reload and the suite would fail for a
+        # reason that has nothing to do with the code under test.
+        #
+        # Polls the real health endpoint rather than sleeping a fixed time,
+        # and prints the log if it never comes up, so a start-up failure is
+        # legible instead of being a timeout in the first Playwright test.
+        run: |
+          nohup node dist/main > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/api/v1/health > /dev/null; then
+              echo "API is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not become healthy within 60s. Log follows:"
+          cat "$RUNNER_TEMP/api.log" || true
+          exit 1
+
+      - name: Install the Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright
+        working-directory: frontend
+        # playwright.config.ts starts the Vite dev server itself, which
+        # carries the /api proxy the application depends on. `forbidOnly` is
+        # already keyed on CI, so a stray test.only fails the run.
+        run: npx playwright test
+
+      - name: Upload traces and the API log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure
+          path: |
+            frontend/test-results/
+            ${{ runner.temp }}/api.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------- security
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Audit backend runtime dependencies
+        working-directory: backend
+        # `--omit=dev` because a vulnerability in a test-only package is not
+        # shipped and is a different, lower-severity conversation. Fails on
+        # high and critical; introducing or keeping a known-vulnerable
+        # dependency needs the exception process in .claude/rules/security.md,
+        # not a flag change here.
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit frontend runtime dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+  # ------------------------------------------------------------------ images
+  docker:
+    name: Container images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the backend runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          target: runtime
+          push: false
+          load: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build the backend migrator image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          target: migrator
+          push: false
+          load: false
+          cache-from: type=gha,scope=backend-migrator
+          cache-to: type=gha,mode=max,scope=backend-migrator
+
+      - name: Build the frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          target: runtime
+          push: false
+          load: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Check the Compose file
+        # Renders the file with variables substituted and fails on anything
+        # malformed. The two required variables have no defaults by design, so
+        # they are supplied here purely to let the render complete — these
+        # values never reach a running container.
+        env:
+          POSTGRES_PASSWORD: ci-not-a-secret
+          JWT_ACCESS_SECRET: ci-only-jwt-secret-value-at-least-32-chars
+        run: docker compose config --quiet
+
+      - name: Check the nginx configuration
+        # The server block is only exercised inside the frontend image, so it
+        # is syntax-checked against the same nginx version that image uses.
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/frontend/nginx.conf:/etc/nginx/conf.d/opsnow.conf:ro" \
+            nginx:1.27-alpine nginx -t
