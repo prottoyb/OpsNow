@@ -512,6 +512,10 @@ describe('Tickets (e2e)', () => {
       ['limit=0', { limit: 0 }],
       ['limit=101', { limit: 101 }],
       ['offset=-1', { offset: -1 }],
+      // Regression (Phase 6a defect): absurd offsets used to answer 500.
+      ['offset=99999999999999999999', { offset: '99999999999999999999' }],
+      ['offset=1e30', { offset: '1e30' }],
+      ['offset=1000001', { offset: '1000001' }],
       ['an unknown query param', { foo: 'bar' }],
     ])('rejects GET /tickets with an invalid query (%s)', async (_label, query) => {
       const response = await request(app.getHttpServer())

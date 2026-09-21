@@ -209,6 +209,10 @@ describe('Audit logging (e2e)', () => {
       ['limit', '0'],
       ['limit', '101'],
       ['offset', '-1'],
+      // Regression: absurd offsets used to reach Prisma and answer 500.
+      ['offset', '99999999999999999999'],
+      ['offset', '1e30'],
+      ['offset', '1000001'],
     ])('400 for invalid %s=%s', async (key, value) => {
       const res = await call('get', '/audit-logs', adminToken).query({
         [key]: value,
