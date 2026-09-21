@@ -95,6 +95,10 @@ services:
       # process, so one hop of X-Forwarded-For is trustworthy and no more
       # (ADR-026).
       TRUST_PROXY_HOPS: "1"
+      # Swagger (ADR-027). Unset means OFF here, because NODE_ENV is
+      # production: /api/docs has no authentication and describes the whole
+      # API surface, so publishing it is an opt-in.
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
       # Off unless the operator opts in. The mock provider is rejected
       # outright when NODE_ENV=production, so this can only ever be
       # `disabled` or `anthropic` here.

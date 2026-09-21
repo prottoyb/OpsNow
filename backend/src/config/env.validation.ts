@@ -55,6 +55,13 @@ const schema = Joi.object({
    * ignored entirely.
    */
   TRUST_PROXY_HOPS: Joi.number().integer().min(0).max(10).default(0),
+  /**
+   * Publishes the Swagger UI and its OpenAPI document at `/api/docs`
+   * (ADR-027). No default here on purpose — `main.ts` supplies one that
+   * depends on NODE_ENV (on outside production, off in it), which a static
+   * default in this schema could not express.
+   */
+  SWAGGER_ENABLED: Joi.boolean().optional(),
   // AI assistant (ADR-023) — every key is optional, so validation passes
   // with none set. The mock provider fabricates output, so it is refused
   // outright in production.

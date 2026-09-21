@@ -3693,3 +3693,355 @@ application can detect that; it is stated plainly in `.env.example` and in
 
 the deployment documentation instead.
 
+
+
+
+
+\---
+
+
+
+\## ADR-027 — Production Deployment Posture: Origin Model, Swagger, Logging and Probes
+
+
+
+Status: Accepted
+
+
+
+Context:
+
+
+
+Phase 16 is the point at which the application has to answer questions it
+
+has so far been able to leave implicit, because everything ran on one
+
+developer's machine over http on localhost. No hosting target, no registry
+
+and no deployment credential exists for this project, so this ADR records
+
+the posture and the configuration; it does not record a deployment.
+
+
+
+Two things forced the issue. First, booting the compiled backend with
+
+`NODE_ENV=production` during Phase 14 showed `/api/docs` answering 200 —
+
+the complete API surface, unauthenticated. Second, Phase 14's Compose stack
+
+made the origin model concrete for the first time, and it needed to be
+
+written down rather than inferred from a proxy comment.
+
+
+
+Problem:
+
+
+
+Decide, and make configurable, the things a deployment gets wrong by
+
+default: where the API lives relative to the browser, what is published,
+
+what is logged, and what an orchestrator should probe.
+
+
+
+Decisions:
+
+
+
+1. The deployment model is SAME-ORIGIN, and a split-origin deployment is
+
+not supported.
+
+
+
+The browser must reach the API under the same origin as the application,
+
+at `/api`, through a reverse proxy. This is not a preference. Three
+
+independent mechanisms already in the codebase assume it:
+
+
+
+\- The refresh cookie is `SameSite=Strict` and scoped to
+
+`path=/api/v1/auth`, so a browser on a different origin never sends it.
+
+
+
+\- `AuthController.assertTrustedOrigin()` rejects any refresh or logout
+
+whose `Origin` host differs from its own `Host`.
+
+
+
+\- The frontend calls a hardcoded relative `/api/v1` and deliberately has
+
+no base-URL override (`frontend/src/lib/api/client.ts`,
+
+`frontend/vite.config.ts`).
+
+
+
+Serving the API on `api.example.com` and the app on `app.example.com` would
+
+require unpicking all three, which is a design change and not a deployment
+
+setting.
+
+
+
+2. CORS stays disabled in production, and that IS the production CORS
+
+configuration.
+
+
+
+Given Decision 1 there is no legitimate cross-origin browser caller, so
+
+there is no origin to allow-list. Adding a configurable allow-list would be
+
+worse than adding nothing: it would appear to enable a split-origin
+
+deployment that would then fail at the first token refresh, because CORS
+
+does not make a `SameSite=Strict` cookie travel. Non-browser API clients
+
+are unaffected — CORS is a browser mechanism and never applied to them.
+
+
+
+The enforcement that does exist is `assertTrustedOrigin()`, which is an
+
+origin check rather than a CORS policy, and it is kept.
+
+
+
+3. Swagger is OFF by default in production, and on by default everywhere
+
+else, overridable in both directions by `SWAGGER_ENABLED`.
+
+
+
+The generated document is a complete machine-readable description of every
+
+route, role gate, parameter and response shape, and `/api/docs` has no
+
+authentication in front of it. That is precisely what a developer wants and
+
+precisely what someone probing the application wants.
+
+
+
+The default is inverted by environment rather than being a single static
+
+value, because the failure modes are asymmetric: a developer who has to
+
+remember to turn documentation ON loses five minutes, and an operator who
+
+has to remember to turn it OFF publishes the API surface indefinitely
+
+without noticing. Enabling it in production is legitimate for an internal
+
+deployment, so it remains possible — but it logs a warning at start-up,
+
+because otherwise nothing would ever tell an operator it had happened.
+
+
+
+4. `debug` and `verbose` logging are dropped in production.
+
+
+
+They are noise at volume and cost money in a log pipeline, but the reason
+
+that actually decides it is that they are the levels most likely to carry
+
+request detail nobody reviewed for what it discloses. `error`, `warn` and
+
+`log` remain.
+
+
+
+The level set is chosen in the `NestFactory.create` call, which means it is
+
+read from `process.env.NODE_ENV` directly — ConfigService does not exist
+
+yet at that point.
+
+
+
+5. Liveness and readiness are separate endpoints.
+
+
+
+`GET /api/v1/health` is readiness: it pings the database, because an API
+
+that cannot reach Postgres can serve almost nothing. A load balancer uses
+
+it to decide whether to route traffic, and the container health check uses
+
+it for the same reason.
+
+
+
+`GET /api/v1/health/live` is liveness and checks nothing external. The
+
+separation is the point: an orchestrator RESTARTS a container that fails
+
+liveness, so a liveness probe that pings the database turns a brief
+
+Postgres blip into a rolling restart of every API instance — at exactly the
+
+moment the database is least able to absorb a reconnect storm.
+
+
+
+6. Both policy functions live in `main.policy.ts`, not inline in
+
+`bootstrap()`.
+
+
+
+`bootstrap()` cannot be imported without starting an application and a
+
+database, so anything written inline there is untestable, and "what does
+
+this deployment publish" is not a question to leave unverified.
+
+`main.policy.spec.ts` covers both.
+
+
+
+7. Security response headers are set at the edge, not by the application.
+
+
+
+`frontend/nginx.conf` sends `X-Content-Type-Options`, `Referrer-Policy`,
+
+`X-Frame-Options` and a Content-Security-Policy that permits no inline
+
+script, and those apply to the proxied `/api` responses too because the API
+
+location declares no `add_header` of its own and therefore inherits them.
+
+
+
+Helmet was considered and not added. It would duplicate what the edge
+
+already sends, add a dependency, and — given Decision 1, in which the API
+
+is never reachable except through that edge — protect nothing that is
+
+currently exposed. The trade-off is that a different topology must
+
+replicate the headers itself; that is stated in `docs/deployment.md` rather
+
+than solved by a dependency that would be dead weight in the topology this
+
+project actually has.
+
+
+
+8. Nothing is deployed, and no deployment automation is written.
+
+
+
+There is no hosting account, no managed Postgres, no registry and no
+
+credential. Writing a deployment workflow against a target that does not
+
+exist would mean inventing secret names and a provider's CLI invocation
+
+that nobody can run — plausible-looking configuration that has never been
+
+executed is worse than an honest gap. `docs/deployment.md` lists the exact
+
+external steps instead, and `README.md` distinguishes what is complete,
+
+what is locally deployment-ready, and what is genuinely deployed (nothing).
+
+
+
+Consequences:
+
+
+
+An operator can now bring the application up in a container with only
+
+`DATABASE_URL`, `JWT_ACCESS_SECRET` and a correct `TRUST_PROXY_HOPS`, and
+
+the defaults for everything else are the safe ones. The environment schema
+
+refuses to boot on a missing or too-short secret, a non-PostgreSQL
+
+`DATABASE_URL`, or a `TRUST_PROXY_HOPS` that is not a hop count.
+
+
+
+Choosing same-origin permanently forecloses a few things: a separately
+
+hosted API, a mobile client using the same cookie session, and any
+
+third-party browser integration. Access tokens are bearer tokens, so a
+
+non-browser client can still authenticate — it just cannot use the refresh
+
+cookie, and must re-authenticate when the access token expires.
+
+
+
+The reverse proxy becomes a load-bearing security component rather than a
+
+convenience. It sets the headers, it terminates TLS (which is what makes
+
+the `Secure` refresh cookie work at all), and it is the sole source of the
+
+`X-Forwarded-For` hop the application trusts. A deployment that replaces it
+
+must replicate all three.
+
+
+
+Risks:
+
+
+
+`TRUST_PROXY_HOPS` is the setting most likely to be wrong in a real
+
+deployment, and being wrong in either direction is a security problem, not
+
+a bug: too low and one attacker exhausts the login throttle for everybody,
+
+too high and a forged `X-Forwarded-For` buys a fresh throttle bucket and a
+
+chosen address in the audit log. Nothing in the application can detect the
+
+mistake. It is documented at every point an operator meets it.
+
+
+
+Turning Swagger on in production remains one environment variable away, and
+
+the start-up warning is the only thing standing between that and a
+
+permanently published API description. A deployment that does not read its
+
+own start-up logs gets no protection from it.
+
+
+
+The absence of a deployment pipeline means the first real deployment will
+
+be done by hand, which is exactly the kind of change
+
+`.claude/rules/engineering.md` says should be reproducible from the
+
+repository. That gap is accepted and recorded rather than papered over, and
+
+closing it is Phase 17 work that needs a target to exist first.
+

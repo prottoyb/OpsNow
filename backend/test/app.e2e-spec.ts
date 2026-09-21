@@ -29,6 +29,15 @@ describe('Health (e2e)', () => {
     expect(response.body).toHaveProperty('info');
   });
 
+  it('GET /api/v1/health/live answers 200 and is unauthenticated', async () => {
+    const response = await request(app.getHttpServer()).get(
+      '/api/v1/health/live',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'ok' });
+  });
+
   it('GET /api/v1/does-not-exist returns a structured 404', async () => {
     const response = await request(app.getHttpServer()).get(
       '/api/v1/does-not-exist',

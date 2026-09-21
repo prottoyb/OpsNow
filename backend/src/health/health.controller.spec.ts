@@ -45,4 +45,13 @@ describe('HealthController', () => {
     );
     expect(result).toBe(expected);
   });
+
+  it('answers liveness without touching the database', () => {
+    // The separation is the point: an orchestrator restarts a container
+    // that fails liveness, so if liveness pinged Postgres a brief database
+    // outage would roll every API instance at the worst possible moment.
+    expect(controller.live()).toEqual({ status: 'ok' });
+    expect(healthCheckService.check).not.toHaveBeenCalled();
+    expect(prismaIndicator.pingCheck).not.toHaveBeenCalled();
+  });
 });
