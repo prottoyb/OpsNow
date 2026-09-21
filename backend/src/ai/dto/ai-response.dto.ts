@@ -9,7 +9,18 @@ export class AiStatusResponseDto {
   })
   enabled!: boolean;
 
-  @ApiProperty({ enum: ['disabled', 'mock', 'anthropic'] })
+  /**
+   * Availability of the assistant TO THE CALLER, not the server configuration.
+   * An Employee always receives 'disabled' whatever the real mode is, so the
+   * response never discloses whether (or which) vendor is configured.
+   */
+  @ApiProperty({
+    enum: ['disabled', 'mock', 'anthropic'],
+    description:
+      'The assistant mode as available to the caller, not the server configuration. ' +
+      "An Employee always receives 'disabled' regardless of the real mode, so the " +
+      'vendor is never disclosed.',
+  })
   mode!: AiMode;
 }
 

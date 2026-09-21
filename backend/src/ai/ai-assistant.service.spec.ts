@@ -144,10 +144,18 @@ describe('AiAssistantService', () => {
         relatedArticles: [{ id: ART, title: 'DB Title', slug: 'db-title' }],
         mode: 'mock',
       });
-      // Triage candidates are assembled under the caller's own visibility.
+      // Triage candidates go through the caller's visibility, narrowed to Published.
       const query = knowledgeBase.findAll.mock.calls[0][0];
-      expect(query.status).toBeUndefined();
+      expect(query.status).toBe(KnowledgeArticleStatus.Published);
       expect(knowledgeBase.findAll.mock.calls[0][1]).toBe(agent);
+    });
+
+    it('re-reads recommended articles as Published only', async () => {
+      const { service, prisma } = setup(answering({ categoryId: CAT, priority: 'Low', articleIds: [ART] }));
+      await service.triage(TICKET_ID, agent);
+      expect(JSON.stringify(prisma.knowledgeBaseArticle.findMany.mock.calls[0][0].where)).toContain(
+        'Published',
+      );
     });
 
     it('degrades a hallucinated category to null and keeps the valid priority', async () => {
@@ -216,6 +224,43 @@ describe('AiAssistantService', () => {
     });
   });
 
+  describe('draft articles never reach the vendor (ADR-023 Decision 7)', () => {
+    const DRAFT_SENTINEL = 'SENTINEL-DRAFT-ARTICLE-5c2';
+
+    /** A KB whose findAll honours the status filter, like the real one. */
+    function withDraftArticle(provider: FakeProvider) {
+      const ctx = setup(provider);
+      ctx.knowledgeBase.findAll.mockImplementation((query: { status?: KnowledgeArticleStatus }) => {
+        const all = [
+          { id: ART, title: 'Published Title', excerpt: 'ex', status: KnowledgeArticleStatus.Published },
+          { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', title: DRAFT_SENTINEL, excerpt: DRAFT_SENTINEL, status: KnowledgeArticleStatus.Draft },
+        ];
+        const data = all.filter((a) => query.status === undefined || a.status === query.status);
+        return Promise.resolve({ data, total: data.length });
+      });
+      return ctx;
+    }
+
+    it.each([
+      ['triage', (s: AiAssistantService) => s.triage(TICKET_ID, teamLead), { categoryId: CAT, priority: 'Low', articleIds: [] }],
+      ['draft response', (s: AiAssistantService) => s.draftResponse(TICKET_ID, teamLead), { draft: 'ok', articleIds: [] }],
+      ['resolution summary', (s: AiAssistantService) => s.resolutionSummary(TICKET_ID, teamLead), { summary: 'ok' }],
+    ])('keeps a Draft article out of the %s prompt', async (_name, run, payload) => {
+      const provider = answering(payload);
+      const { service } = withDraftArticle(provider);
+      await run(service);
+      expect(provider.prompts).toHaveLength(1);
+      expect(JSON.stringify(provider.prompts[0])).not.toContain(DRAFT_SENTINEL);
+    });
+
+    it('does send the Published article, so the sentinel test is not vacuous', async () => {
+      const provider = answering({ categoryId: CAT, priority: 'Low', articleIds: [] });
+      const { service } = withDraftArticle(provider);
+      await service.triage(TICKET_ID, teamLead);
+      expect(provider.prompts[0].user).toContain('Published Title');
+    });
+  });
+
   describe('failure mapping', () => {
     it.each(['timeout', 'rate_limited', 'provider_error'] as const)(
       'passes the provider reason %s through',
@@ -265,6 +310,16 @@ describe('AiAssistantService', () => {
     function loggedText(): string {
       return JSON.stringify(spies.flatMap((spy) => spy.mock.calls));
     }
+
+    it('logs the class of an unexpected exception but never its message', async () => {
+      const { service } = setup(
+        new FakeProvider('anthropic', () => Promise.reject(new TypeError(`bug ${PROMPT_SENTINEL}`))),
+      );
+      await unavailableReason(service.triage(TICKET_ID, agent));
+      const text = loggedText();
+      expect(text).toContain('unexpectedError=TypeError');
+      expect(text).not.toContain(PROMPT_SENTINEL);
+    });
 
     it('never logs a prompt, a completion or a key, on success or failure', async () => {
       const ok = setup(
