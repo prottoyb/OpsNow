@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { CommentVisibility, Role, TicketPriority, TicketStatus } from '@prisma/client';
 import { AssetsService } from '../assets/assets.service';
+import { AuditService } from '../audit/audit.service';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -87,6 +88,7 @@ describe('TicketsService', () => {
     ticketComment: { create: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     $transaction: jest.Mock;
   };
+  let audit: { record: jest.Mock };
   let usersService: { findById: jest.Mock };
   let ticketCategoriesService: { findActiveById: jest.Mock };
   let slaService: {
@@ -150,6 +152,8 @@ describe('TicketsService', () => {
       unlinkFromTicket: jest.fn(),
     };
 
+    audit = { record: jest.fn().mockResolvedValue(undefined) };
+
     service = new TicketsService(
       prisma as unknown as PrismaService,
       usersService as unknown as UsersService,
@@ -157,6 +161,7 @@ describe('TicketsService', () => {
       slaService as unknown as SlaService,
       assetsService as unknown as AssetsService,
       knowledgeBaseService as unknown as KnowledgeBaseService,
+      audit as unknown as AuditService,
     );
   });
 
@@ -1217,6 +1222,135 @@ describe('TicketsService', () => {
           staffUser,
         );
       });
+    });
+  });
+
+  describe('audit events', () => {
+    const SENTINEL_TEXT = 'SENTINEL-FREE-TEXT-should-not-be-audited';
+
+    function recorded() {
+      return audit.record.mock.calls.map((c) => c[0]);
+    }
+
+    it('records ticket.created with identifiers, not subject/description text', async () => {
+      const created = buildTicket({
+        subject: SENTINEL_TEXT,
+        description: SENTINEL_TEXT,
+        priority: TicketPriority.High,
+      });
+      prisma.ticket.create.mockResolvedValue(created);
+      prisma.ticketHistory.create.mockResolvedValue({});
+      prisma.ticket.findFirst.mockResolvedValue(created);
+
+      await service.create(
+        { subject: SENTINEL_TEXT, description: SENTINEL_TEXT },
+        authUser(),
+      );
+
+      const [event] = recorded();
+      expect(event.action).toBe('ticket.created');
+      expect(event.actorId).toBe('employee-1');
+      expect(event.entityId).toBe('ticket-1');
+      expect(event.metadata.priority).toBe('High');
+      expect(JSON.stringify(recorded())).not.toContain(SENTINEL_TEXT);
+    });
+
+    it('records ticket.updated with the changed field NAMES only', async () => {
+      const before = buildTicket();
+      prisma.ticket.findFirst
+        .mockResolvedValueOnce(before)
+        .mockResolvedValueOnce(before);
+      prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+      prisma.ticketHistory.createMany.mockResolvedValue({});
+
+      await service.update(
+        'ticket-1',
+        { subject: SENTINEL_TEXT, description: SENTINEL_TEXT },
+        staffUser,
+      );
+
+      const [event] = recorded();
+      expect(event.action).toBe('ticket.updated');
+      expect(event.metadata).toEqual({
+        changedFields: ['subject', 'description'],
+      });
+      expect(JSON.stringify(recorded())).not.toContain(SENTINEL_TEXT);
+    });
+
+    it('records nothing for a no-op update', async () => {
+      prisma.ticket.findFirst.mockResolvedValue(buildTicket());
+      await service.update('ticket-1', { subject: 'Laptop broken' }, staffUser);
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it('records ticket.assigned then ticket.unassigned with old/new assignee ids', async () => {
+      const agent2 = buildUserRecord({ id: 'agent-2', role: Role.SupportAgent });
+      prisma.ticket.findFirst.mockResolvedValue(buildTicket({ assigneeId: null }));
+      usersService.findById.mockResolvedValue(agent2);
+      prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+      prisma.ticketHistory.create.mockResolvedValue({});
+
+      await service.assign('ticket-1', { assigneeId: 'agent-2' }, staffUser);
+      expect(recorded()[0].action).toBe('ticket.assigned');
+      expect(recorded()[0].metadata).toEqual({ from: null, to: 'agent-2' });
+
+      audit.record.mockClear();
+      prisma.ticket.findFirst.mockResolvedValue(
+        buildTicket({ assigneeId: 'agent-2' }),
+      );
+      await service.assign('ticket-1', { assigneeId: null }, staffUser);
+      expect(recorded()[0].action).toBe('ticket.unassigned');
+      expect(recorded()[0].metadata).toEqual({ from: 'agent-2', to: null });
+    });
+
+    it('does not record a failed (409) assignment', async () => {
+      prisma.ticket.findFirst.mockResolvedValue(buildTicket({ assigneeId: null }));
+      usersService.findById.mockResolvedValue(
+        buildUserRecord({ id: 'agent-2', role: Role.SupportAgent }),
+      );
+      prisma.ticket.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.assign('ticket-1', { assigneeId: 'agent-2' }, staffUser),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it('records ticket.priority_changed with old/new priority', async () => {
+      prisma.ticket.findFirst.mockResolvedValue(
+        buildTicket({ priority: TicketPriority.Medium }),
+      );
+      prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+      prisma.ticketHistory.create.mockResolvedValue({});
+
+      await service.updatePriority(
+        'ticket-1',
+        { priority: TicketPriority.Critical },
+        staffUser,
+      );
+
+      expect(recorded()[0].action).toBe('ticket.priority_changed');
+      expect(recorded()[0].metadata).toEqual({
+        from: 'Medium',
+        to: 'Critical',
+      });
+    });
+
+    it('records ticket.status_changed with old/new status', async () => {
+      prisma.ticket.findFirst.mockResolvedValue(
+        buildTicket({ status: TicketStatus.New }),
+      );
+      prisma.ticket.updateMany.mockResolvedValue({ count: 1 });
+      prisma.ticketHistory.createMany.mockResolvedValue({});
+
+      await service.updateStatus(
+        'ticket-1',
+        { status: TicketStatus.Open },
+        staffUser,
+      );
+
+      expect(recorded()[0].action).toBe('ticket.status_changed');
+      expect(recorded()[0].metadata).toEqual({ from: 'New', to: 'Open' });
     });
   });
 });

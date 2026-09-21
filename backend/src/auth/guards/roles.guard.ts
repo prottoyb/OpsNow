@@ -7,6 +7,8 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
 import type { Request } from 'express';
+import { accessDenied } from '../../audit/audit.events';
+import { AuditService } from '../../audit/audit.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { AuthenticatedUser } from '../types/jwt-payload.interface';
@@ -20,9 +22,12 @@ import { AuthenticatedUser } from '../types/jwt-payload.interface';
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly audit: AuditService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     // @Public() routes never populate request.user (JwtAuthGuard
     // short-circuits before Passport runs) — always let them through
     // rather than risk reading a role off an undefined user. A route
@@ -52,6 +57,22 @@ export class RolesGuard implements CanActivate {
     const user = request.user as AuthenticatedUser | undefined;
 
     if (!user || requiredRoles.length === 0 || !requiredRoles.includes(user.role)) {
+      if (user) {
+        // Authenticated but not permitted: a permission-sensitive event.
+        // (Unauthenticated callers never reach here — JwtAuthGuard 401s
+        // first — and have no identity to attribute anyway.) Only the role
+        // list, method and route PATTERN are recorded, never the URL/query.
+        await this.audit.record(
+          accessDenied(
+            user.id,
+            user.role,
+            requiredRoles,
+            request.method,
+            `${request.baseUrl ?? ''}${(request.route as { path?: string } | undefined)?.path ?? ''}`,
+            { ipAddress: request.ip, userAgent: request.headers?.['user-agent'] },
+          ),
+        );
+      }
       throw new ForbiddenException('Insufficient role permissions');
     }
 

@@ -45,8 +45,11 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  async register(@Body() dto: RegisterDto) {
-    const { user } = await this.authService.register(dto);
+  async register(@Body() dto: RegisterDto, @Req() req: Request) {
+    const { user } = await this.authService.register(
+      dto,
+      this.requestMeta(req),
+    );
     return user;
   }
 
@@ -90,7 +93,7 @@ export class AuthController {
     this.assertTrustedOrigin(req);
     const rawToken = req.cookies?.[REFRESH_COOKIE_NAME] as string | undefined;
     if (rawToken) {
-      await this.authService.logout(rawToken);
+      await this.authService.logout(rawToken, this.requestMeta(req));
     }
     res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
   }

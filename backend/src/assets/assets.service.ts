@@ -10,6 +10,8 @@ import { AssetStatus, Prisma } from '@prisma/client';
 import { AssetTypesService, toAssetTypeResponse } from '../asset-types/asset-types.service';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { assetVisibilityWhere as buildAssetVisibilityWhere } from '../common/asset-visibility';
+import * as auditEvents from '../audit/audit.events';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { isStaffRole } from '../tickets/tickets.constants';
 import { toUserSummary, UsersService } from '../users/users.service';
@@ -134,6 +136,7 @@ export class AssetsService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly assetTypesService: AssetTypesService,
+    private readonly audit: AuditService,
   ) {}
 
   async create(
@@ -405,6 +408,14 @@ export class AssetsService {
 
     this.logger.log(
       `Asset ${asset.id} assignment changed by user ${user.id}`,
+    );
+    await this.audit.record(
+      auditEvents.assetAssignmentChanged(
+        user.id,
+        asset.id,
+        expectedAssigneeId,
+        dto.assignedToId ?? null,
+      ),
     );
 
     return this.findOne(id, user);

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AssetStatus, Prisma, Role } from '@prisma/client';
 import { AssetTypesService } from '../asset-types/asset-types.service';
+import { AuditService } from '../audit/audit.service';
 import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { assetVisibilityWhere } from '../common/asset-visibility';
 import { PrismaService } from '../prisma/prisma.service';
@@ -107,6 +108,7 @@ describe('AssetsService', () => {
     };
     $transaction: jest.Mock;
   };
+  let audit: { record: jest.Mock };
   let usersService: { findById: jest.Mock };
   let assetTypesService: { findActiveById: jest.Mock };
 
@@ -136,10 +138,13 @@ describe('AssetsService', () => {
     usersService = { findById: jest.fn() };
     assetTypesService = { findActiveById: jest.fn() };
 
+    audit = { record: jest.fn().mockResolvedValue(undefined) };
+
     service = new AssetsService(
       prisma as unknown as PrismaService,
       usersService as unknown as UsersService,
       assetTypesService as unknown as AssetTypesService,
+      audit as unknown as AuditService,
     );
   });
 
@@ -1180,6 +1185,53 @@ describe('AssetsService', () => {
       expect(prisma.ticketAsset.deleteMany).toHaveBeenCalledWith({
         where: { ticketId: 'ticket-1', assetId: 'asset-1' },
       });
+    });
+  });
+
+  describe('audit events', () => {
+    it('records asset.assigned with old/new holder ids, then asset.returned', async () => {
+      const asset = buildAsset();
+      const target = buildUserRecord({ id: 'employee-2' });
+      prisma.asset.findFirst.mockResolvedValue(asset);
+      usersService.findById.mockResolvedValue(target);
+      prisma.asset.updateMany.mockResolvedValue({ count: 1 });
+      prisma.assetAssignment.updateMany.mockResolvedValue({ count: 0 });
+      prisma.assetAssignment.create.mockResolvedValue({});
+
+      await service.updateAssignment(
+        'asset-1',
+        { assignedToId: 'employee-2', notes: 'FREE-TEXT-NOTE' },
+        staffUser,
+      );
+
+      const [assigned] = audit.record.mock.calls[0];
+      expect(assigned.action).toBe('asset.assigned');
+      expect(assigned.entityId).toBe('asset-1');
+      expect(assigned.metadata).toEqual({ from: null, to: 'employee-2' });
+      expect(JSON.stringify(assigned)).not.toContain('FREE-TEXT-NOTE');
+
+      audit.record.mockClear();
+      prisma.asset.findFirst.mockResolvedValue(
+        buildAsset({
+          status: AssetStatus.Assigned,
+          currentAssigneeId: 'employee-2',
+        }),
+      );
+      await service.updateAssignment('asset-1', { assignedToId: null }, staffUser);
+      const [returned] = audit.record.mock.calls[0];
+      expect(returned.action).toBe('asset.returned');
+      expect(returned.metadata).toEqual({ from: 'employee-2', to: null });
+    });
+
+    it('records nothing when the assignment CAS is lost', async () => {
+      prisma.asset.findFirst.mockResolvedValue(buildAsset());
+      usersService.findById.mockResolvedValue(buildUserRecord({ id: 'employee-2' }));
+      prisma.asset.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.updateAssignment('asset-1', { assignedToId: 'employee-2' }, staffUser),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(audit.record).not.toHaveBeenCalled();
     });
   });
 });

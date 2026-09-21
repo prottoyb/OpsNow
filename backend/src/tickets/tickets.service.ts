@@ -18,6 +18,8 @@ import { AuthenticatedUser } from '../auth/types/jwt-payload.interface';
 import { ticketVisibilityWhere as buildTicketVisibilityWhere } from '../common/ticket-visibility';
 import { TicketKnowledgeArticleResponseDto } from '../knowledge-base/dto/ticket-knowledge-article-response.dto';
 import { KnowledgeBaseService } from '../knowledge-base/knowledge-base.service';
+import * as auditEvents from '../audit/audit.events';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlaService } from '../sla/sla.service';
 import { TicketSlaResponseDto } from '../sla/dto/ticket-sla-response.dto';
@@ -129,6 +131,7 @@ export class TicketsService {
     private readonly slaService: SlaService,
     private readonly assetsService: AssetsService,
     private readonly knowledgeBaseService: KnowledgeBaseService,
+    private readonly audit: AuditService,
   ) {}
 
   async create(
@@ -172,6 +175,10 @@ export class TicketsService {
 
       return ticket;
     });
+
+    // Audit AFTER the transaction has committed and outside it: AuditService
+    // never throws, so a failed audit write cannot fail or undo the create.
+    await this.audit.record(auditEvents.ticketCreated(user.id, created));
 
     return this.findOne(created.id, user);
   }
@@ -299,6 +306,22 @@ export class TicketsService {
       await tx.ticketHistory.createMany({ data: historyRows });
     });
 
+    // Which fields changed, not their text (see audit.events.ts); the
+    // category is an id, so its old/new values are kept.
+    await this.audit.record(
+      auditEvents.ticketUpdated(
+        user.id,
+        ticket.id,
+        historyRows.map((row) => row.fieldName),
+        data.categoryId !== undefined
+          ? {
+              from: ticket.categoryId,
+              to: (data.categoryId as string | null) ?? null,
+            }
+          : undefined,
+      ),
+    );
+
     return this.findOne(id, user);
   }
 
@@ -363,6 +386,14 @@ export class TicketsService {
 
     this.logger.log(
       `Ticket ${ticket.id} assignment changed by user ${user.id}`,
+    );
+    await this.audit.record(
+      auditEvents.ticketAssignmentChanged(
+        user.id,
+        ticket.id,
+        expectedCurrent,
+        dto.assigneeId,
+      ),
     );
 
     return this.findOne(id, user);
@@ -430,6 +461,14 @@ export class TicketsService {
     });
 
     this.logger.log(`Ticket ${ticket.id} priority changed by user ${user.id}`);
+    await this.audit.record(
+      auditEvents.ticketPriorityChanged(
+        user.id,
+        ticket.id,
+        ticket.priority,
+        dto.priority,
+      ),
+    );
 
     return this.findOne(id, user);
   }
@@ -746,6 +785,14 @@ export class TicketsService {
 
     this.logger.log(
       `Ticket ${ticket.id} status changed ${currentStatus} -> ${newStatus} by user ${user.id}`,
+    );
+    await this.audit.record(
+      auditEvents.ticketStatusChanged(
+        user.id,
+        ticket.id,
+        currentStatus,
+        newStatus,
+      ),
     );
 
     return this.findOne(ticket.id, user);
