@@ -9,9 +9,11 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiTooManyRequestsResponse } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import type { CookieOptions, Request, Response } from 'express';
 import { DEFAULT_REFRESH_TOKEN_TTL_SECONDS } from '../config/env.validation';
 import { AuthService } from './auth.service';
@@ -23,6 +25,20 @@ import { AuthenticatedUser } from './types/jwt-payload.interface';
 
 const REFRESH_COOKIE_NAME = 'refresh_token';
 const REFRESH_COOKIE_PATH = '/api/v1/auth';
+
+/*
+ * `@UseGuards(ThrottlerGuard)` below is applied to the three routes that
+ * either accept credentials or mint a token, and to no others (ADR-026).
+ *
+ * `GET /auth/me` is excluded on purpose: an authenticated SPA calls it on
+ * every load, and it reveals nothing the caller does not already hold a
+ * valid access token for. `POST /auth/logout` is excluded because
+ * throttling it could strand a user in a session they are trying to end.
+ *
+ * The throttle counts every attempt, successful or not. Counting only
+ * failures would let an attacker reset the window by interleaving logins
+ * to an account they already control.
+ */
 
 @ApiTags('auth')
 @Controller('auth')
@@ -44,6 +60,8 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @ApiTooManyRequestsResponse({ description: 'Auth endpoint rate limit exceeded.' })
   @Post('register')
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
     const { user } = await this.authService.register(
@@ -54,6 +72,8 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @ApiTooManyRequestsResponse({ description: 'Auth endpoint rate limit exceeded.' })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -67,6 +87,8 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @ApiTooManyRequestsResponse({ description: 'Auth endpoint rate limit exceeded.' })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(

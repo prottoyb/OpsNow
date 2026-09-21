@@ -11,6 +11,6 @@
     "^.+\\.ts$": "ts-jest"
   },
   "setupFiles": [
-    "<rootDir>/support/jest-ai-env.ts"
+    "<rootDir>/support/jest-env.ts"
   ]
 }

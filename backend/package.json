@@ -34,6 +34,7 @@
     "@nestjs/platform-express": "^11.2.3",
     "@nestjs/swagger": "^11.4.7",
     "@nestjs/terminus": "^11.1.1",
+    "@nestjs/throttler": "^6.7.0",
     "@prisma/client": "^6.1.0",
     "argon2": "^0.41.1",
     "class-transformer": "^0.5.1",
@@ -89,7 +90,7 @@
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
     "setupFiles": [
-      "<rootDir>/../test/support/jest-ai-env.ts"
+      "<rootDir>/../test/support/jest-env.ts"
     ]
   }
 }

@@ -3355,3 +3355,341 @@ account of a ticket's history — `ticket_history` remains the authority for
 
 that.
 
+
+
+
+
+\---
+
+
+
+\## ADR-026 — Auth Endpoint Rate Limiting and Proxy Trust
+
+
+
+Status: Accepted
+
+
+
+Context:
+
+
+
+Phase 4 shipped authentication with no brute-force protection and recorded
+
+that gap as a deferred task in TASKS.md, flagged by that phase's architect
+
+review as a real exposure. Phase 13 is the hardening phase, so it is the
+
+place to close it.
+
+
+
+`POST /auth/login` is an unauthenticated endpoint that returns a different
+
+outcome for a correct password than for an incorrect one. Argon2 makes each
+
+guess expensive for the server, which is a cost problem as well as a
+
+security one, but it does not stop an attacker working through a credential
+
+dump at whatever rate the network allows. `POST /auth/register` lets an
+
+unauthenticated caller create rows, and `POST /auth/refresh` mints new
+
+access tokens from a cookie, so grinding refresh tokens is a second path to
+
+the same prize.
+
+
+
+A second, entangled question had to be answered at the same time. Any
+
+IP-based control is only as good as the server's idea of the client's
+
+address, and `req.ip` was already being persisted into every audit row
+
+(ADR-025) with `trust proxy` never configured — recorded as a deferred item
+
+in Phase 11.
+
+
+
+Problem:
+
+
+
+Add a brute-force control to the credential-bearing endpoints without
+
+degrading the authenticated API, without making the existing e2e suites
+
+unreliable, and without introducing an IP-based decision that a client can
+
+trivially forge.
+
+
+
+Options considered:
+
+
+
+1. Account lockout after N failed attempts. Rejected: it converts a
+
+guessing attack into a denial-of-service against a named user, and it needs
+
+a persisted counter, an unlock path and an operator procedure — a lot of
+
+new surface for a portfolio-scale application.
+
+
+
+2. A global rate limit on the whole API, via `APP_GUARD`. Rejected: the
+
+exposure is specific to endpoints that accept credentials or mint tokens.
+
+An agent working a queue of tickets makes many authenticated requests a
+
+minute quite legitimately, and a global limit would eventually rate-limit
+
+real work in order to protect endpoints the limit was never about.
+
+
+
+3. `@nestjs/throttler` applied to the three unauthenticated auth routes
+
+only. Chosen.
+
+
+
+4. A hand-rolled in-memory counter. Rejected: it is the same amount of
+
+storage and expiry logic, with none of the guard/decorator integration, and
+
+`@nestjs/throttler` is a first-party Nest package already aligned with the
+
+project's stack (`npm audit` reports no vulnerability, and it adds no
+
+transitive runtime dependency of note).
+
+
+
+Decisions:
+
+
+
+1. `ThrottlerGuard` is applied per route, in `AuthController`, and NOT
+
+registered as an `APP_GUARD`.
+
+
+
+`POST /auth/login`, `POST /auth/register` and `POST /auth/refresh` carry
+
+`@UseGuards(ThrottlerGuard)`. `GET /auth/me` deliberately does not: an
+
+authenticated SPA calls it on every load, and it discloses nothing the
+
+caller does not already hold a valid access token for. `POST /auth/logout`
+
+deliberately does not either, because throttling it could strand a user in
+
+a session they are trying to end — and ending a session is the safe
+
+direction to fail in.
+
+
+
+2. Every attempt is counted, not only the failures.
+
+
+
+Counting failures alone would let an attacker reset the window by
+
+interleaving successful logins to an account they already control.
+
+
+
+3. Each throttled route has its own counter.
+
+
+
+This is a consequence of how `ThrottlerGuard` derives its storage key
+
+(class plus handler), and it is kept rather than worked around. It means a
+
+noisy refresh loop cannot lock a user out of logging in. It also means the
+
+budget available to an attacker across all three routes is three times the
+
+configured limit rather than one times it; that is accepted, because the
+
+three routes are not interchangeable — only `login` tests a password.
+
+
+
+4. The limit and window are environment variables with production defaults
+
+of 10 attempts per 60 seconds, validated by Joi as positive integers.
+
+
+
+There is deliberately no value that switches the throttle off. Ten attempts
+
+a minute is far above what a person fumbling a password produces and far
+
+below what an online guessing attack needs to be worth running. It is
+
+configurable because the correct number depends on how many real users sit
+
+behind one egress IP, which is a deployment fact rather than a design one.
+
+
+
+5. `trust proxy` is configured from `TRUST_PROXY_HOPS`, a hop COUNT, and
+
+never Express' boolean `true`.
+
+
+
+Express' `true` believes the left-most `X-Forwarded-For` entry, which any
+
+client can set. That single setting would defeat both controls that depend
+
+on `req.ip`: an attacker would get a fresh throttle bucket per forged
+
+header, and would choose what address the audit log records. A hop count
+
+makes Express take the n-th address from the right — the one the outermost
+
+proxy the operator actually controls appended. The default is 0, meaning
+
+the app is reached directly and the header is ignored entirely, so a
+
+deployment that forgets to set it fails safe (everyone shares one bucket)
+
+rather than unsafe (everyone gets their own forged bucket).
+
+
+
+It is applied in `configureApp`, not `main.ts`, so the e2e bootstrap gets
+
+the identical configuration and the two cannot drift.
+
+
+
+6. The existing e2e suites run with a raised limit, and the control is
+
+covered by a suite of its own.
+
+
+
+Every e2e suite authenticates several role accounts in `beforeAll`, and
+
+`jest --runInBand` runs them back to back well inside a 60-second window,
+
+so a production-sized limit would produce 429s that look like defects in
+
+unrelated code. `test/support/jest-env.ts` therefore raises
+
+`AUTH_THROTTLE_LIMIT`, using `??=` so an explicit value still wins.
+
+
+
+Raising a threshold is not the same as disabling a control, and this
+
+decision is what keeps the distinction honest: the guard is still mounted
+
+and still executing on every auth route in every suite, and
+
+`test/auth-throttle.e2e-spec.ts` boots its own application with a limit of
+
+3 and asserts the 429 actually fires, that it keeps firing, that the body
+
+leaks nothing, that `/auth/me` and `/auth/logout` are unaffected, and that
+
+no account or session is created along the way.
+
+
+
+That spec loads `AppModule` with `await import()` inside `beforeAll` rather
+
+than at the top of the file. This is load-bearing: `ConfigModule.forRoot()`
+
+runs `validateEnv(process.env)` synchronously while `app.module.ts` is
+
+being evaluated, so a top-level import would freeze the configuration
+
+before the spec could lower the limit, and the suite would pass for the
+
+wrong reason.
+
+
+
+Consequences:
+
+
+
+The throttle counter is the default in-memory store, so it is per process.
+
+With more than one backend replica the effective limit is the configured
+
+limit multiplied by the replica count. That is the same single-instance
+
+assumption ADR-023 already records for the AI concurrency cap, and moving
+
+either to a shared store is the same piece of work.
+
+
+
+A 429 is rejected by the guard before the service runs, so it writes no
+
+audit row. Blocked attempts are therefore invisible in the audit log, while
+
+the attempts leading up to the block are recorded as ordinary failed
+
+logins. This is the same property already tracked from Phase 11 — rejected
+
+operations are not audited — but it matters more here, because the audit
+
+log is where an operator would look for evidence of an attack.
+
+
+
+Adding `TRUST_PROXY_HOPS` makes a previously invisible assumption explicit,
+
+which means a deployment behind a load balancer now has one more thing it
+
+must get right. Deployment documentation states the value to use, and the
+
+default is the safe one.
+
+
+
+Risks:
+
+
+
+If a large number of genuine users share one egress IP — a corporate NAT is
+
+the obvious case — 10 attempts per minute is shared between all of them,
+
+and a Monday-morning burst of mistyped passwords could produce 429s for
+
+people who have done nothing wrong. The mitigation is the configuration
+
+knob rather than a design change, and the failure is visible and temporary.
+
+
+
+An operator who sets `TRUST_PROXY_HOPS` higher than the real number of
+
+proxies reintroduces exactly the forgery the hop count exists to prevent,
+
+because Express will then reach past the addresses the infrastructure
+
+appended into the part of the header the client controls. Nothing in the
+
+application can detect that; it is stated plainly in `.env.example` and in
+
+the deployment documentation instead.
+
