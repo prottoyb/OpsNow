@@ -131,6 +131,24 @@ export function AppLayout() {
                     </NavLink>
                   </li>
                 ) : null}
+                {/* Staff-only, like SLA; the route renders "page not found"
+                    for anyone else. */}
+                {isStaff ? (
+                  <li>
+                    <NavLink
+                      to="/dashboard"
+                      className={({ isActive }) =>
+                        `${NAV_LINK_CLASSES} ${
+                          isActive
+                            ? 'font-semibold text-slate-900 underline'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`
+                      }
+                    >
+                      Dashboard
+                    </NavLink>
+                  </li>
+                ) : null}
               </ul>
             </nav>
           </div>

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AssetCreatePage } from '../features/assets/pages/AssetCreatePage';
 import { AssetDetailPage } from '../features/assets/pages/AssetDetailPage';
 import { AssetListPage } from '../features/assets/pages/AssetListPage';
+import { AnalyticsDashboardPage } from '../features/analytics/pages/AnalyticsDashboardPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { useIsStaff } from '../features/auth/useAuth';
 import { ArticleCreatePage } from '../features/knowledge-base/pages/ArticleCreatePage';
@@ -76,6 +77,16 @@ function ArticleCreateRoute() {
   return useIsStaff() ? <ArticleCreatePage /> : <NotFoundPage />;
 }
 
+/**
+ * The analytics dashboard is staff-only on the backend (`GET /analytics/*`).
+ * Same precedent as `SlaDashboardRoute`: anyone else gets the ordinary "page
+ * not found" rather than a page that mounts and then fails. The agent tab
+ * inside it is narrower again and gated in the page itself.
+ */
+function AnalyticsDashboardRoute() {
+  return useIsStaff() ? <AnalyticsDashboardPage /> : <NotFoundPage />;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -100,6 +111,7 @@ export function AppRoutes() {
         <Route path="/kb/new" element={<ArticleCreateRoute />} />
         <Route path="/kb/:id" element={<ArticleDetailRoute />} />
         <Route path="/sla" element={<SlaDashboardRoute />} />
+        <Route path="/dashboard" element={<AnalyticsDashboardRoute />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
