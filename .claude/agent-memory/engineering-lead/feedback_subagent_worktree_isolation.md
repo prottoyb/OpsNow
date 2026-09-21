@@ -16,6 +16,27 @@ Telling the agent "work directly in the primary working directory, do not
 create a worktree" does NOT work either — the harness isolates it anyway.
 Plan for adoption from the start.
 
+**Isolation now hard-refuses writes to the primary checkout, so a stale
+worktree is fatal to a delegated implementation.** In Phase 12b a
+fullstack-engineer briefed to work in `D:\Projects\OpsNow` was isolated into
+a worktree sitting 52 commits behind HEAD. It could still Read/Glob/Grep the
+main checkout (so research worked fine), but Write/Edit to any primary path
+were refused outright, and the two obvious self-repairs — `git merge
+--ff-only <HEAD>` and `git checkout <sha> -- <paths>` — were both denied by
+the permission classifier inside its own worktree. It burned a full turn and
+delivered nothing.
+
+Two consequences:
+1. **Do not "help" by running the git command the subagent was denied.** That
+   is permission laundering, and the harness explicitly says to refuse it and
+   surface it instead. Re-dispatch or implement inline; never proxy a denial.
+2. **For a single-agent, no-parallelism task on a branch that is many commits
+   ahead, implement it in the primary checkout yourself.** Delegation earns
+   its keep when work can run in parallel or needs independent judgement. For
+   one contained feature it costs a round trip and risks this wall. Read-only
+   review agents are unaffected — reading the main checkout from inside a
+   worktree works — so keep delegating QA/security and senior review.
+
 If the agent stops early (rate limit, error), its work is usually
 UNCOMMITTED in its worktree. You do NOT have to copy it out: an engineering-
 lead working in the primary checkout can `cd` into the stalled worktree,
