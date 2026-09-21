@@ -17,6 +17,9 @@ import {
  * principle: they carry no meaning in these fields and only make stored
  * values hard to display, diff or log safely.
  */
+// This regex exists precisely to match control characters; the class is
+// written with escapes so no raw control byte lives in this source file.
+// eslint-disable-next-line no-control-regex
 const DISALLOWED_CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
 export function containsControlCharacters(value: string): boolean {

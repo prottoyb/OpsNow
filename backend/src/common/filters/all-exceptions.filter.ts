@@ -18,11 +18,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     const isHttpException = exception instanceof HttpException;
-    const status = isHttpException
+    const status: number = isHttpException
       ? exception.getStatus()
       : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    if (!isHttpException || status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    // Any 5xx, not just 500: a 502/503 from a downstream dependency is
+    // also something an operator needs the stack for. Written as a plain
+    // number because `status` is a plain number here — comparing it to a
+    // HttpStatus enum member is the sloppier form, not the safer one.
+    const isServerError = status >= 500;
+
+    if (!isHttpException || isServerError) {
       this.logger.error(
         `${request.method} ${request.url} -> ${status}`,
         exception instanceof Error ? exception.stack : undefined,
@@ -68,7 +74,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const { message, statusCode: _statusCode, ...rest } =
         exceptionResponse as Record<string, unknown>;
       return {
-        message: (message as string | string[] | undefined) ?? httpException.message,
+        message: message ?? httpException.message,
         ...rest,
       };
     }

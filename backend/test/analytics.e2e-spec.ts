@@ -5,7 +5,6 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/configure-app';
 import { Role } from '@prisma/client';
 import { AnalyticsService } from '../src/analytics/analytics.service';
-import { AnalyticsQueryDto } from '../src/analytics/dto/analytics-query.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const SEED_PASSWORD = 'DevPassword123!';
@@ -413,7 +412,7 @@ describe('Analytics (e2e)', () => {
           assigneeId: scopedAssigneeId,
           from: new Date(now.getTime() - 3_600_000),
           to: new Date(now.getTime() + 3_600_000),
-        } as AnalyticsQueryDto,
+        },
         now,
       );
     }

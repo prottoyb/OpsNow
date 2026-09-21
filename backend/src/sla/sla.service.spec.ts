@@ -259,7 +259,7 @@ describe('SlaService', () => {
 
     it('maps a running, unpaused ticket', () => {
       const result = service.toTicketSlaResponse(
-        buildSla() as never,
+        buildSla(),
         { status: TicketStatus.Open, resolvedAt: null },
         now,
       );
@@ -275,7 +275,7 @@ describe('SlaService', () => {
         buildSla({
           responseAt: new Date('2026-01-01T00:05:00.000Z'),
           onHoldStartedAt: new Date('2026-01-01T00:15:00.000Z'), // D4 anchor
-        }) as never,
+        }),
         { status: TicketStatus.Resolved, resolvedAt: new Date('2026-01-01T00:15:00.000Z') },
         now,
       );
@@ -285,7 +285,7 @@ describe('SlaService', () => {
 
     it('maps NoResponse when resolved without ever having responded', () => {
       const result = service.toTicketSlaResponse(
-        buildSla() as never,
+        buildSla(),
         { status: TicketStatus.Resolved, resolvedAt: new Date('2026-01-01T00:15:00.000Z') },
         now,
       );

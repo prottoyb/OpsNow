@@ -1,6 +1,7 @@
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
+import type { Application } from 'express';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 /**
@@ -52,5 +53,6 @@ export function configureApp(app: INestApplication): void {
  */
 function configureProxyTrust(app: INestApplication): void {
   const hops = app.get(ConfigService).get<number>('TRUST_PROXY_HOPS', 0);
-  app.getHttpAdapter().getInstance().set('trust proxy', hops);
+  const expressApp = app.getHttpAdapter().getInstance() as Application;
+  expressApp.set('trust proxy', hops);
 }

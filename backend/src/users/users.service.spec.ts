@@ -29,7 +29,7 @@ describe('toSafeUser', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       deletedAt: null,
-    } as never);
+    });
 
     expect(result).toEqual({
       id: 'user-1',
@@ -56,7 +56,7 @@ describe('toUserSummary', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       deletedAt: null,
-    } as never);
+    });
 
     expect(result).toEqual({
       id: 'user-1',

@@ -91,7 +91,7 @@ export class AuditService {
           action: event.action,
           entityType: event.entityType,
           entityId: event.entityId,
-          metadata: metadata as Prisma.InputJsonObject,
+          metadata: metadata,
           ipAddress: sanitizeIp(event.request.ipAddress),
           userAgent: sanitizeUserAgent(event.request.userAgent),
         },

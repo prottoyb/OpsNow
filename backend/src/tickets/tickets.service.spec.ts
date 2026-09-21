@@ -235,7 +235,7 @@ describe('TicketsService', () => {
       prisma.ticket.findMany.mockResolvedValue([]);
       prisma.ticket.count.mockResolvedValue(0);
 
-      await service.findAll({ limit: 20, offset: 0 } as never, authUser());
+      await service.findAll({ limit: 20, offset: 0 }, authUser());
 
       const where = flattenWhere(prisma.ticket.findMany.mock.calls[0][0]);
       expect(where).toMatchObject({ deletedAt: null, requesterId: 'employee-1' });
@@ -245,7 +245,7 @@ describe('TicketsService', () => {
       prisma.ticket.findMany.mockResolvedValue([]);
       prisma.ticket.count.mockResolvedValue(0);
 
-      await service.findAll({ limit: 20, offset: 0 } as never, staffUser);
+      await service.findAll({ limit: 20, offset: 0 }, staffUser);
 
       const where = flattenWhere(prisma.ticket.findMany.mock.calls[0][0]);
       expect(where).not.toHaveProperty('requesterId');
@@ -264,7 +264,7 @@ describe('TicketsService', () => {
           priority: TicketPriority.High,
           categoryId: 'cat-1',
           assigneeId: 'agent-1',
-        } as never,
+        },
         staffUser,
       );
 
@@ -281,7 +281,7 @@ describe('TicketsService', () => {
       prisma.ticket.findMany.mockResolvedValue([]);
       prisma.ticket.count.mockResolvedValue(0);
 
-      await service.findAll({ limit: 20, offset: 0 } as never, authUser());
+      await service.findAll({ limit: 20, offset: 0 }, authUser());
 
       expect(prisma.ticket.count).toHaveBeenCalledWith({
         where: prisma.ticket.findMany.mock.calls[0][0].where,
@@ -1064,7 +1064,7 @@ describe('TicketsService', () => {
       prisma.ticketComment.findMany.mockResolvedValue([]);
       prisma.ticketComment.count.mockResolvedValue(0);
 
-      await service.findComments('ticket-1', { limit: 20, offset: 0 } as never, authUser());
+      await service.findComments('ticket-1', { limit: 20, offset: 0 }, authUser());
 
       expect(prisma.ticketComment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1081,7 +1081,7 @@ describe('TicketsService', () => {
       prisma.ticketComment.findMany.mockResolvedValue([]);
       prisma.ticketComment.count.mockResolvedValue(0);
 
-      await service.findComments('ticket-1', { limit: 20, offset: 0 } as never, staffUser);
+      await service.findComments('ticket-1', { limit: 20, offset: 0 }, staffUser);
 
       const where = prisma.ticketComment.findMany.mock.calls[0][0].where;
       expect(where).not.toHaveProperty('visibility');
@@ -1091,7 +1091,7 @@ describe('TicketsService', () => {
   describe('findHistory', () => {
     it('rejects a non-staff caller', async () => {
       await expect(
-        service.findHistory('ticket-1', { limit: 20, offset: 0 } as never, authUser()),
+        service.findHistory('ticket-1', { limit: 20, offset: 0 }, authUser()),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.ticket.findFirst).not.toHaveBeenCalled();
     });
@@ -1112,7 +1112,7 @@ describe('TicketsService', () => {
 
       const result = await service.findHistory(
         'ticket-1',
-        { limit: 20, offset: 0 } as never,
+        { limit: 20, offset: 0 },
         staffUser,
       );
 

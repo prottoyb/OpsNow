@@ -94,6 +94,9 @@ describe('sanitizeMetadata', () => {
     });
 
     expect(metadata.reason).toHaveLength(255);
+    // Asserting the absence of control characters necessarily means
+    // matching on them.
+    // eslint-disable-next-line no-control-regex
     expect(metadata.reason).not.toMatch(/[\x00-\x1f]/);
     expect(metadata.from).toBeNull();
   });

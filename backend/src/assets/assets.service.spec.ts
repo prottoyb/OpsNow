@@ -239,7 +239,7 @@ describe('AssetsService', () => {
       prisma.asset.findMany.mockResolvedValue([]);
       prisma.asset.count.mockResolvedValue(0);
 
-      await service.findAll({ limit: 20, offset: 0 } as never, authUser());
+      await service.findAll({ limit: 20, offset: 0 }, authUser());
 
       const where = flattenWhere(prisma.asset.findMany.mock.calls[0][0]);
       expect(where).toMatchObject({
@@ -252,7 +252,7 @@ describe('AssetsService', () => {
       prisma.asset.findMany.mockResolvedValue([]);
       prisma.asset.count.mockResolvedValue(0);
 
-      await service.findAll({ limit: 20, offset: 0 } as never, staffUser);
+      await service.findAll({ limit: 20, offset: 0 }, staffUser);
 
       const where = flattenWhere(prisma.asset.findMany.mock.calls[0][0]);
       expect(where).toMatchObject({ deletedAt: null });
@@ -263,7 +263,7 @@ describe('AssetsService', () => {
       prisma.asset.findMany.mockResolvedValue([]);
       prisma.asset.count.mockResolvedValue(0);
 
-      await service.findAll({ limit: 20, offset: 0 } as never, authUser());
+      await service.findAll({ limit: 20, offset: 0 }, authUser());
 
       expect(prisma.asset.count.mock.calls[0][0].where).toEqual(
         prisma.asset.findMany.mock.calls[0][0].where,
@@ -275,7 +275,7 @@ describe('AssetsService', () => {
       prisma.asset.count.mockResolvedValue(0);
 
       await service.findAll(
-        { limit: 20, offset: 0, assigneeId: 'employee-2' } as never,
+        { limit: 20, offset: 0, assigneeId: 'employee-2' },
         authUser(),
       );
 
@@ -297,7 +297,7 @@ describe('AssetsService', () => {
       prisma.asset.count.mockResolvedValue(0);
 
       await service.findAll(
-        { limit: 20, offset: 0, q: 'lat' } as never,
+        { limit: 20, offset: 0, q: 'lat' },
         staffUser,
       );
 
@@ -321,7 +321,7 @@ describe('AssetsService', () => {
       prisma.asset.count.mockResolvedValue(0);
 
       await service.findAll(
-        { limit: 20, offset: 0, q: '50%_off' } as never,
+        { limit: 20, offset: 0, q: '50%_off' },
         staffUser,
       );
 
@@ -346,7 +346,7 @@ describe('AssetsService', () => {
       prisma.asset.count.mockResolvedValue(0);
 
       await service.findAll(
-        { limit: 20, offset: 0, q: 'a\\%b' } as never,
+        { limit: 20, offset: 0, q: 'a\\%b' },
         staffUser,
       );
 
@@ -375,7 +375,7 @@ describe('AssetsService', () => {
           offset: 0,
           status: AssetStatus.InRepair,
           assetTypeId: 'type-9',
-        } as never,
+        },
         staffUser,
       );
 
@@ -969,7 +969,7 @@ describe('AssetsService', () => {
   describe('findAssignments', () => {
     it('rejects a non-staff caller', async () => {
       await expect(
-        service.findAssignments('asset-1', { limit: 20, offset: 0 } as never, authUser()),
+        service.findAssignments('asset-1', { limit: 20, offset: 0 }, authUser()),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.asset.findFirst).not.toHaveBeenCalled();
     });
@@ -978,7 +978,7 @@ describe('AssetsService', () => {
       prisma.asset.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.findAssignments('asset-1', { limit: 20, offset: 0 } as never, staffUser),
+        service.findAssignments('asset-1', { limit: 20, offset: 0 }, staffUser),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.assetAssignment.findMany).not.toHaveBeenCalled();
     });
@@ -1009,7 +1009,7 @@ describe('AssetsService', () => {
 
       const result = await service.findAssignments(
         'asset-1',
-        { limit: 10, offset: 0 } as never,
+        { limit: 10, offset: 0 },
         staffUser,
       );
 

@@ -22,7 +22,7 @@ function make(fetchFn: jest.Mock, timeoutMs = 1000) {
     apiKey: KEY,
     model: 'test-model',
     timeoutMs,
-    fetchFn: fetchFn as unknown as typeof fetch,
+    fetchFn: fetchFn,
   });
 }
 

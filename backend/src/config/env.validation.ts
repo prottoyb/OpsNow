@@ -78,6 +78,11 @@ const schema = Joi.object({
 export function validateEnv(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
+  // `schema` is a Joi.ObjectSchema<any>, so `validate` is typed as
+  // returning ValidationResult<any> no matter what the schema actually
+  // describes. The shape is guaranteed by the schema above and asserted
+  // on the way out; there is no narrower type Joi can give us here.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const { error, value } = schema.validate(config, { abortEarly: false });
 
   if (error) {

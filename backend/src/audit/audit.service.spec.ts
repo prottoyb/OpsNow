@@ -10,7 +10,7 @@ const SENTINEL_PASSWORD = 'Sentinel-P@ssw0rd-9f3a';
 const SENTINEL_BEARER = 'Bearer sentinel-access-token-abc123';
 
 function user(role: Role): AuthenticatedUser {
-  return { id: 'u1', email: 'x@y.z', role } as AuthenticatedUser;
+  return { id: 'u1', email: 'x@y.z', role };
 }
 
 describe('AuditService', () => {
