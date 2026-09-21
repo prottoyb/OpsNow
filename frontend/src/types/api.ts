@@ -851,3 +851,100 @@ export interface ListAuditLogsQuery {
   limit?: number;
   offset?: number;
 }
+
+/* --------------------------- AI ticket assistant --------------------------- */
+
+/**
+ * Mirrors `AiMode` in `backend/src/ai/ai.types.ts`.
+ *
+ * This is the assistant's availability **to the caller**, not the server's
+ * configuration: an Employee is always told `disabled` whatever is really
+ * configured, so the response never discloses whether (or which) vendor is
+ * wired up. See DECISIONS.md ADR-023.
+ */
+export const AI_MODES = ['disabled', 'mock', 'anthropic'] as const;
+export type AiMode = (typeof AI_MODES)[number];
+
+/**
+ * Mirrors `AiFailureReason` in `backend/src/ai/ai.types.ts` — a CLOSED list
+ * carried on the `reason` field of every AI 503. A drift guard
+ * (`features/ai/aiFailure.test.ts`) parses the backend file and fails if the
+ * two ever diverge.
+ */
+export const AI_FAILURE_REASONS = [
+  'disabled',
+  'timeout',
+  'rate_limited',
+  'provider_error',
+  'invalid_output',
+  'busy',
+] as const;
+export type AiFailureReason = (typeof AI_FAILURE_REASONS)[number];
+
+/**
+ * `GET /ai/status`, readable by any authenticated user.
+ *
+ * `enabled` is true only when a provider is configured AND the caller is
+ * staff, so the client needs no role logic of its own to decide whether the
+ * assistant is usable (ADR-023 Decision 12).
+ */
+export interface AiStatus {
+  enabled: boolean;
+  mode: AiMode;
+}
+
+/** A suggested category. `name` is read from the database, never from the
+ * model's own text (ADR-023 Decision 6). */
+export interface AiCategorySuggestion {
+  id: string;
+  name: string;
+}
+
+/**
+ * A knowledge article the assistant referenced. Membership of this list is
+ * grounded against the caller's own article visibility and re-read under that
+ * rule before it is returned, so linking to one can never land on a 404.
+ * `title` comes from the database row, never from the model.
+ */
+export interface AiArticleReference {
+  id: string;
+  title: string;
+  slug: string;
+}
+
+/**
+ * `POST /tickets/:id/ai/triage` — advisory only. Nothing here has been
+ * applied to the ticket, and nothing in this application applies it
+ * automatically: an accepted suggestion is applied by a human through the
+ * ordinary `PATCH /tickets/:id` (ADR-023 Decision 5).
+ *
+ * Every field degrades independently: a category id the model invented, or a
+ * priority that is not a real `TicketPriority`, is dropped to `null` rather
+ * than failing the whole call.
+ */
+export interface AiTriage {
+  suggestedCategory: AiCategorySuggestion | null;
+  suggestedPriority: TicketPriority | null;
+  rationale: string | null;
+  relatedArticles: AiArticleReference[];
+  /** Never `disabled` on a 200 — a disabled assistant answers 503. */
+  mode: AiMode;
+}
+
+/**
+ * `POST /tickets/:id/ai/draft-response` — a suggested reply to the
+ * requester. It is NOT a comment: it is posted only if a human copies it into
+ * the comment form and submits it. Unlike triage this does not degrade
+ * partially, because the generated text is the entire payload.
+ */
+export interface AiDraftResponse {
+  draft: string;
+  referencedArticles: AiArticleReference[];
+  mode: AiMode;
+}
+
+/** `POST /tickets/:id/ai/resolution-summary`. */
+export interface AiResolutionSummary {
+  summary: string;
+  mode: AiMode;
+}
