@@ -10,7 +10,29 @@ Status: In Progress
 
 
 
-Current Phase: Phase 13 — Testing & Quality (not started). Phase 12 — AI Ticket Assistant (backend API and frontend UI) — complete; Phase 11 — Audit Logging (backend and UI) — complete; Phase 10 — Dashboard & Analytics (backend API and frontend UI) — complete; Phase 9 — Knowledge Base (backend API and frontend UI) — complete; Phases 8a and 8b — Asset Management backend API and frontend UI — complete; Phases 7a and 7b — SLA Management backend API and frontend UI — complete; Phases 6a and 6b — Ticket Management backend API and frontend UI — complete.
+Current Phase: Phase 17 — Final Review & Portfolio Preparation (NOT
+
+started).
+
+Phases 0–16 are complete. Phases 13 (Testing & Quality Hardening), 14
+
+(Docker), 15 (CI/CD) and 16 (Deployment posture) landed in the
+
+feature/phases-13-16-milestone branch.
+
+Two of those are written but NOT verified by execution, and are marked
+
+as such in their own sections below: the container images have never
+
+been built (Docker is not installed on the development machine) and
+
+the CI pipeline has never run (nothing has been pushed).
+
+OpsNow is NOT deployed anywhere. No hosting account, managed database,
+
+registry, domain or credential exists, which is why nine of Phase 16's
+
+eleven items remain unchecked.
 
 
 
@@ -1316,25 +1338,125 @@ replica multiplies both limits.
 
 
 
-\- \[ ] Create GitHub Actions workflow
+\- \[x] Create GitHub Actions workflow
 
-\- \[ ] Install dependencies automatically
+\- \[x] Install dependencies automatically
 
-\- \[ ] Run lint checks
+\- \[x] Run lint checks
 
-\- \[ ] Run type checks
+\- \[x] Run type checks
 
-\- \[ ] Run unit tests
+\- \[x] Run unit tests
 
-\- \[ ] Run integration tests
+\- \[x] Run integration tests
 
-\- \[ ] Build frontend
+\- \[x] Build frontend
 
-\- \[ ] Build backend
+\- \[x] Build backend
 
-\- \[ ] Configure deployment workflow
+\- \[ ] Configure deployment workflow — NOT DONE, deliberately. There is
 
-\- \[ ] Verify CI pipeline
+no hosting target, registry, domain or credential to deploy to. A
+
+workflow written against a target that does not exist, or one carrying
+
+empty secret references waiting to be filled, is worse than an honest
+
+gap. `docs/deployment.md` lists the external steps that must happen
+
+first.
+
+\- \[ ] Verify CI pipeline — NOT DONE. Nothing has been pushed, so no
+
+workflow run exists. The file was parsed and its job graph, services,
+
+health gates and permissions inspected, and every command it runs
+
+passes locally — but that is not the same as a green run.
+
+
+
+`.github/workflows/ci.yml` runs five jobs on push and pull request:
+
+`frontend` (typecheck, eslint, vitest, build), `backend` (prisma
+
+validate/generate/`migrate deploy`/`migrate status`, seed, typecheck,
+
+eslint, unit, e2e, build, against a health-gated Postgres service),
+
+`browser-e2e` (builds and starts the compiled API, waits on the real
+
+health endpoint, runs Playwright, uploads traces on failure),
+
+`dependency-audit` (`npm audit --omit=dev --audit-level=high` both
+
+sides), and `docker` (builds all three image targets, renders
+
+`docker compose config`, and syntax-checks `nginx.conf` inside the same
+
+nginx version the image uses).
+
+
+
+That last job matters more than usual: since Docker is not installed
+
+locally, CI is the first place the Phase 14 images will actually be
+
+built, and the first place `nginx.conf` will be syntax-checked.
+
+
+
+Two choices worth recording. `migrate status` runs after
+
+`migrate deploy` to catch a `schema.prisma` edited without a matching
+
+migration, which otherwise passes every test and then fails at
+
+deployment. And seeding is required in CI while being forbidden locally
+
+— the difference is the database, not the command: `prisma db seed`
+
+deletes every table, which is unacceptable against a developer's
+
+`opsnow_dev` and correct against a service container created seconds
+
+earlier. The e2e suites sign in as the seeded role accounts, so without
+
+it they cannot run.
+
+
+
+No credentials anywhere. The Postgres password and JWT value are literal
+
+throwaways for a container that lives for one job, labelled as such.
+
+`permissions: contents: read` is declared explicitly rather than
+
+inherited.
+
+
+
+\## Deferred from Phase 15 (tracked, not dropped)
+
+
+
+\- \[ ] No deployment job, and none can be written until a target exists.
+
+
+
+\- \[ ] No coverage reporting or threshold, and no lint/test result
+
+annotations on a pull request.
+
+
+
+\- \[ ] `actionlint` is not run over the workflow itself.
+
+
+
+\- \[ ] Actions are pinned to major version tags rather than commit
+
+SHAs, so a compromised tag would be picked up automatically.
 
 
 
@@ -1358,7 +1480,21 @@ replica multiplies both limits.
 
 \- \[ ] Deploy frontend
 
-\- \[ ] Configure production CORS
+\- \[x] Configure production CORS — the production CORS configuration is
+
+**none**, deliberately, and that is a decision rather than an omission
+
+(ADR-027). The deployment model is same-origin, so there is no
+
+legitimate cross-origin browser caller to allow-list; an allow-list
+
+would merely appear to enable a split-origin deployment that would then
+
+fail at the first token refresh, because CORS does not make a
+
+`SameSite=Strict` cookie travel. `assertTrustedOrigin()` remains the
+
+enforcement.
 
 \- \[ ] Verify production authentication
 
@@ -1367,6 +1503,120 @@ replica multiplies both limits.
 \- \[ ] Verify production database
 
 \- \[ ] Test production application
+
+
+
+Every remaining box above is unchecked because it requires something
+
+that does not exist: a hosting account, a managed database, a registry, a
+
+domain, or a credential. None has been invented, and **OpsNow is not
+
+deployed anywhere**. `docs/deployment.md` lists the ten external steps,
+
+in order, and says which of them unlocks each of these tasks.
+
+
+
+What Phase 16 DID deliver — none of it on the task list above, because
+
+that list was written assuming a deployment would happen:
+
+
+
+\- Swagger is now OFF by default in production and on by default
+
+elsewhere, overridable both ways by `SWAGGER_ENABLED`, with a start-up
+
+warning when it is enabled in production. Booting the compiled build
+
+during Phase 14 showed `/api/docs` answering 200 under
+
+`NODE_ENV=production` — a complete, unauthenticated, machine-readable
+
+description of every route and role gate.
+
+
+
+\- `GET /api/v1/health/live` alongside the existing readiness check. An
+
+orchestrator RESTARTS a container that fails liveness, so a liveness
+
+probe that pings Postgres turns a brief database blip into a rolling
+
+restart of every instance.
+
+
+
+\- `debug` and `verbose` logging dropped in production — the levels most
+
+likely to carry request detail nobody reviewed for what it discloses.
+
+
+
+\- Both policies extracted to `main.policy.ts` with tests, because
+
+`bootstrap()` cannot be imported without starting an application and a
+
+database, so a policy written inline there is never verified.
+
+
+
+\- ADR-027: the origin model and why a split-origin deployment is
+
+unsupported, the CORS decision, why security headers come from the edge
+
+rather than helmet, and the statement that nothing is deployed.
+
+
+
+\- `docs/deployment.md`: the operator-facing companion — every variable
+
+with its production value, why `TRUST_PROXY_HOPS` is dangerous in both
+
+directions, the migration rules, the absence of down-migrations and what
+
+that means for rollback ordering, which probe goes where, what is and is
+
+not in the logs, a pre-launch security checklist, and the external steps.
+
+
+
+\## Deferred from Phase 16 (tracked, not dropped)
+
+
+
+\- \[ ] **No way to create the first administrator.**
+
+`POST /auth/register` always creates an `Employee` and the role is not
+
+settable through the API, while the seed script wipes the database and
+
+must never run against a deployment. A first real deployment therefore
+
+needs a one-off SQL promotion. A small `create-admin` CLI is the right
+
+fix.
+
+
+
+\- \[ ] Logs are plain text with no request or correlation id, and there
+
+is no log shipping. There is no error-reporting service on either side;
+
+the frontend's error boundary logs to the browser console only.
+
+
+
+\- \[ ] No backup or restore procedure, and no down-migrations — a schema
+
+rollback means writing a new forward migration.
+
+
+
+\- \[ ] Security response headers are sent by the edge (nginx) and not by
+
+the application, so a different topology must replicate them.
 
 
 

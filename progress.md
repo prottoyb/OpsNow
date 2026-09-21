@@ -10,27 +10,41 @@ Project status: In Progress
 
 
 
-Current phase: Phase 15 — CI/CD (in progress)
+Current phase: Phases 13–16 complete; Phase 17 — Final Review & Portfolio
+
+Preparation is next and has NOT been started
 
 
 
-Current task: Phase 15 — GitHub Actions pipeline
+Current task: none
 
 
 
-Last completed task: Phase 14 — Docker (multi-stage production-oriented
+Last completed task: Phase 16 — Deployment posture (Swagger gated off in
 
-images for both halves, a self-contained Compose stack with a one-shot
+production, split liveness/readiness probes, production log policy, the
 
-migration job, env-driven configuration and no baked secrets — WRITTEN
+same-origin/CORS decision, and operator documentation — recorded as
 
-AND STATICALLY CHECKED BUT NEVER BUILT, because Docker is not installed
+ADR-027). OpsNow is NOT deployed anywhere and no deployment credential
 
-on this machine)
+exists.
 
 
 
-Next task: Phase 15 — CI/CD, then Phase 16 — Deployment
+Next task: Phase 17 — Final Review & Portfolio Preparation
+
+
+
+Honest status of Phases 14 and 15: the container images have never been
+
+built (Docker is not installed on this machine) and the CI pipeline has
+
+never run (nothing has been pushed). Both are written and statically
+
+checked. Treat the first `docker compose up` and the first CI run as
+
+untried steps.
 
 
 
@@ -3822,6 +3836,280 @@ Next:
 
 
 \- Phase 15 — CI/CD.
+
+
+
+\### 2026-09-22 — Phases 15 and 16: CI/CD and Deployment Posture
+
+
+
+\#### Phase 15 — CI/CD
+
+
+
+`.github/workflows/ci.yml`, five jobs on push and pull request:
+
+`frontend` (typecheck, eslint, vitest, build); `backend` (prisma
+
+validate, generate, `migrate deploy`, `migrate status`, seed, typecheck,
+
+eslint, unit, e2e, build — against a Postgres service container with a
+
+health-gated start); `browser-e2e` (builds and starts the compiled API,
+
+polls the real health endpoint rather than sleeping, installs chromium,
+
+runs Playwright, uploads traces and the API log on failure);
+
+`dependency-audit` (`npm audit --omit=dev --audit-level=high` on both
+
+packages); and `docker` (builds the backend runtime and migrator images
+
+and the frontend image with buildx, renders `docker compose config`, and
+
+syntax-checks `nginx.conf` inside the same nginx version the image uses).
+
+
+
+The `docker` job carries more weight than it normally would: Docker is
+
+not installed locally, so CI is the first place the Phase 14 images will
+
+actually be built and the first place the nginx config will be checked.
+
+
+
+Two decisions recorded rather than left to be inferred. `migrate status`
+
+runs after `migrate deploy`, to catch a `schema.prisma` edited without a
+
+matching migration — which otherwise passes every test and then fails at
+
+deployment. And seeding is required here while being forbidden locally:
+
+the difference is the database, not the command. `prisma db seed` calls
+
+`resetData()`, which deletes every table — unacceptable against a
+
+developer's `opsnow_dev`, correct against a service container created
+
+seconds earlier and destroyed when the job ends. The e2e suites sign in
+
+as the seeded role accounts, so without it they cannot run at all.
+
+
+
+The `browser-e2e` job leaves `NODE_ENV` unset deliberately. Under
+
+`production` the refresh cookie is marked `Secure`, a browser will not
+
+send a `Secure` cookie back over plain http, and every session would die
+
+on reload — a failure with nothing to do with the code under test. It
+
+also raises `AUTH_THROTTLE_LIMIT`, which is a raised threshold and not a
+
+disabled control; the backend job's `auth-throttle.e2e-spec.ts` is what
+
+proves the limit fires.
+
+
+
+No credentials anywhere. The Postgres password and JWT value are literal
+
+throwaways for a container that exists for one job, labelled as such, and
+
+written at each use because GitHub does not expose the `env` context
+
+inside a `services:` block. `permissions: contents: read` is declared
+
+explicitly rather than inherited from the repository default.
+
+
+
+There is deliberately no deployment job — see Phase 16.
+
+
+
+\#### Phase 16 — Deployment posture
+
+
+
+Three code changes, all of them things a deployment gets wrong by
+
+default, so the safe value is now the default rather than something an
+
+operator has to remember:
+
+
+
+\- **Swagger is off by default in production.** Booting the compiled
+
+build during Phase 14 showed `/api/docs` answering 200 under
+
+`NODE_ENV=production`: a complete, unauthenticated, machine-readable
+
+description of every route, role gate, parameter and response shape. It
+
+is now opt-in via `SWAGGER_ENABLED`, and on by default outside
+
+production. The default is inverted by environment because the failure
+
+modes are asymmetric — a developer who must remember to turn docs ON
+
+loses five minutes; an operator who must remember to turn them OFF
+
+publishes the API surface indefinitely without noticing. Enabling it in
+
+production still works and logs a warning, because otherwise nothing
+
+would ever say it had happened.
+
+
+
+\- **Liveness and readiness are now separate.** `GET /health` keeps the
+
+database ping and is readiness; `GET /health/live` checks nothing and is
+
+liveness. An orchestrator RESTARTS a container that fails liveness, so a
+
+liveness probe that pings Postgres turns a brief database blip into a
+
+rolling restart of every instance, at exactly the moment the database is
+
+least able to absorb a reconnect storm.
+
+
+
+\- **`debug` and `verbose` logging are dropped in production.** They are
+
+noise at volume and cost money in a pipeline, but the deciding reason is
+
+that they are the levels most likely to carry request detail nobody
+
+reviewed for what it discloses.
+
+
+
+Both policies live in `main.policy.ts` rather than inline in
+
+`bootstrap()`, because `bootstrap()` cannot be imported without starting
+
+an application and a database — so a policy written there is a policy
+
+that is never verified. `main.policy.spec.ts` covers both.
+
+
+
+Decisions:
+
+
+
+\- ADR-027 records the posture. The deployment model is SAME-ORIGIN and a
+
+split-origin deployment is explicitly unsupported: the `SameSite=Strict`
+
+path-scoped refresh cookie, `assertTrustedOrigin()` and the hardcoded
+
+relative `/api/v1` all assume it, and CORS cannot fix a cookie. Production
+
+CORS is therefore disabled, and that IS the production CORS
+
+configuration — an allow-list would merely appear to enable a
+
+deployment that would fail at the first token refresh. Security headers
+
+come from the edge rather than from helmet, with the trade-off stated
+
+(a different topology must replicate them). And nothing is deployed, with
+
+no deployment automation written against a target that does not exist.
+
+
+
+\- `docs/deployment.md` is the operator-facing companion: the origin
+
+model and why it is not negotiable, every environment variable with its
+
+production value, why `TRUST_PROXY_HOPS` is dangerous in both directions,
+
+the migration rules (deploy only; never dev, push, reset or seed), the
+
+absence of down-migrations and what that means for rollback ordering,
+
+which health probe belongs where, what is and is not in the logs, a
+
+pre-launch security checklist, and the ten external steps that each need
+
+an account or a card.
+
+
+
+Verification:
+
+
+
+\- Against the compiled production build: `/api/docs` and
+
+`/api/docs-json` both 404 with `NODE_ENV=production` and no override;
+
+both 200 with `SWAGGER_ENABLED=true`, with the warning logged; readiness
+
+200; liveness 200 returning `{"status":"ok"}`.
+
+
+
+\- Backend typecheck, lint at `--max-warnings 0`, 823 unit tests across
+
+43 suites, and `nest build` all clean.
+
+
+
+\- The probe's three failed-login audit rows were removed afterwards;
+
+seed data untouched.
+
+
+
+What is NOT done, and will not be claimed:
+
+
+
+\- **OpsNow is not deployed anywhere.** No hosting account, no managed
+
+database, no registry, no domain, no credential. Nine of Phase 16's
+
+eleven task-list items remain unchecked for that reason, and
+
+`docs/deployment.md` says which external step unlocks each.
+
+
+
+\- The CI pipeline has never run — nothing has been pushed.
+
+
+
+\- The container images have never been built.
+
+
+
+\- There is no way to create the first administrator through the API:
+
+`POST /auth/register` always creates an `Employee`, the role is not
+
+settable, and the seed script must never touch a deployment. A first real
+
+deployment needs a one-off SQL promotion. A small `create-admin` CLI is
+
+the right fix and is recorded as a gap.
+
+
+
+Next:
+
+
+
+\- Phase 17 — Final Review & Portfolio Preparation. NOT started.
 
 
 

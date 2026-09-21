@@ -316,21 +316,21 @@ Prefer small changes that can be verified independently.
 
 
 
-Phases 0–12 are complete: project foundation, approved architecture (ADR-001
+Phases 0–16 are complete: project foundation, approved architecture (ADR-001
 
-through ADR-025 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, the
+through ADR-027 in `DECISIONS.md`), the Prisma/PostgreSQL database layer, the
 
-NestJS backend foundation, authentication and RBAC, ticket management
+NestJS backend foundation, authentication and RBAC, ticket management, SLA
 
-(backend API and frontend UI), SLA management (backend API and frontend UI),
+management, asset management, the knowledge base, dashboard analytics, audit
 
-asset management (backend API and frontend UI), the knowledge base
+logging and the AI ticket assistant — each with a backend API and a frontend
 
-(backend API and frontend UI), dashboard analytics (backend API and
+UI — followed by a cross-cutting testing and quality hardening pass
 
-frontend UI), audit logging (backend and Administrator-only UI), and the
+(Phase 13), containerisation (Phase 14), a GitHub Actions pipeline (Phase 15)
 
-AI ticket assistant (backend API and staff-facing frontend UI).
+and a documented production deployment posture (Phase 16).
 
 
 
@@ -346,6 +346,28 @@ success path without a vendor key, and the UI labels mock output as canned.
 
 
 
-Phase 13 — Testing & Quality is next. See `TASKS.md` for the current task
+Two parts of Phases 14–15 are WRITTEN BUT NEVER EXECUTED and must not be
 
-list and `progress.md` for the full development log.
+described otherwise: the container images have never been built, because
+
+Docker is not installed on this machine, and the CI pipeline has never run,
+
+because nothing has been pushed.
+
+
+
+OpsNow is NOT deployed anywhere. There is no hosting account, managed
+
+database, container registry, domain or credential. `docs/deployment.md`
+
+lists the external steps that would be required, and nine of Phase 16's
+
+eleven task-list items are unchecked for exactly that reason.
+
+
+
+Phase 17 — Final Review & Portfolio Preparation is next and has NOT been
+
+started. See `TASKS.md` for the current task list and `progress.md` for the
+
+full development log.
