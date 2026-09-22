@@ -12,7 +12,7 @@ import { AssetLinkPicker } from './AssetLinkPicker';
 import { AssetStatusBadge } from './AssetStatusBadge';
 
 const LINK_CLASSES =
-  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700';
 
 function TicketAssetRow({
   ticketId,

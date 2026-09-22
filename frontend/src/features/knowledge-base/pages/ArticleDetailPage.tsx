@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { ErrorState, InlineNotice } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
 import { FullPageSpinner, Spinner } from '../../../components/ui/Spinner';
@@ -270,10 +271,9 @@ export function ArticleDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
-          <article className="rounded-md border border-slate-200 bg-white p-4">
-            <h2 className="text-base font-semibold text-slate-900">Article</h2>
+          <Card heading="Article">
             {editing && canEdit ? (
-              <div className="mt-3">
+              <div>
                 <ArticleForm
                   initialValues={{
                     title: article.title,
@@ -303,7 +303,7 @@ export function ArticleDetailPage() {
                 ) : null}
               </>
             )}
-          </article>
+          </Card>
 
           <ArticleFeedbackWidget
             feedback={article.feedback}
@@ -324,19 +324,14 @@ export function ArticleDetailPage() {
 
         <aside className="flex flex-col gap-6">
           {canPublish ? (
-            <section className="rounded-md border border-slate-200 bg-white p-4">
-              <h2 className="text-base font-semibold text-slate-900">
-                Publishing
-              </h2>
-              <div className="mt-3">
-                <ArticleStatusControl
-                  status={article.status}
-                  submitting={updateStatus.isPending}
-                  serverMessages={statusMessages}
-                  onChange={handleStatusChange}
-                />
-              </div>
-            </section>
+            <Card heading="Publishing">
+              <ArticleStatusControl
+                status={article.status}
+                submitting={updateStatus.isPending}
+                serverMessages={statusMessages}
+                onChange={handleStatusChange}
+              />
+            </Card>
           ) : null}
 
           <ArticleMetadata article={article} showStatus={isStaff} />
@@ -354,9 +349,8 @@ function ArticleMetadata({
   showStatus: boolean;
 }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4">
-      <h2 className="text-base font-semibold text-slate-900">About</h2>
-      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+    <Card heading="About">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="font-medium text-slate-700">Author</dt>
         <dd className="text-slate-800">{fullName(article.author)}</dd>
         {showStatus ? (
@@ -390,7 +384,7 @@ function ArticleMetadata({
         <dt className="font-medium text-slate-700">Views</dt>
         <dd className="text-slate-800">{article.viewCount}</dd>
       </dl>
-    </section>
+    </Card>
   );
 }
 
@@ -412,7 +406,7 @@ function renderLoadError(error: unknown, retry: () => void) {
         </p>
         <Link
           to="/kb"
-          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
         >
           Back to the knowledge base
         </Link>
@@ -431,7 +425,7 @@ function renderLoadError(error: unknown, retry: () => void) {
         </p>
         <Link
           to="/kb"
-          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
         >
           Back to the knowledge base
         </Link>

@@ -141,7 +141,7 @@ export function AnalyticsFilterBar({
               onChange={(event) =>
                 onChange({ assignee: event.target.checked ? 'me' : 'anyone' })
               }
-              className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+              className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
             />
             Assigned to me
           </label>

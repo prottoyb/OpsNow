@@ -69,7 +69,7 @@ function EntryDetails({ entry }: { entry: AuditLogEntry }) {
   const metadata = Object.entries(entry.metadata);
   return (
     <details>
-      <summary className="cursor-pointer rounded-sm text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+      <summary className="cursor-pointer rounded-sm text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700">
         View details
         <span className="sr-only"> for {entry.action}</span>
       </summary>

@@ -19,7 +19,7 @@ import {
 } from '../useAi';
 
 const LINK_CLASSES =
-  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700';
 
 /**
  * Shown above every block of generated text. ADR-023 Decision 7 names

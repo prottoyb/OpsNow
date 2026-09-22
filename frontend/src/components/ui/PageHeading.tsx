@@ -26,7 +26,7 @@ export function PageHeading({ children, actions }: PageHeadingProps) {
       <h1
         ref={headingRef}
         tabIndex={-1}
-        className="text-xl font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-900 sm:text-2xl"
+        className="text-xl font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-700 sm:text-2xl"
       >
         {children}
       </h1>

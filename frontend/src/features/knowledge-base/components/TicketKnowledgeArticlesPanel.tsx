@@ -12,7 +12,7 @@ import { ArticleStatusBadge } from './ArticleStatusBadge';
 import { useTicketArticles, useUnlinkTicketArticle } from '../useKnowledgeBase';
 
 const LINK_CLASSES =
-  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700';
 
 function TicketArticleRow({
   ticketId,

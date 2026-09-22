@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
+import { CARD_SURFACE_CLASSES } from '../../../components/ui/Card';
 import { fullName } from '../../../lib/format';
 import type { Asset } from '../../../types/api';
 import { AssetStatusBadge } from './AssetStatusBadge';
 
 const LINK_CLASSES =
-  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700';
 
 function assigneeLabel(asset: Asset): string {
   return asset.currentAssignee ? fullName(asset.currentAssignee) : 'Unassigned';
@@ -66,10 +67,7 @@ export function AssetTable({ assets }: { assets: readonly Asset[] }) {
 
       <ul className="flex flex-col gap-3 md:hidden">
         {assets.map((asset) => (
-          <li
-            key={asset.id}
-            className="rounded-md border border-slate-200 bg-white p-4"
-          >
+          <li key={asset.id} className={CARD_SURFACE_CLASSES}>
             <Link to={`/assets/${asset.id}`} className={LINK_CLASSES}>
               {asset.assetTag}
             </Link>

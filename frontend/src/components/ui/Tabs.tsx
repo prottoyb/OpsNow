@@ -74,7 +74,7 @@ export function Tabs({ tabs, activeId, onChange, label }: TabsProps) {
               tabIndex={selected ? 0 : -1}
               onClick={() => onChange(tab.id)}
               onKeyDown={(event) => handleKeyDown(event, index)}
-              className={`-mb-px rounded-t-md border-b-2 px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 ${
+              className={`-mb-px rounded-t-md border-b-2 px-3 py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700 ${
                 selected
                   ? 'border-slate-900 text-slate-900'
                   : 'border-transparent text-slate-600 hover:text-slate-900'

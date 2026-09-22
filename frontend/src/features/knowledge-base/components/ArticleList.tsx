@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { CARD_SURFACE_CLASSES } from '../../../components/ui/Card';
 import {
   formatDateTime,
   fullName,
@@ -8,7 +9,7 @@ import type { KnowledgeArticleSummary } from '../../../types/api';
 import { ArticleStatusBadge } from './ArticleStatusBadge';
 
 const LINK_CLASSES =
-  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700';
 
 export interface ArticleListProps {
   articles: readonly KnowledgeArticleSummary[];
@@ -35,10 +36,7 @@ export function ArticleList({ articles, showStatus }: ArticleListProps) {
     // the page also carries the filter panel and the main navigation.
     <ul aria-label="Knowledge articles" className="flex flex-col gap-3">
       {articles.map((article) => (
-        <li
-          key={article.id}
-          className="rounded-md border border-slate-200 bg-white p-4"
-        >
+        <li key={article.id} className={CARD_SURFACE_CLASSES}>
           <div className="flex flex-wrap items-center gap-2">
             <Link to={`/kb/${article.id}`} className={LINK_CLASSES}>
               {article.title}

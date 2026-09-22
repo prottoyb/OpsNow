@@ -1,3 +1,4 @@
+import { CARD_SURFACE_CLASSES } from '../../../components/ui/Card';
 import { formatDateTime, fullName, toDateTimeAttribute } from '../../../lib/format';
 import type { AssetAssignment } from '../../../types/api';
 
@@ -28,10 +29,7 @@ export function AssignmentHistoryList({
       {assignments.map((assignment) => {
         const isCurrent = assignment.returnedAt === null;
         return (
-          <li
-            key={assignment.id}
-            className="rounded-md border border-slate-200 bg-white p-3 text-sm"
-          >
+          <li key={assignment.id} className={`${CARD_SURFACE_CLASSES} text-sm`}>
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-medium text-slate-900">
                 {fullName(assignment.assignedTo)}

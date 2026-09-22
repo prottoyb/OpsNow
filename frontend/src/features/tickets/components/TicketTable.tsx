@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
+import { CARD_SURFACE_CLASSES } from '../../../components/ui/Card';
 import { formatDateTime, fullName, toDateTimeAttribute } from '../../../lib/format';
 import type { Ticket } from '../../../types/api';
 import { TicketSlaIndicator } from '../../sla/components/TicketSlaIndicator';
 import { TicketPriorityBadge, TicketStatusBadge } from './TicketStatusBadge';
 
 const LINK_CLASSES =
-  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700';
 
 function assigneeLabel(ticket: Ticket): string {
   return ticket.assignee ? fullName(ticket.assignee) : 'Unassigned';
@@ -91,10 +92,7 @@ export function TicketTable({ tickets }: { tickets: readonly Ticket[] }) {
 
       <ul className="flex flex-col gap-3 md:hidden">
         {tickets.map((ticket) => (
-          <li
-            key={ticket.id}
-            className="rounded-md border border-slate-200 bg-white p-4"
-          >
+          <li key={ticket.id} className={CARD_SURFACE_CLASSES}>
             <p className="text-xs text-slate-500">#{ticket.ticketNumber}</p>
             <Link to={`/tickets/${ticket.id}`} className={LINK_CLASSES}>
               {ticket.subject}

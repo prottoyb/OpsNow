@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import type { KnowledgeBaseCategory } from '../../../types/api';
@@ -60,10 +61,7 @@ export function ArticleFilters({
   }, [searchDraft, filters.q, onChange]);
 
   return (
-    <section
-      aria-labelledby="article-filters-heading"
-      className="rounded-md border border-slate-200 bg-white p-4"
-    >
+    <Card aria-labelledby="article-filters-heading">
       <h2 id="article-filters-heading" className="sr-only">
         Filter knowledge articles
       </h2>
@@ -141,7 +139,7 @@ export function ArticleFilters({
                   onChange={(event) =>
                     onChange({ author: event.target.checked ? 'me' : 'anyone' })
                   }
-                  className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                  className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
                 />
                 Written by me
               </label>
@@ -157,6 +155,6 @@ export function ArticleFilters({
           </Button>
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }

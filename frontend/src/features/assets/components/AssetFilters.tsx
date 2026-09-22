@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import type { AssetType } from '../../../types/api';
@@ -53,10 +54,7 @@ export function AssetFilters({
   }, [searchDraft, filters.q, onChange]);
 
   return (
-    <section
-      aria-labelledby="asset-filters-heading"
-      className="rounded-md border border-slate-200 bg-white p-4"
-    >
+    <Card aria-labelledby="asset-filters-heading">
       <h2 id="asset-filters-heading" className="sr-only">
         Filter assets
       </h2>
@@ -132,7 +130,7 @@ export function AssetFilters({
               onChange={(event) =>
                 onChange({ assignee: event.target.checked ? 'me' : 'anyone' })
               }
-              className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+              className="size-4 rounded border-slate-300 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
             />
             Assigned to me
           </label>
@@ -146,6 +144,6 @@ export function AssetFilters({
           </Button>
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }

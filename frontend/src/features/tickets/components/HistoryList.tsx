@@ -1,3 +1,4 @@
+import { CARD_SURFACE_CLASSES } from '../../../components/ui/Card';
 import { formatDateTime, fullName, toDateTimeAttribute } from '../../../lib/format';
 import type { TicketHistoryEntry } from '../../../types/api';
 
@@ -32,10 +33,7 @@ export function HistoryList({
   return (
     <ol className="flex flex-col gap-2">
       {entries.map((entry) => (
-        <li
-          key={entry.id}
-          className="rounded-md border border-slate-200 bg-white p-3 text-sm"
-        >
+        <li key={entry.id} className={`${CARD_SURFACE_CLASSES} text-sm`}>
           <p className="text-slate-900">
             <span className="font-medium">{fieldLabel(entry.fieldName)}</span>{' '}
             changed from{' '}

@@ -85,7 +85,7 @@ export function TicketListPage() {
             action={
               <Link
                 to="/tickets/new"
-                className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
               >
                 Raise your first ticket
               </Link>

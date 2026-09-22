@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { ErrorState, InlineNotice } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
 import { FullPageSpinner, Spinner } from '../../../components/ui/Spinner';
@@ -251,10 +252,9 @@ export function AssetDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
-          <article className="rounded-md border border-slate-200 bg-white p-4">
-            <h2 className="text-base font-semibold text-slate-900">Details</h2>
+          <Card heading="Details">
             {editing && isStaff ? (
-              <div className="mt-3">
+              <div>
                 <AssetForm
                   mode="edit"
                   initialValues={{
@@ -304,7 +304,7 @@ export function AssetDetailPage() {
                 ) : null}
               </>
             )}
-          </article>
+          </Card>
 
           {tabs.length > 0 ? (
             <Tabs
@@ -317,49 +317,39 @@ export function AssetDetailPage() {
         </div>
 
         <aside className="flex flex-col gap-6">
-          <section className="rounded-md border border-slate-200 bg-white p-4">
-            <h2 className="text-base font-semibold text-slate-900">
-              Assignment
-            </h2>
-            <div className="mt-3">
-              {isStaff ? (
-                <AssetAssignmentControl
-                  status={asset.status}
-                  currentAssignee={asset.currentAssignee}
-                  currentUserId={user?.id ?? ''}
-                  submitting={updateAssignment.isPending}
-                  serverMessages={assignmentMessages}
-                  onAssign={handleAssignmentChange}
-                />
-              ) : (
-                // `PATCH /assets/:id/assignment` is staff-only; an Employee
-                // (viewing an asset currently assigned to them) gets a
-                // read-only view rather than buttons the backend would 403.
-                <p className="text-sm text-slate-700">
-                  <span className="font-medium">Assigned to: </span>
-                  {asset.currentAssignee
-                    ? fullName(asset.currentAssignee)
-                    : 'Unassigned'}
-                </p>
-              )}
-            </div>
-          </section>
+          <Card heading="Assignment">
+            {isStaff ? (
+              <AssetAssignmentControl
+                status={asset.status}
+                currentAssignee={asset.currentAssignee}
+                currentUserId={user?.id ?? ''}
+                submitting={updateAssignment.isPending}
+                serverMessages={assignmentMessages}
+                onAssign={handleAssignmentChange}
+              />
+            ) : (
+              // `PATCH /assets/:id/assignment` is staff-only; an Employee
+              // (viewing an asset currently assigned to them) gets a
+              // read-only view rather than buttons the backend would 403.
+              <p className="text-sm text-slate-700">
+                <span className="font-medium">Assigned to: </span>
+                {asset.currentAssignee
+                  ? fullName(asset.currentAssignee)
+                  : 'Unassigned'}
+              </p>
+            )}
+          </Card>
 
           {isStaff ? (
-            <section className="rounded-md border border-slate-200 bg-white p-4">
-              <h2 className="text-base font-semibold text-slate-900">
-                Status
-              </h2>
-              <div className="mt-3">
-                <AssetStatusControl
-                  status={asset.status}
-                  hasAssignee={asset.currentAssignee !== null}
-                  submitting={updateStatus.isPending}
-                  serverMessages={statusMessages}
-                  onChange={handleStatusChange}
-                />
-              </div>
-            </section>
+            <Card heading="Status">
+              <AssetStatusControl
+                status={asset.status}
+                hasAssignee={asset.currentAssignee !== null}
+                submitting={updateStatus.isPending}
+                serverMessages={statusMessages}
+                onChange={handleStatusChange}
+              />
+            </Card>
           ) : null}
 
           <AssetMetadata asset={asset} />
@@ -371,9 +361,8 @@ export function AssetDetailPage() {
 
 function AssetMetadata({ asset }: { asset: Asset }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4">
-      <h2 className="text-base font-semibold text-slate-900">Metadata</h2>
-      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+    <Card heading="Metadata">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="font-medium text-slate-700">Asset tag</dt>
         <dd className="text-slate-800">{asset.assetTag}</dd>
         <dt className="font-medium text-slate-700">Type</dt>
@@ -413,7 +402,7 @@ function AssetMetadata({ asset }: { asset: Asset }) {
           </time>
         </dd>
       </dl>
-    </section>
+    </Card>
   );
 }
 
@@ -435,7 +424,7 @@ function renderLoadError(error: unknown, retry: () => void) {
         </p>
         <Link
           to="/assets"
-          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
         >
           Back to assets
         </Link>
@@ -454,7 +443,7 @@ function renderLoadError(error: unknown, retry: () => void) {
         </p>
         <Link
           to="/assets"
-          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
         >
           Back to assets
         </Link>

@@ -1,4 +1,5 @@
 import { Badge } from '../../../components/ui/Badge';
+import { CARD_SURFACE_CLASSES } from '../../../components/ui/Card';
 import {
   formatDateTime,
   fullName,
@@ -33,10 +34,7 @@ export function ArticleFeedbackLog({
   return (
     <ul className="flex flex-col gap-3">
       {entries.map((entry) => (
-        <li
-          key={entry.id}
-          className="rounded-md border border-slate-200 bg-white p-3 text-sm"
-        >
+        <li key={entry.id} className={`${CARD_SURFACE_CLASSES} text-sm`}>
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               tone={entry.isHelpful ? 'success' : 'warning'}

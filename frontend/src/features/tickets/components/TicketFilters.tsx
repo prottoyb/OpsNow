@@ -1,4 +1,5 @@
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { Select } from '../../../components/ui/Select';
 import type { TicketCategory } from '../../../types/api';
 import { TICKET_PRIORITIES, TICKET_STATUSES } from '../../../types/api';
@@ -24,10 +25,7 @@ export function TicketFilters({
   onClear,
 }: TicketFiltersProps) {
   return (
-    <section
-      aria-labelledby="ticket-filters-heading"
-      className="rounded-md border border-slate-200 bg-white p-4"
-    >
+    <Card aria-labelledby="ticket-filters-heading">
       <h2 id="ticket-filters-heading" className="sr-only">
         Filter tickets
       </h2>
@@ -143,6 +141,6 @@ export function TicketFilters({
           </Button>
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }

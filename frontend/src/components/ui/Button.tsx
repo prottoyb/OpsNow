@@ -6,11 +6,11 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   primary:
     'bg-brand-600 text-white hover:bg-brand-700 disabled:bg-slate-400 focus-visible:outline-brand-700',
   secondary:
-    'bg-white text-slate-900 ring-1 ring-slate-300 hover:bg-slate-50 disabled:text-slate-400 focus-visible:outline-slate-900',
+    'bg-white text-slate-900 ring-1 ring-slate-300 hover:bg-slate-50 disabled:text-slate-400 focus-visible:outline-brand-700',
   danger:
     'bg-red-700 text-white hover:bg-red-800 disabled:bg-red-300 focus-visible:outline-red-700',
   ghost:
-    'bg-transparent text-slate-700 underline hover:text-slate-900 focus-visible:outline-slate-900',
+    'bg-transparent text-slate-700 underline hover:text-slate-900 focus-visible:outline-brand-700',
 };
 
 /**

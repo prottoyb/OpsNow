@@ -513,7 +513,7 @@ function renderLoadError(error: unknown, retry: () => void) {
         </p>
         <Link
           to="/tickets"
-          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
         >
           Back to tickets
         </Link>
@@ -532,7 +532,7 @@ function renderLoadError(error: unknown, retry: () => void) {
         </p>
         <Link
           to="/tickets"
-          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          className="text-sm font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
         >
           Back to tickets
         </Link>
