@@ -177,10 +177,12 @@ Be ready to name a few honestly rather than implying everything is done:
 - Resolution-time analytics don't subtract paused time, so a ticket
   parked awaiting a reply reports a longer resolution time than the work
   actually took.
-- The container images have never been built (no Docker on the authoring
-  machine) and, until this Phase 17 push, the CI pipeline had never run.
-  Both were statically verified in lieu of execution — say so plainly if
-  asked, it's a stronger answer than pretending otherwise.
+- The container images have never been built *locally* — no Docker on the
+  authoring machine — though CI has built them successfully on every
+  green run since 2026-09-22, which is real (if remote) evidence they
+  work. Say so plainly if asked, including the distinction between
+  "CI has proven it" and "I've run it myself" — that's a stronger,
+  more precise answer than either overclaiming or underclaiming it.
 - The project has never been deployed. That's a resourcing fact (no
   hosting account, no card on file), not an engineering gap — the
   deployment posture, environment validation, and the external-steps

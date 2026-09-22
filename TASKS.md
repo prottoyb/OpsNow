@@ -20,13 +20,21 @@ Phases 0–16 are complete. Phases 13 (Testing & Quality Hardening), 14
 
 feature/phases-13-16-milestone branch.
 
-Two of those are written but NOT verified by execution, and are marked
+One of those was, for a time, described here as unverified by execution
 
-as such in their own sections below: the container images have never
+in a way that had gone stale: the CI pipeline (Phase 15) has actually run
 
-been built (Docker is not installed on the development machine) and
+repeatedly on `origin/main` since 2026-09-22 and is green, including the
 
-the CI pipeline has never run (nothing has been pushed).
+`docker` job successfully building all three container images every run
+
+— corrected during Phase 17c rather than left inaccurate. What remains
+
+genuinely true: Docker itself has never been installed or run locally on
+
+the development machine, so no local `docker compose up` has happened,
+
+separately from CI having proven the images build.
 
 OpsNow is NOT deployed anywhere. No hosting account, managed database,
 
@@ -1234,15 +1242,23 @@ reason: pruning is a deliberate human decision.
 
 \- \[x] Configure environment variables
 
-\- \[ ] Verify complete local environment — NOT DONE. Docker is not
+\- \[ ] Verify complete local environment — still NOT DONE, specifically
 
-installed on the development machine (`docker` is not on PATH and Docker
+locally. Docker is not installed on the development machine (`docker` is
 
-Desktop is not present), so no image has been built and the stack has
+not on PATH and Docker Desktop is not present), so no image has been
 
-never been started. See the Phase 14 note below for what was verified
+built and no stack has been started *on this machine*. Separately, and
 
-instead. This task is the single remaining Phase 14 item.
+confirmed during Phase 17c: CI's `docker` job HAS built all three images
+
+and validated `docker compose config`/`nginx -t` successfully on every
+
+green run since 2026-09-22, which is real evidence the images build and
+
+the stack's configuration is valid — but it is not the same as a local
+
+`docker compose up`, which remains untried. See the Phase 14 note below.
 
 \- \[x] Document Docker setup
 
@@ -1288,7 +1304,17 @@ act), and `docker compose down` leaves the volume alone.
 
 Docker is not available on this machine, so **the images have never been
 
-built and the stack has never been started**. What was verified instead:
+built locally and the stack has never been started locally**. CI's
+
+`docker` job has, however, built all three images and validated
+
+`docker compose config`/`nginx -t` successfully on every green run since
+
+2026-09-22 (confirmed during Phase 17c via the GitHub Actions API) —
+
+genuine evidence the images build, distinct from a local run. What was
+
+verified locally, in lieu of a local Docker install:
 
 
 
@@ -1320,7 +1346,9 @@ throttle answered 401/401/401/429 against a limit of 3.
 
 
 
-\- `frontend/nginx.conf` has NOT been run through `nginx -t`.
+\- `frontend/nginx.conf` has been run through `nginx -t` — in CI, not
+
+locally (see above) — and has passed on every green run since 2026-09-22.
 
 
 
@@ -1402,13 +1430,21 @@ gap. `docs/deployment.md` lists the external steps that must happen
 
 first.
 
-\- \[ ] Verify CI pipeline — NOT DONE. Nothing has been pushed, so no
+\- \[x] Verify CI pipeline — DONE, though this line previously said
 
-workflow run exists. The file was parsed and its job graph, services,
+otherwise and that had gone stale. Confirmed during Phase 17c via the
 
-health gates and permissions inspected, and every command it runs
+GitHub Actions API (not assumed): the workflow has actually run on
 
-passes locally — but that is not the same as a green run.
+`origin/main` repeatedly since 2026-09-22 — three early failures while
+
+the nginx-config check was being debugged (`a45336a`, `08aae89`,
+
+`7e8346f`), green on every run from `3488d0f` onward, including this
+
+session's own push. All five jobs (frontend, backend, browser-e2e,
+
+dependency-audit, docker) pass.
 
 
 
@@ -1436,9 +1472,11 @@ nginx version the image uses).
 
 That last job matters more than usual: since Docker is not installed
 
-locally, CI is the first place the Phase 14 images will actually be
+locally, CI is the only place the Phase 14 images have actually been
 
-built, and the first place `nginx.conf` will be syntax-checked.
+built, and the only place `nginx.conf` has been syntax-checked — and it
+
+has done both successfully on every green run since 2026-09-22.
 
 
 

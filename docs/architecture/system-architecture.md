@@ -43,11 +43,11 @@ flowchart TB
         PROVIDER["AI provider (Anthropic)<br/>off by default — ADR-023"]
     end
 
-    subgraph pipeline["CI/CD — never run (nothing pushed)"]
+    subgraph pipeline["CI/CD — green since 2026-09-22"]
         CI["GitHub Actions<br/>frontend · backend · browser-e2e ·<br/>dependency-audit · docker"]
     end
 
-    subgraph containers["Containers — never built (no Docker locally)"]
+    subgraph containers["Containers — built by CI; never built locally"]
         IMG["Multi-stage images<br/>frontend (nginx) · backend · one-shot migrate job"]
     end
 
@@ -58,7 +58,7 @@ flowchart TB
     modules --> PRISMA --> PG
     AI -.->|"only when AI_PROVIDER is set"| PROVIDER
 
-    CI -.->|"builds, never yet run"| IMG
+    CI -.->|"builds successfully, every green run"| IMG
     IMG -.->|"packages"| api
     IMG -.->|"packages"| SPA
 ```
@@ -132,14 +132,15 @@ suggestion is applied only by a second explicit click through the
 ordinary `PATCH /tickets/:id` mutation, which gets the same validation,
 history write and 403/409 handling as a change a person typed.
 
-## CI and containers — written, not yet exercised
+## CI and containers — proven in CI, still untried locally
 
 The diagram above marks the CI pipeline and container images with dashed
-boundaries deliberately: `.github/workflows/ci.yml` has never run (nothing
-has been pushed to `origin` until this Phase 17 push), and no image has
-ever been built (Docker is not installed on the authoring machine). Both
-were statically verified — the workflow YAML parses and its job graph was
-inspected, the Compose file parses, and the compiled backend was booted
-and exercised outside a container — but treat the first real CI run and
-the first `docker compose up` as untried steps. See `docs/docker.md` and
-`docs/deployment.md`.
+boundaries because they run somewhere other than this repository's own
+checkout, not because they're unverified: `.github/workflows/ci.yml` has
+run repeatedly on `origin/main` and been green on every run since
+2026-09-22, including the `docker` job building all three container
+images and validating `docker compose config`/`nginx -t` every time. What
+remains genuinely untried is **local** execution — Docker has never been
+installed or run on the authoring machine, so no local `docker compose
+up` has happened even though CI has proven the images build. See
+`docs/docker.md` and `docs/deployment.md`.

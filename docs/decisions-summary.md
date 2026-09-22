@@ -114,9 +114,10 @@ It does not replace `DECISIONS.md` and no new ADRs were written for it.
   couldn't authenticate anyway; it would only add attack surface.
 - **CI enforces every gate the project runs locally, including the image
   builds** (ADR-010). Since Docker isn't installed on the authoring
-  machine, CI is deliberately the first place the container images will
-  ever actually be built and the first place `nginx.conf` is syntax-checked
-  — not an afterthought job, but the actual verification step for Phase 14.
+  machine, CI is the only place the container images have actually been
+  built and the only place `nginx.conf` has been syntax-checked — not an
+  afterthought job, but the actual verification step for Phase 14. It has
+  done both successfully on every green CI run since 2026-09-22.
 - **No deployment job, deliberately** (ADR-010/027). A workflow written
   against a hosting target that doesn't exist, or one carrying empty
   secret references waiting to be filled in, is judged worse than an

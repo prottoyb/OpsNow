@@ -350,13 +350,29 @@ success path without a vendor key, and the UI labels mock output as canned.
 
 
 
-Two parts of Phases 14–15 are WRITTEN BUT NEVER EXECUTED and must not be
+The CI pipeline (Phase 15) has run repeatedly on `origin/main` and is
 
-described otherwise: the container images have never been built, because
+green — GitHub Actions history shows it green on every run since
 
-Docker is not installed on this machine, and the CI pipeline has never run,
+2026-09-22, including the `docker` job successfully building all three
 
-because nothing has been pushed.
+container images (backend runtime, backend migrator, frontend runtime)
+
+and validating `docker compose config`/`nginx -t` every time. This was
+
+previously described here as "never run" — that had gone stale by the
+
+time it was checked during Phase 17c; it is corrected now rather than
+
+left to be discovered later. What remains genuinely true, and distinct
+
+from the above: Docker itself has never been installed or run on this
+
+authoring machine, so no **local** `docker compose up` has ever happened,
+
+even though CI has proven the images build and the stack's configuration
+
+is valid.
 
 
 

@@ -38,26 +38,27 @@ are separated deliberately:
 | | State |
 | --- | --- |
 | **Built, tested and reviewed** | Phases 0–13. Every feature area, plus a cross-cutting hardening pass. |
-| **Locally deployment-ready** | Phases 14–16. Production container images, a full-stack Compose run, a CI pipeline and a documented deployment posture — all written, none of it running anywhere. |
-| **Actually deployed** | **Nothing.** There is no hosting account, no managed database, no registry, no domain and no credential. The application has never run outside a developer's machine. |
-| **Remaining** | Phase 17, plus the external steps in `docs/deployment.md` that need an account and a card. |
+| **Locally deployment-ready** | Phases 14–16. Production container images, a full-stack Compose run, a CI pipeline and a documented deployment posture — written, and (see below) proven to work in CI, but never run as a stack on a developer's own machine. |
+| **Actually deployed** | **Nothing.** There is no hosting account, no managed database, no registry, no domain and no credential. The application has never run outside CI or a developer's machine. |
+| **Remaining** | The external steps in `docs/deployment.md` that need an account and a card. |
 
-Two things in that table are unverified-by-execution and are flagged
-wherever they appear rather than only here:
+One thing in that table is unverified-by-execution **locally** and is
+flagged wherever it appears rather than only here:
 
-- **The container images have never been built.** Docker is not installed
-  on the machine they were authored on. They were statically checked, the
-  Compose file parses, and the compiled backend was booted with
-  `NODE_ENV=production` and exercised — but the first `docker compose up`
-  is an untried step. `docs/docker.md` says so at the top and lists what
-  to suspect if it fails.
-- **The CI pipeline has never run.** Nothing has been pushed, so no run
-  exists. Every command it executes passes locally.
+- **Docker has never been installed or run on the machine these files are
+  authored on**, so no local `docker compose up` has ever happened. This
+  is genuinely still true. What is *not* still true, and was corrected
+  during Phase 17c after going stale: CI's `docker` job has actually
+  built all three container images and validated `docker compose config`/
+  `nginx -t` successfully on every green run since 2026-09-22 — including
+  the push that landed this documentation. See `docs/docker.md` for what
+  local verification remains outstanding and what to suspect if a local
+  first build behaves differently than CI's.
 
 Completed so far:
 
 - Project foundation and an approved architecture, recorded as ADR-001
-  through ADR-021 in `DECISIONS.md`.
+  through ADR-027 in `DECISIONS.md`.
 - A PostgreSQL database with Prisma as the schema/migration source of
   truth (18 tables, 7 enums, including tables reserved for not-yet-built
   phases such as Knowledge Base, Notifications and Audit Log).
@@ -177,11 +178,12 @@ server-side, not on feature breadth for its own sake.
 **Infrastructure**
 - Multi-stage Docker images for both halves, plus a Compose stack
   (Postgres, a one-shot migration job, the API, and nginx serving the SPA
-  and proxying `/api`). Written and statically checked, but never built —
-  Docker is not installed on the authoring machine.
+  and proxying `/api`). Built successfully by CI on every green run since
+  2026-09-22; never built locally, since Docker is not installed on the
+  authoring machine.
 - GitHub Actions for CI: typecheck, lint, unit, e2e, Playwright,
-  dependency audit and image builds. Written, but never run — nothing has
-  been pushed.
+  dependency audit and image builds — green on every run since
+  2026-09-22.
 - No hosting, registry, domain or deployed instance of any kind.
 
 ## System Architecture
@@ -597,12 +599,13 @@ same-origin path — and same-origin is a hard requirement, not a
 preference, because the refresh cookie is `SameSite=Strict` and
 path-scoped and the backend rejects a cross-origin refresh outright.
 
-> **Never built.** Docker is not installed on the machine these images
-> were authored on, so `docker compose up` has not been run even once.
-> The Compose file parses, the images were statically checked, and the
-> compiled backend was booted with `NODE_ENV=production` and exercised —
-> but expect to fix something on the first build. `docs/docker.md`
-> explains the setup in full and lists what to suspect if it fails.
+> **Never built locally.** Docker is not installed on the machine these
+> images were authored on, so `docker compose up` has not been run on it
+> even once. CI, however, *has* built all three images successfully on
+> every green run since 2026-09-22 (see Continuous Integration below) —
+> real evidence the images build, just not from this machine. Expect to
+> fix something small on the first genuinely local build regardless;
+> `docs/docker.md` explains the setup in full and lists what to suspect.
 
 ## Continuous Integration
 
@@ -616,13 +619,17 @@ path-scoped and the backend rejects a cross-origin refresh outright.
 | `dependency-audit` | `npm audit --omit=dev --audit-level=high` on both packages |
 | `docker` | builds all three images, renders `docker compose config`, and syntax-checks `nginx.conf` inside the nginx version the image uses |
 
-That last job matters more than usual: CI is the first place the
-container images will actually be built.
+That last job matters more than usual: since Docker isn't installed
+locally, CI is the only place the container images have actually been
+built.
 
 There is no deployment job, deliberately — see below.
 
-> **Never run.** Nothing has been pushed, so no workflow run exists.
-> Every command it executes passes locally.
+> **Green since 2026-09-22.** After three early runs spent debugging the
+> nginx-config check, every run on `origin/main` has passed — all five
+> jobs, including the container image builds. This corrects an earlier
+> version of this README that said CI had never run at all; that claim
+> had gone stale and was caught during Phase 17c's final review.
 
 ## Deployment
 
@@ -774,7 +781,8 @@ is what kept it consistent across ~20 phases of work.
 ## Project Maturity / Portfolio Status
 
 OpsNow is a **complete, working ITSM system that has never been
-deployed**. As of this checkpoint (Phases 0–16 complete, Phase 17 next):
+deployed**. As of this checkpoint (Phases 0–16 complete, Phase 17
+complete for everything achievable from inside this repository):
 
 - Every feature area — tickets, SLA, assets, knowledge base, analytics,
   audit logging and the optional AI assistant — is complete end to end
@@ -783,17 +791,19 @@ deployed**. As of this checkpoint (Phases 0–16 complete, Phase 17 next):
 - Authentication, authorization, and the concurrency-sensitive parts of
   the ticket and asset workflows have been specifically reviewed and
   tested for correctness under race conditions and adversarial input.
-- It is **locally deployment-ready**: production container images, a
-  full-stack Compose run, a CI pipeline covering every gate, environment
-  validation that refuses to boot on a bad configuration, and a written
-  production posture (ADR-027, `docs/deployment.md`).
+- It is **deployment-ready and CI-verified**: production container
+  images that CI has built successfully on every run since 2026-09-22, a
+  full-stack Compose config CI has validated the same way, a CI pipeline
+  covering every gate (green throughout), environment validation that
+  refuses to boot on a bad configuration, and a written production
+  posture (ADR-027, `docs/deployment.md`).
 - It is **not deployed**, and nothing here should be read as claiming
   otherwise. No hosting account, managed database, registry, domain or
   credential exists.
-- Two pieces of that deployment-readiness are **written but never
-  executed**: the container images have never been built (Docker is not
-  installed on the authoring machine) and the CI pipeline has never run
-  (nothing has been pushed). Both are labelled as such in
+- One piece of that deployment-readiness has genuinely never been
+  exercised: **Docker itself has never been installed or run locally** on
+  the authoring machine, so no local `docker compose up` has happened —
+  distinct from CI having built the images. This is labelled as such in
   `docs/docker.md`, `TASKS.md` and `progress.md` rather than being left
   to be discovered.
 - "Production-ready" would be an overstatement while the images are

@@ -6,13 +6,17 @@ secrets baked in, health checks, and schema migration as its own one-shot job.
 
 > **Verification status.** Docker was not available on the machine this was
 > authored on (no `docker` on `PATH`, no Docker Desktop installed), so the
-> images have **never been built** and the stack has **never been started**.
-> Everything below is written from the project's real behaviour and was
-> statically checked — the Compose file parses and its service graph was
-> inspected, the production bundles both build, and the compiled backend was
-> booted with `NODE_ENV=production` and exercised (health, auth throttle).
-> Treat the first `docker compose up --build` as an unverified step and expect
-> to fix something. The "If the first build fails" section lists what to
+> images have **never been built locally** and the stack has **never been
+> started locally**. CI, however, has built all three images and validated
+> `docker compose config`/`nginx -t` successfully on every green run since
+> 2026-09-22 (see `.github/workflows/ci.yml`'s `docker` job and the project's
+> GitHub Actions history) — real evidence the images build, just not from
+> this machine. Everything below was also checked directly: the Compose file
+> parses and its service graph was inspected, the production bundles both
+> build, and the compiled backend was booted with `NODE_ENV=production` and
+> exercised (health, auth throttle). Treat the first **local**
+> `docker compose up --build` as an unverified step and expect to fix
+> something small. The "If the first build fails" section lists what to
 > suspect.
 
 ---

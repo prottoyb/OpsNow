@@ -5411,6 +5411,16 @@ Completed:
 
 No backend or frontend source file was touched in this pass — `git diff --stat` against `backend/` and `frontend/` for the whole of Phase 17c is empty; every change is documentation, `TASKS.md`/`progress.md`/`CLAUDE.md`/`README.md` status text, and the new `docs/` tree.
 
+Git/CI/Release outcome:
+
+\- Fetched `origin` before pushing (18 ahead, 0 behind — a clean fast-forward), pushed `main` (commit `e9774bc`), and confirmed `git rev-parse main origin/main` returned the same SHA for both.
+
+\- **A significant finding surfaced while monitoring the resulting CI run**: querying the GitHub Actions API directly (no `gh` CLI is installed in this environment, so this went through the public REST API) showed CI had already run nine times on `origin/main`, starting 2026-09-22, well before this session began — three early failures while a Playwright/nginx-config issue was being debugged (`a45336a`, `08aae89`, `7e8346f`), then green on every run from `3488d0f` onward, including two runs (`5c5f9bc`, `b2b06f8`) for the AI-team-V2 migration that this session's own `git log` had already seen at start-up. Every green run included the `docker` job, so all three container images had already been built successfully by CI, and `docker compose config`/`nginx -t` had already validated cleanly — none of which was ever executed locally, since Docker still isn't installed on this machine. This directly contradicted the "the CI pipeline has never run" / "the container images have never been built" language that CLAUDE.md, TASKS.md, README.md and this session's own freshly-written docs all stated in absolute terms — inherited uncritically from the repository's own prior documentation rather than verified against GitHub's actual state. It was corrected in every current-status location (CLAUDE.md, TASKS.md's summary and Phase 14/15 sections, README.md's status table/Docker section/CI section/Project Maturity section, and this session's own `docs/architecture/system-architecture.md`, `docs/decisions-summary.md`, `docs/portfolio/interview-prep.md`, `docs/docker.md` and `docs/releases/v0.1.0.md`) rather than left for a future session to find — the distinction drawn throughout is "CI has proven the images build" versus "Docker has never been run **locally**," which remains genuinely true and is the only piece of that gap left open.
+
+\- The push that carried this session's own documentation (`e9774bc`) was, itself, also green: all five jobs (frontend, backend, browser-e2e, dependency-audit, docker) passed, confirmed by polling the run to completion via the API rather than assumed.
+
+\- Release: no prior git tag existed; both `package.json` files declare `0.1.0`, so `v0.1.0` was chosen. `docs/releases/v0.1.0.md` was corrected for the same stale CI/Docker claim as everything else, then this correction batch (the stale-claim fix across all of the above, plus the release notes) was committed and pushed as its own commit, an annotated tag `v0.1.0` was created against it and pushed. No `gh` CLI or GitHub API token is available in this environment, so the formal GitHub Release object (the one with a release-notes page in the repository's Releases UI) could not be created automatically — the tag exists on GitHub, but turning it into a Release is a manual step, documented at the bottom of `docs/releases/v0.1.0.md`.
+
 \---
 
 
