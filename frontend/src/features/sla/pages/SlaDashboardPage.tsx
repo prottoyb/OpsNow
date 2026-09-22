@@ -62,6 +62,13 @@ const RESOLUTION_METRICS: readonly MetricDefinition[] = [
  * own), but a second, non-colour cue that a "bad" tile is bad at a glance,
  * the same "never colour alone" principle `Badge` already applies. `good`
  * gets a check, `bad` a triangle; `neutral` (the lead figure) gets none.
+ *
+ * `bad` uses red/danger, not amber/warning: every tile tagged `bad` here
+ * (late/overdue/never-responded/breached) represents a completed or
+ * in-flight BREACH, not a merely at-risk-but-not-yet-late state — the same
+ * distinction `slaDisplay.ts` already draws (`Breached` -> `danger`,
+ * `AtRisk` -> `warning`). Matching that vocabulary here, rather than
+ * introducing a second meaning for amber, is the point.
  */
 function MetricToneGlyph({ tone }: { tone: MetricTone }) {
   if (tone === 'neutral') return null;
@@ -74,7 +81,7 @@ function MetricToneGlyph({ tone }: { tone: MetricTone }) {
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={`size-3.5 ${tone === 'good' ? 'text-emerald-700' : 'text-amber-700'}`}
+      className={`size-3.5 ${tone === 'good' ? 'text-emerald-700' : 'text-red-700'}`}
     >
       {tone === 'good' ? (
         <path d="M5 12l4 4 10-10" />
