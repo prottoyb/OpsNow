@@ -30,9 +30,13 @@ the CI pipeline has never run (nothing has been pushed).
 
 OpsNow is NOT deployed anywhere. No hosting account, managed database,
 
-registry, domain or credential exists, which is why nine of Phase 16's
+registry, domain or credential exists, which is why ten of Phase 16's
 
-eleven items remain unchecked.
+eleven items remain unchecked. The eleventh, "Configure production CORS",
+
+is checked because its answer is that production CORS is deliberately
+
+disabled (ADR-027), not because anything was deployed.
 
 
 

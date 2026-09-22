@@ -4081,11 +4081,15 @@ What is NOT done, and will not be claimed:
 
 \- **OpsNow is not deployed anywhere.** No hosting account, no managed
 
-database, no registry, no domain, no credential. Nine of Phase 16's
+database, no registry, no domain, no credential. Ten of Phase 16's
 
 eleven task-list items remain unchecked for that reason, and
 
-`docs/deployment.md` says which external step unlocks each.
+`docs/deployment.md` says which external step unlocks each. (This entry
+
+originally said nine; the count was corrected at the milestone close —
+
+only "Configure production CORS" is checked.)
 
 
 

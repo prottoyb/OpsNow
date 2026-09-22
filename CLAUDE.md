@@ -360,9 +360,13 @@ OpsNow is NOT deployed anywhere. There is no hosting account, managed
 
 database, container registry, domain or credential. `docs/deployment.md`
 
-lists the external steps that would be required, and nine of Phase 16's
+lists the external steps that would be required, and ten of Phase 16's
 
-eleven task-list items are unchecked for exactly that reason.
+eleven task-list items are unchecked for exactly that reason. The one that
+
+is checked is "Configure production CORS", whose answer is that production
+
+CORS is deliberately disabled (ADR-027).
 
 
 
