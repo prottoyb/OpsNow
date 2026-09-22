@@ -6,7 +6,7 @@
 
 
 
-@D:\Projects\Claude\AI-Software-Team\CLAUDE.md
+@D:\Projects\Claude\AI-Software-Team-V2\CLAUDE.md
 
 
 
@@ -14,7 +14,7 @@ The shared engineering constitution, mandatory gates, policy precedence,
 
 and agent/rule/skill definitions above are maintained as the single
 
-source of truth at D:\Projects\Claude\AI-Software-Team and made
+source of truth at D:\Projects\Claude\AI-Software-Team-V2 and made
 
 available here via the symlinked `.claude\agents`, `.claude\rules`, and
 
