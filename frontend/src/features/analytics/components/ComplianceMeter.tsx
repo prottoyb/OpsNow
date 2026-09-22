@@ -19,7 +19,10 @@ export interface ComplianceMeterProps {
  *
  * Collapsing null into 0 would show a quiet window as total failure.
  * Colour is not used to judge the number — the figure and the met/breached
- * counts are printed, and the bar is one neutral hue.
+ * counts are printed, and the bar is one hue (the brand accent) throughout,
+ * never traffic-light red/amber/green: a compliance RATE is a magnitude, not
+ * a status, and this bar sits beside real status badges elsewhere on the
+ * page that already own the good/warning/critical vocabulary.
  */
 export function ComplianceMeter({
   label,
@@ -39,7 +42,7 @@ export function ComplianceMeter({
           <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
             {formatRate(rate)}
           </p>
-          <div className="mt-2 h-3 rounded-sm bg-slate-100">
+          <div className="mt-2 h-2.5 rounded-full bg-slate-100">
             <div
               role="meter"
               aria-label={label}
@@ -47,7 +50,7 @@ export function ComplianceMeter({
               aria-valuemax={100}
               aria-valuenow={Math.round(rate * 100)}
               aria-valuetext={`${formatRate(rate)}, ${formatCount(met)} met and ${formatCount(breached)} breached`}
-              className="h-3 rounded-sm bg-slate-700"
+              className="h-2.5 rounded-full bg-brand-600"
               style={{ width: `${rate * 100}%` }}
             />
           </div>

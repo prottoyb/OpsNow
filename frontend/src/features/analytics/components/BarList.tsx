@@ -20,7 +20,8 @@ export interface BarListProps {
  * also printed as text beside it, so nothing depends on colour or bar length.
  * The bar itself is a `role="meter"` with a name and a value, so a screen
  * reader hears "High: 12 tickets, 40% of the total" rather than silence. One
- * hue throughout: the row label, not the colour, identifies each row.
+ * hue throughout (the brand accent, a sequential/magnitude encoding — see
+ * the dataviz skill): the row label, not the colour, identifies each row.
  */
 export function BarList({ label, unit, items }: BarListProps) {
   const max = Math.max(0, ...items.map((item) => item.value));
@@ -39,7 +40,7 @@ export function BarList({ label, unit, items }: BarListProps) {
               className="grid grid-cols-[6.5rem_1fr_3rem] items-center gap-2 text-sm sm:grid-cols-[8rem_1fr_3.5rem]"
             >
               <span className="text-slate-700">{item.label}</span>
-              <div className="h-3 rounded-r-sm bg-slate-100">
+              <div className="h-2.5 rounded-full bg-slate-100">
                 <div
                   role="meter"
                   aria-label={`${label}: ${item.label}`}
@@ -47,7 +48,7 @@ export function BarList({ label, unit, items }: BarListProps) {
                   aria-valuemax={max}
                   aria-valuenow={item.value}
                   aria-valuetext={`${formatCount(item.value)} ${unit}, ${share}% of the total`}
-                  className="h-3 rounded-r-sm bg-slate-700"
+                  className="h-2.5 rounded-full bg-brand-600"
                   style={{ width: `${widthPercent}%` }}
                 />
               </div>

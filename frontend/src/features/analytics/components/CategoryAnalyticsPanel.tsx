@@ -58,7 +58,7 @@ export function CategoryAnalyticsPanel({
                           </th>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
-                              <div className="h-3 w-24 rounded-r-sm bg-slate-100">
+                              <div className="h-2.5 w-24 rounded-full bg-slate-100">
                                 <div
                                   role="meter"
                                   aria-label={`${name} ticket volume`}
@@ -66,7 +66,7 @@ export function CategoryAnalyticsPanel({
                                   aria-valuemax={maxVolume}
                                   aria-valuenow={category.volume}
                                   aria-valuetext={`${formatCount(category.volume)} tickets`}
-                                  className="h-3 rounded-r-sm bg-slate-700"
+                                  className="h-2.5 rounded-full bg-brand-600"
                                   style={{ width: `${width}%` }}
                                 />
                               </div>
