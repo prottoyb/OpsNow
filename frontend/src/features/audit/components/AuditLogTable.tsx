@@ -68,8 +68,26 @@ function Recorded({ value }: { value: string | null }) {
 function EntryDetails({ entry }: { entry: AuditLogEntry }) {
   const metadata = Object.entries(entry.metadata);
   return (
-    <details>
-      <summary className="cursor-pointer rounded-sm text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700">
+    <details className="group">
+      <summary className="[&::-webkit-details-marker]:hidden marker:hidden inline-flex cursor-pointer items-center gap-1 rounded-sm border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700">
+        {/* Both `marker:hidden` (the standards `::marker` a <summary> gets)
+            and the `[&::-webkit-details-marker]:hidden` arbitrary variant
+            (older WebKit's own pseudo-element) remove the native disclosure
+            triangle, replaced by this glyph so open/closed state stays
+            visible without looking like a bare underlined link in a data
+            cell. */}
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="size-3 transition-transform group-open:rotate-90"
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
         View details
         <span className="sr-only"> for {entry.action}</span>
       </summary>
@@ -106,8 +124,8 @@ function EntryDetails({ entry }: { entry: AuditLogEntry }) {
   );
 }
 
-const TH = 'px-3 py-2 font-semibold';
-const TD = 'px-3 py-2 align-top';
+const TH = 'px-3 py-2.5';
+const TD = 'px-3 py-3 align-top';
 /**
  * Entity is the one column a narrow phone screen can least afford: every
  * other column is either short (Time, Outcome), already wraps (Actor,
@@ -131,11 +149,11 @@ export function AuditLogTable({
   entries: readonly AuditLogEntry[];
 }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-card border border-slate-200 bg-white shadow-card">
       <table className="w-full border-collapse text-left text-sm">
         <caption className="sr-only">Audit log, newest first</caption>
         <thead>
-          <tr className="border-b border-slate-300 text-slate-700">
+          <tr className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase">
             <th scope="col" className={TH}>
               Time
             </th>
@@ -156,16 +174,27 @@ export function AuditLogTable({
             </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-slate-100">
           {entries.map((entry) => (
-            <tr key={entry.id} className="border-b border-slate-200 bg-white">
-              <td className={`${TD} whitespace-nowrap`}>
+            <tr
+              key={entry.id}
+              className="transition-colors hover:bg-slate-50 focus-within:bg-slate-50"
+            >
+              <td className={`${TD} whitespace-nowrap text-slate-600`}>
                 <time dateTime={toDateTimeAttribute(entry.createdAt)}>
                   {formatDateTime(entry.createdAt)}
                 </time>
               </td>
               <td className={TD}>
-                <code className="text-xs break-all">{entry.action}</code>
+                {/* A plain span, not `<code>` — the `<code>` element itself
+                    was the single biggest "raw database dump" signal (per
+                    the designer's rendered-UI review), independent of any
+                    styling; a smaller mono weight keeps the dotted action
+                    key legible as a system identifier without that
+                    connotation. */}
+                <span className="font-mono text-xs break-all text-slate-700">
+                  {entry.action}
+                </span>
               </td>
               <td className={TD}>
                 {entry.actor ? (

@@ -24,7 +24,7 @@ export function Pagination({
   return (
     <nav
       aria-label={`${itemNoun} pagination`}
-      className="flex flex-wrap items-center justify-between gap-3"
+      className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"
     >
       {/* Announced on change so a screen-reader user hears the new range. */}
       <p aria-live="polite" className="text-sm text-slate-600">

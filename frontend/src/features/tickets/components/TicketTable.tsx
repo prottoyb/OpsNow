@@ -20,44 +20,44 @@ function assigneeLabel(ticket: Ticket): string {
 export function TicketTable({ tickets }: { tickets: readonly Ticket[] }) {
   return (
     <>
-      <div className="hidden overflow-x-auto md:block">
+      <div className="hidden overflow-x-auto rounded-card border border-slate-200 bg-white shadow-card md:block">
         <table className="w-full border-collapse text-left text-sm">
           <caption className="sr-only">Tickets</caption>
           <thead>
-            <tr className="border-b border-slate-300 text-slate-700">
-              <th scope="col" className="px-3 py-2 font-semibold">
+            <tr className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase">
+              <th scope="col" className="px-3 py-2.5">
                 Ticket
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 Subject
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 Status
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 Priority
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 SLA
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 Assignee
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 Created
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {tickets.map((ticket) => (
               <tr
                 key={ticket.id}
-                className="border-b border-slate-200 align-top"
+                className="align-top transition-colors hover:bg-slate-50 focus-within:bg-slate-50"
               >
-                <td className="px-3 py-2 text-slate-600">
+                <td className="px-3 py-3 text-slate-600">
                   #{ticket.ticketNumber}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-3">
                   <Link to={`/tickets/${ticket.id}`} className={LINK_CLASSES}>
                     {ticket.subject}
                   </Link>
@@ -67,19 +67,19 @@ export function TicketTable({ tickets }: { tickets: readonly Ticket[] }) {
                     </p>
                   ) : null}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-3 whitespace-nowrap">
                   <TicketStatusBadge status={ticket.status} />
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-3 whitespace-nowrap">
                   <TicketPriorityBadge priority={ticket.priority} />
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-3 whitespace-nowrap">
                   <TicketSlaIndicator ticket={ticket} />
                 </td>
-                <td className="px-3 py-2 text-slate-700">
+                <td className="px-3 py-3 text-slate-700">
                   {assigneeLabel(ticket)}
                 </td>
-                <td className="px-3 py-2 text-slate-600">
+                <td className="px-3 py-3 text-slate-600">
                   <time dateTime={toDateTimeAttribute(ticket.createdAt)}>
                     {formatDateTime(ticket.createdAt)}
                   </time>

@@ -19,44 +19,47 @@ function assigneeLabel(asset: Asset): string {
 export function AssetTable({ assets }: { assets: readonly Asset[] }) {
   return (
     <>
-      <div className="hidden overflow-x-auto md:block">
+      <div className="hidden overflow-x-auto rounded-card border border-slate-200 bg-white shadow-card md:block">
         <table className="w-full border-collapse text-left text-sm">
           <caption className="sr-only">Assets</caption>
           <thead>
-            <tr className="border-b border-slate-300 text-slate-700">
-              <th scope="col" className="px-3 py-2 font-semibold">
+            <tr className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase">
+              <th scope="col" className="px-3 py-2.5">
                 Asset tag
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 Name
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 Type
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 Status
               </th>
-              <th scope="col" className="px-3 py-2 font-semibold">
+              <th scope="col" className="px-3 py-2.5">
                 Assigned to
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {assets.map((asset) => (
-              <tr key={asset.id} className="border-b border-slate-200 align-top">
-                <td className="px-3 py-2">
+              <tr
+                key={asset.id}
+                className="align-top transition-colors hover:bg-slate-50 focus-within:bg-slate-50"
+              >
+                <td className="px-3 py-3">
                   <Link to={`/assets/${asset.id}`} className={LINK_CLASSES}>
                     {asset.assetTag}
                   </Link>
                 </td>
-                <td className="px-3 py-2 text-slate-800">{asset.name}</td>
-                <td className="px-3 py-2 text-slate-700">
+                <td className="px-3 py-3 text-slate-800">{asset.name}</td>
+                <td className="px-3 py-3 text-slate-700">
                   {asset.assetType.name}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-3 whitespace-nowrap">
                   <AssetStatusBadge status={asset.status} />
                 </td>
-                <td className="px-3 py-2 text-slate-700">
+                <td className="px-3 py-3 text-slate-700">
                   {assigneeLabel(asset)}
                 </td>
               </tr>
