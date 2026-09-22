@@ -4729,6 +4729,346 @@ demo prep, final GitHub release.
 
 
 
+\### 2026-09-22 — Phase 17a-2 Rendered-UI Correction Pass Implemented
+
+
+
+Phase 17a (above) closed on a code-only review — no browser tool was
+
+available, so the design and senior reviews could only read source. The
+
+project owner then actually started both dev servers, opened the app in a
+
+real browser at desktop and mobile widths, and paused all further Phase 17
+
+work to report back nine specific, numbered problems: the nav visibly
+
+wrapped/broke below ~900px with no mobile treatment at all; pages felt
+
+narrow with too much dead side margin; tables looked "basic"; forms looked
+
+like "a default form dropped on the page"; the knowledge base was
+
+"generic"; the SLA dashboard was "boxed metrics plus a plain table"; the
+
+audit log looked "like a raw database table"; and analytics, while the
+
+strongest screen, still needed more composition work. This is a materially
+
+different and more useful verdict than a code-only review can reach, and
+
+confirms the earlier pass's own stated limitation was a real gap, not
+
+just a formality.
+
+
+
+Workflow: `ui-ux-product-designer` produced a concrete correction spec
+
+from the nine findings (in one pass, no turn-limit issue this time — the
+
+work packet front-loaded enough context) -> implemented across five commits
+
+-> second-pass design review -> one correction commit -> Senior Review ->
+
+full regression. Same `ui-polish` workflow as Phase 17a, this time actually
+
+exercised against a human's real observations instead of a designer's own
+
+code-only inference.
+
+
+
+\*\*Implemented\*\* (`87861e9`..`5a08991`, six commits):
+
+
+
+\- \*\*App shell rewrite\*\* (`AppLayout.tsx`, full rewrite): the single
+
+biggest structural change. A two-tier header (brand/account strip, then a
+
+nav row) that becomes a fixed slide-in drawer below `md`, toggled by a
+
+hamburger button. The load-bearing design constraint, stated explicitly in
+
+both the work packet and the code's own comments: exactly ONE
+
+`<nav aria-label="Main">` and ONE "Sign out" button must exist in the
+
+rendered tree at all times, never a second copy for mobile — because
+
+several existing tests (`auth.test.tsx`, `AssetListPage.test.tsx`,
+
+`SlaDashboardPage.test.tsx`, `ArticleListPage.test.tsx`) query
+
+`getByRole('navigation', { name: 'Main' })` and
+
+`getByRole('button', { name: /sign out/i })` as singular/unscoped, and
+
+jsdom applies no CSS — so a second, "hidden" mobile copy would actually
+
+coexist in the accessibility tree during a test run and break those
+
+queries, not just add invisible markup. The drawer's CONTAINER is what
+
+changes shape by breakpoint (fixed off-canvas panel vs. static inline
+
+row), never its content. Caught and fixed mid-implementation: an early
+
+draft duplicated the Sign-out button into the drawer for mobile before
+
+this constraint was fully internalised; found and corrected before any
+
+commit. Drawer details: focus moves to the first link on open, Escape
+
+closes and returns focus to the trigger, a backdrop click closes it,
+
+closing also happens automatically on route change, and `invisible` (not
+
+just the off-screen transform) is used when closed so a keyboard user
+
+tabbing past the hamburger doesn't land on off-screen links — restored via
+
+`md:visible` for the desktop row. Active nav state moved from
+
+underline-only to a filled brand-50/brand-700 pill. Page shell widened
+
+`max-w-6xl` -> `max-w-7xl` with scaling gutters (`px-4 sm:px-6 lg:px-8`)
+
+on both the header and `<main>`; header gained `sticky top-0`.
+
+
+
+\- \*\*Tables\*\* (`TicketTable`, `AssetTable`, `AuditLogTable`,
+
+`AgentAnalyticsPanel`, `CategoryAnalyticsPanel`, the SLA policy table — six
+
+places): `bg-slate-50` uppercase header band (was the same visual weight
+
+as body text), `divide-y divide-slate-100` row separation (was a border
+
+per row), `hover:bg-slate-50`/`focus-within:bg-slate-50` row highlight
+
+(was none at all), `py-3` row rhythm, whole table wrapped in the `Card`
+
+surface. `focus-within` was deliberately included only on tables whose
+
+rows contain a focusable link (`TicketTable`/`AssetTable`) and omitted from
+
+tables that don't (`AgentAnalyticsPanel`'s rows are plain text) — flagged
+
+by the senior reviewer as possible copy-paste drift, verified by reading
+
+the actual row markup to be a deliberate, correct difference, not a bug.
+
+`AuditLogTable`'s Action cell dropped `<code>` (judged the single biggest
+
+"raw database dump" signal, independent of any styling) for a plain
+
+`font-mono` span; its "View details" disclosure gained a real bordered-chip
+
+affordance with a rotating chevron instead of reading as a bare underlined
+
+link in a data cell. `Pagination` gained a `border-t` footer separator.
+
+
+
+\- \*\*SLA dashboard\*\*: the flat, undifferentiated 7-tile metric grid
+
+became a standalone lead figure (Open tickets with an SLA) plus two
+
+labelled subgroups, Response and Resolution. Each non-neutral tile gets a
+
+small shape-coded glyph (check vs. triangle) beside its label — a second,
+
+non-colour cue for breach vs. healthy, the same principle `Badge` already
+
+applies — without touching any calculation, label or value. The glyph
+
+colour was initially amber for every "bad" tile; the design review's
+
+second pass correctly flagged this as inconsistent with `slaDisplay.ts`'s
+
+own established vocabulary (`Breached -> danger`/red,
+
+`AtRisk -> warning`/amber) — every "bad" tile here represents a completed
+
+or in-flight breach, not a merely at-risk state, so it was corrected to
+
+red in a follow-up commit.
+
+
+
+\- \*\*Forms\*\* (ticket/asset/article create pages plus their shared form
+
+components): each standalone create page now wraps its form in `Card` —
+
+previously no container at all, reading as "a default form dropped on the
+
+page." The same form components' edit-in-place usage (inside
+
+`TicketDetailPage`/`AssetDetailPage`/`ArticleDetailPage`'s existing Details
+
+Card) was deliberately NOT also wrapped, which would have doubled the
+
+surface — verified structurally impossible to get wrong, not just
+
+avoided by convention: `TicketForm.tsx`/`AssetForm.tsx`/`ArticleForm.tsx`
+
+contain zero `Card` references of their own. Each form gained an internal
+
+section break separating conceptually different field groups, and Cancel
+
+moved from the `secondary` to the `ghost` button variant so Submit reads
+
+as clearly dominant.
+
+
+
+\- \*\*Knowledge base\*\*: search now leads `ArticleFilters` on its own
+
+full-width row with an icon and larger type — built as a bespoke `<input>`
+
+with a complete, self-contained class list rather than extending the
+
+shared `Input` component, specifically because this project has no
+
+`tailwind-merge` and appending `pl-9` after `Input`'s hard-coded `px-3` in
+
+one class string is not guaranteed to win Tailwind's cascade. `ArticleList`
+
+article titles are now the dominant element in their card (larger, bolder,
+
+underline dropped as redundant on a card's own heading — a documented,
+
+scoped exception to the project's "links stay quiet" rule, verified by
+
+both review passes to read as a deliberate carve-out rather than an
+
+unexplained inconsistency) with metadata visually demoted behind a
+
+separator. Article body prose gained `max-w-prose`/relaxed leading for
+
+reading comfort at the new page width.
+
+
+
+\- \*\*Analytics\*\*: the two remaining raw tables (`AgentAnalyticsPanel`,
+
+`CategoryAnalyticsPanel` — their chart bars had already gotten colour
+
+treatment in Phase 17a) got the same table treatment as above.
+
+`TicketAnalyticsPanel` gained section breaks between its stat grid, its
+
+"Time to resolution" subsection, and its by-status/by-priority charts.
+
+
+
+\*\*Second-pass design review\*\* (one pass this time, no resume needed for
+
+the report itself — the earlier turn-limit pattern from Phase 17a repeated
+
+though: the first review agent hit its 10-turn limit mid-review and was
+
+correctly resumed via `SendMessage` rather than re-launched fresh). One
+
+real finding (the SLA glyph colour above), fixed in commit `5a08991`.
+
+Confirmed directly, not assumed: the single-nav/single-Sign-out invariant
+
+holds, no edit-mode form site is double-wrapped in Card, and the
+
+`AuditLogTable` chevron/marker-hiding CSS is valid and correctly wired.
+
+
+
+\*\*Senior Review\*\* (also hit its turn limit once, resumed the same way):
+
+\*\*APPROVE, no CRITICAL or HIGH finding.\*\* Verified directly by reading the
+
+actual focus-management effects in `AppLayout.tsx` (not just trusting
+
+that tests pass) that there's no stale-closure risk, no render loop
+
+between the two `useEffect`s, and the drawer's class logic is internally
+
+coherent. A handful of small-diff files (`index.css`, `Pagination.tsx`,
+
+`TicketAnalyticsPanel.tsx`) and two tables' row bodies
+
+(`AssetTable.tsx`/`CategoryAnalyticsPanel.tsx`, checked only by grep during
+
+the review) went unread by the reviewer due to its own turn limit;
+
+closed out afterward with a direct mechanical check (grepped for the
+
+expected treatment markers in every flagged file, and confirmed zero
+
+`Card` references in any of the three form components, closing the one
+
+residual double-wrap risk with certainty rather than inference).
+
+
+
+Verification: `npx tsc --noEmit` and `npx eslint .` clean at every commit
+
+checkpoint; `npx vitest run` — 39 files, 481 tests passing, unchanged
+
+throughout the entire correction pass. No backend file touched anywhere
+
+(`git diff --stat` against `backend/` empty across the whole range).
+
+
+
+\*\*Still no visual/rendered verification was possible\*\* even for this
+
+pass's own review steps — no browser tool is available in this
+
+environment. The project owner's own manual inspection is what drove this
+
+entire correction pass in the first place, which is precisely why it
+
+happened: a code-only review cannot substitute for someone actually
+
+looking at the rendered result, and this session said so plainly when
+
+asked how to proceed after Phase 17a rather than pretending otherwise.
+
+Both dev servers were left running throughout implementation (backend on
+
+3000, frontend on 5173) — Vite and Nest's watch modes live-reloaded every
+
+change, so nothing needed restarting for the project owner to inspect the
+
+corrected app.
+
+
+
+Git status: four implementation commits (`87861e9`, `83a7bb5`, `9e125c4`,
+
+`47b67b5`) plus the correction-pass commit (`5a08991`) — five total, all
+
+local on `main`, not pushed.
+
+
+
+Next:
+
+
+
+\- Still the remainder of Phase 17's checklist (see the entry above) —
+
+unless the project owner's next round of manual inspection surfaces
+
+further correction work first.
+
+
+
+\---
+
+
+
 ## Resume Instructions
 
 

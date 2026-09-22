@@ -1916,3 +1916,137 @@ existing "Review accessibility"/"Review responsive design" items
 
 above, which are therefore still unchecked.
 
+
+
+\---
+
+
+
+\### Phase 17a-2 — Rendered-UI Correction Pass
+
+
+
+After Phase 17a above closed (code-only review), the project owner
+
+started both dev servers, manually inspected the actual running app on
+
+desktop and mobile, and judged it "too flat, too sparse, too close to
+
+a basic admin template" — a materially different verdict than the
+
+code-only review could reach. This second pass corrected nine specific,
+
+numbered problem areas named from that direct inspection: app shell/
+
+navigation, page width/composition, ticket/asset tables, forms,
+
+knowledge base, the SLA dashboard, analytics, the audit log, and mobile
+
+responsiveness. Presentation-only, same as Phase 17a: `git diff --stat`
+
+against `backend/` across the whole correction pass is empty.
+
+
+
+\- \[x] `ui-ux-product-designer` produced a concrete correction spec from
+
+the nine rendered findings (concrete Tailwind values/breakpoints, not
+
+just adjectives)
+
+\- \[x] App shell rewrite (`AppLayout.tsx`): two-tier header, a real
+
+mobile nav drawer (focus-trap-ish: focus-to-first-link on open,
+
+Escape-to-close-and-return-focus, backdrop click, closes on route
+
+change, `invisible`/`visible` so closed-drawer links drop out of tab
+
+order below `md`). Exactly ONE `<nav aria-label="Main">` and ONE
+
+Sign-out button at all times — verified directly (not just via passing
+
+tests) by both review passes, since jsdom's lack of CSS means a
+
+duplicated instance would be a real, not merely cosmetic, regression.
+
+Page shell widened `max-w-6xl` -> `max-w-7xl` with scaling gutters.
+
+\- \[x] Table hierarchy (`TicketTable`, `AssetTable`, `AuditLogTable`,
+
+`AgentAnalyticsPanel`, `CategoryAnalyticsPanel`, the SLA policy table):
+
+header band, row separation/hover, `Card` surface — applied consistently
+
+across all six tables, confirmed deliberate (not drifted) where one
+
+detail differs between them (`focus-within` only on tables whose rows
+
+contain a focusable link).
+
+\- \[x] `AuditLogTable`: dropped `<code>` for the Action cell (judged the
+
+single biggest "database dump" signal, independent of styling); gave
+
+"View details" a real button-like affordance.
+
+\- \[x] SLA dashboard: flat 7-tile grid regrouped into a lead figure plus
+
+Response/Resolution subgroups, each non-neutral tile gets a shape-coded
+
+glyph (not colour alone) — colour corrected from amber to red after the
+
+design review flagged it didn't match `slaDisplay.ts`'s own
+
+`Breached -> danger` vocabulary.
+
+\- \[x] Forms: standalone create pages (ticket/asset/article) now wrap
+
+their form in `Card`; the same form components' edit-in-place usage
+
+(already inside an existing Card) verified NOT double-wrapped — the
+
+form components themselves contain no `Card` import at all, so
+
+double-wrapping is structurally impossible, not just avoided by
+
+convention.
+
+\- \[x] Knowledge base: search leads its own full-width row with an
+
+icon and larger type (a bespoke input, not an override of the shared
+
+`Input`'s hard-coded padding, since this project has no tailwind-merge);
+
+article titles are now the dominant element in their card.
+
+\- \[x] Second-pass design review (one real finding: the SLA glyph colour
+
+above, fixed) and Senior Review (APPROVE, no CRITICAL/HIGH; a handful of
+
+small-diff files — `index.css`, `Pagination.tsx`, `TicketAnalyticsPanel.tsx`
+
+— and two table row bodies went unread by the reviewer due to its turn
+
+limit but were independently confirmed via direct grep/read afterward).
+
+\- \[x] Full regression at every checkpoint: `tsc --noEmit`, `eslint .`,
+
+`vitest run` — 39 files, 481 tests, unchanged throughout.
+
+
+
+Still open, same reasons as Phase 17a above: no rendered/visual
+
+verification was possible in this environment (no browser tool), so a
+
+real breakpoint walkthrough and a proper accessibility review remain
+
+folded into Phase 17's "Review accessibility"/"Review responsive
+
+design" items, which stay unchecked. Both dev servers were left running
+
+throughout this pass (Vite/Nest watch mode live-reloaded every change)
+
+so the project owner can inspect the corrected app without a restart.
+
