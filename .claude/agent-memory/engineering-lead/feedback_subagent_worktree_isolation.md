@@ -53,6 +53,17 @@ delegated implementation brief, and the brief should say plainly: if the
 probe fails, hand back immediately rather than attempting a workaround. That
 cost one cheap round trip instead of a wasted turn.
 
+**Confirmed working, 2026-09-22 (milestone close).** The probe-first brief
+did its job: the agent probed, was refused, ff-merged its stale base up to
+the target branch by itself, delivered in its own worktree and said so
+loudly at the top of its report. For a SMALL diff (2 new files + one
+package.json line) plain `cp` into the primary checkout was clean — the new
+files were untracked, so the LF/CRLF noise warned about at the bottom of
+this file never materialised; git just reported "LF will be replaced by
+CRLF" on `add` and the diff stayed to the three intended files. Use
+copy-out for a handful of new files; use branch adoption when the agent has
+modified many tracked ones.
+
 If the agent stops early (rate limit, error), its work is usually
 UNCOMMITTED in its worktree. You do NOT have to copy it out: an engineering-
 lead working in the primary checkout can `cd` into the stalled worktree,
