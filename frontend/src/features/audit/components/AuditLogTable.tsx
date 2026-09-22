@@ -108,6 +108,18 @@ function EntryDetails({ entry }: { entry: AuditLogEntry }) {
 
 const TH = 'px-3 py-2 font-semibold';
 const TD = 'px-3 py-2 align-top';
+/**
+ * Entity is the one column a narrow phone screen can least afford: every
+ * other column is either short (Time, Outcome), already wraps (Actor,
+ * Details), or is the reason someone opened the log at all (Action).
+ * Deliberately a simplification, not a recovery path: entity type/id is not
+ * duplicated into "View details" (which covers IP/user agent/metadata only),
+ * so this genuinely narrows what a phone-width viewport can see, in exchange
+ * for not forcing horizontal scroll on every row (`.claude/rules/ui-design.md`:
+ * avoid unnecessary horizontal scroll). Widening the viewport — or resizing —
+ * is what recovers the column.
+ */
+const ENTITY_CELL = 'hidden sm:table-cell';
 
 /**
  * Read-only by construction: an audit row is append-only, so this renders no
@@ -133,7 +145,7 @@ export function AuditLogTable({
             <th scope="col" className={TH}>
               Actor
             </th>
-            <th scope="col" className={TH}>
+            <th scope="col" className={`${TH} ${ENTITY_CELL}`}>
               Entity
             </th>
             <th scope="col" className={TH}>
@@ -167,7 +179,7 @@ export function AuditLogTable({
                   <span className="text-slate-600">{NOT_ATTRIBUTED}</span>
                 )}
               </td>
-              <td className={TD}>
+              <td className={`${TD} ${ENTITY_CELL}`}>
                 {entry.entityType || entry.entityId ? (
                   <>
                     {entry.entityType ?? NOT_RECORDED}
