@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { Spinner } from '../../../components/ui/Spinner';
 import type {
   AiArticleReference,
@@ -251,18 +252,19 @@ function AssistantCard({
   mode?: AiMode;
 }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-base font-semibold text-slate-900">AI assistant</h2>
-        {/* The badge's text carries the whole meaning; the tone is redundant. */}
-        {mode === 'mock' ? (
+    <Card
+      heading="AI assistant"
+      // The badge's text carries the whole meaning; the tone is redundant.
+      actions={
+        mode === 'mock' ? (
           <Badge tone="warning" srPrefix="Mode:">
             Demonstration mode
           </Badge>
-        ) : null}
-      </div>
-      <div className="mt-3 flex flex-col gap-3">{children}</div>
-    </section>
+        ) : undefined
+      }
+    >
+      <div className="flex flex-col gap-3">{children}</div>
+    </Card>
   );
 }
 

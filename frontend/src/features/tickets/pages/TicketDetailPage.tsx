@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { ErrorState, InlineNotice } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
 import { FullPageSpinner, Spinner } from '../../../components/ui/Spinner';
@@ -321,15 +322,14 @@ export function TicketDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
-          <article className="rounded-md border border-slate-200 bg-white p-4">
-            <h2 className="text-base font-semibold text-slate-900">Details</h2>
+          <Card heading="Details">
             {/*
               Gated on `canEditDetails` as well as `editing`: a refetch after a
               403 can withdraw edit permission, and the form must not survive
               that.
             */}
             {editing && canEditDetails ? (
-              <div className="mt-3">
+              <div>
                 <TicketForm
                   mode="edit"
                   initialValues={{
@@ -372,7 +372,7 @@ export function TicketDetailPage() {
                 )}
               </>
             )}
-          </article>
+          </Card>
 
           {/*
             Staff-only, and mounted here rather than in the aside because the
@@ -407,25 +407,19 @@ export function TicketDetailPage() {
         </div>
 
         <aside className="flex flex-col gap-6">
-          <section className="rounded-md border border-slate-200 bg-white p-4">
-            <h2 className="text-base font-semibold text-slate-900">Status</h2>
-            <div className="mt-3">
-              <StatusControl
-                status={ticket.status}
-                role={user?.role ?? 'Employee'}
-                submitting={updateStatus.isPending}
-                onChange={handleStatusChange}
-              />
-            </div>
-          </section>
+          <Card heading="Status">
+            <StatusControl
+              status={ticket.status}
+              role={user?.role ?? 'Employee'}
+              submitting={updateStatus.isPending}
+              onChange={handleStatusChange}
+            />
+          </Card>
 
           {/* Priority and assignment are staff-only affordances. */}
           {isStaff ? (
-            <section className="rounded-md border border-slate-200 bg-white p-4">
-              <h2 className="text-base font-semibold text-slate-900">
-                Triage
-              </h2>
-              <div className="mt-3 flex flex-col gap-4">
+            <Card heading="Triage">
+              <div className="flex flex-col gap-4">
                 <PriorityControl
                   priority={ticket.priority}
                   submitting={updatePriority.isPending}
@@ -438,7 +432,7 @@ export function TicketDetailPage() {
                   onAssign={handleAssignmentChange}
                 />
               </div>
-            </section>
+            </Card>
           ) : null}
 
           {/* Identical for every role: the SLA payload is the same shape for
@@ -470,9 +464,8 @@ export function TicketDetailPage() {
 
 function TicketMetadata({ ticket }: { ticket: Ticket }) {
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4">
-      <h2 className="text-base font-semibold text-slate-900">About</h2>
-      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+    <Card heading="About">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt className="font-medium text-slate-700">Requester</dt>
         <dd className="text-slate-800">{fullName(ticket.requester)}</dd>
         <dt className="font-medium text-slate-700">Assignee</dt>
@@ -498,7 +491,7 @@ function TicketMetadata({ ticket }: { ticket: Ticket }) {
           </>
         ) : null}
       </dl>
-    </section>
+    </Card>
   );
 }
 

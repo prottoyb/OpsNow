@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { Spinner } from '../../../components/ui/Spinner';
 import { toApiError } from '../../../lib/api/errors';
@@ -127,10 +128,8 @@ export function TicketAssetsPanel({ ticketId, requester }: TicketAssetsPanelProp
   const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4">
-      <h2 className="text-base font-semibold text-slate-900">Assets</h2>
-
-      <div className="mt-3 flex flex-col gap-3">
+    <Card heading="Assets">
+      <div className="flex flex-col gap-3">
         {ticketAssetsQuery.isPending ? (
           <Spinner label="Loading linked assets" />
         ) : null}
@@ -181,6 +180,6 @@ export function TicketAssetsPanel({ ticketId, requester }: TicketAssetsPanelProp
           )
         ) : null}
       </div>
-    </section>
+    </Card>
   );
 }

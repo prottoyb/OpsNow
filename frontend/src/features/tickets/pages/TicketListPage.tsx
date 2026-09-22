@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Button } from '../../../components/ui/Button';
+import { Button, PRIMARY_LINK_CLASSES } from '../../../components/ui/Button';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
@@ -29,10 +29,7 @@ export function TicketListPage() {
     <section className="flex flex-col gap-6">
       <PageHeading
         actions={
-          <Link
-            to="/tickets/new"
-            className="inline-flex items-center rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-          >
+          <Link to="/tickets/new" className={PRIMARY_LINK_CLASSES}>
             New ticket
           </Link>
         }

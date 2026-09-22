@@ -6,7 +6,15 @@ import { useCanViewAudit } from '../features/audit/useAudit';
 import { useAuth, useIsStaff } from '../features/auth/useAuth';
 
 const NAV_LINK_CLASSES =
-  'rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+  'rounded-sm py-1 text-sm underline-offset-4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700';
+
+function navLinkClassName({ isActive }: { isActive: boolean }) {
+  return `${NAV_LINK_CLASSES} ${
+    isActive
+      ? 'font-semibold text-brand-700 underline decoration-2'
+      : 'text-slate-600 hover:text-slate-900'
+  }`;
+}
 
 const ROLE_LABELS: Record<string, string> = {
   Employee: 'Employee',
@@ -40,57 +48,35 @@ export function AppLayout() {
         Skip to main content
       </a>
 
-      <header className="border-b border-slate-200 bg-white">
+      <header className="border-b border-slate-200 bg-white shadow-card">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-6">
             <Link
               to="/tickets"
-              className="text-base font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+              className="flex items-center gap-2 text-base font-semibold text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700"
             >
+              <span
+                aria-hidden="true"
+                className="flex size-7 items-center justify-center rounded-md bg-brand-600 text-sm font-bold text-white"
+              >
+                O
+              </span>
               OpsNow
             </Link>
             <nav aria-label="Main">
               <ul className="flex items-center gap-4 text-sm">
                 <li>
-                  <NavLink
-                    to="/tickets"
-                    end
-                    className={({ isActive }) =>
-                      `rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 ${
-                        isActive
-                          ? 'font-semibold text-slate-900 underline'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`
-                    }
-                  >
+                  <NavLink to="/tickets" end className={navLinkClassName}>
                     Tickets
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink
-                    to="/tickets/new"
-                    className={({ isActive }) =>
-                      `${NAV_LINK_CLASSES} ${
-                        isActive
-                          ? 'font-semibold text-slate-900 underline'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`
-                    }
-                  >
+                  <NavLink to="/tickets/new" className={navLinkClassName}>
                     New ticket
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink
-                    to="/assets"
-                    className={({ isActive }) =>
-                      `${NAV_LINK_CLASSES} ${
-                        isActive
-                          ? 'font-semibold text-slate-900 underline'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`
-                    }
-                  >
+                  <NavLink to="/assets" className={navLinkClassName}>
                     {/* D3: an Employee's list is already row-scoped to their
                         own assigned equipment, so the label reflects that
                         rather than implying a full inventory view. */}
@@ -98,16 +84,7 @@ export function AppLayout() {
                   </NavLink>
                 </li>
                 <li>
-                  <NavLink
-                    to="/kb"
-                    className={({ isActive }) =>
-                      `${NAV_LINK_CLASSES} ${
-                        isActive
-                          ? 'font-semibold text-slate-900 underline'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`
-                    }
-                  >
+                  <NavLink to="/kb" className={navLinkClassName}>
                     {/* Visible to every role, unlike SLA: an Employee needs
                         the knowledge base most of all — searching it is the
                         self-service half of the product. The label does not
@@ -121,16 +98,7 @@ export function AppLayout() {
                     "page not found" for anyone else. */}
                 {isStaff ? (
                   <li>
-                    <NavLink
-                      to="/sla"
-                      className={({ isActive }) =>
-                        `${NAV_LINK_CLASSES} ${
-                          isActive
-                            ? 'font-semibold text-slate-900 underline'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`
-                      }
-                    >
+                    <NavLink to="/sla" className={navLinkClassName}>
                       SLA
                     </NavLink>
                   </li>
@@ -139,16 +107,7 @@ export function AppLayout() {
                     for anyone else. */}
                 {isStaff ? (
                   <li>
-                    <NavLink
-                      to="/dashboard"
-                      className={({ isActive }) =>
-                        `${NAV_LINK_CLASSES} ${
-                          isActive
-                            ? 'font-semibold text-slate-900 underline'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`
-                      }
-                    >
+                    <NavLink to="/dashboard" className={navLinkClassName}>
                       Dashboard
                     </NavLink>
                   </li>
@@ -157,16 +116,7 @@ export function AppLayout() {
                     for anyone else, and the backend enforces it. */}
                 {canViewAudit ? (
                   <li>
-                    <NavLink
-                      to="/audit"
-                      className={({ isActive }) =>
-                        `${NAV_LINK_CLASSES} ${
-                          isActive
-                            ? 'font-semibold text-slate-900 underline'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`
-                      }
-                    >
+                    <NavLink to="/audit" className={navLinkClassName}>
                       Audit log
                     </NavLink>
                   </li>

@@ -1,6 +1,46 @@
 @import 'tailwindcss';
 
 /*
+ * OpsNow design tokens (Phase 17 UI polish). Tailwind's default spacing and
+ * typography scales already cover this app well — the UI/UX audit's actual
+ * finding was narrower: no brand/accent hue distinct from the neutral slate
+ * scale used everywhere, and no elevation (shadow) system beyond a single
+ * flat 1px border. These tokens extend the theme only for those two gaps.
+ * Presentation-only: nothing here changes any component's behaviour.
+ */
+@theme {
+  /*
+   * Brand accent, aliased to Tailwind's own indigo scale rather than a
+   * hand-picked palette, so it inherits Tailwind's already-tuned contrast
+   * and hue steps. Used for primary actions, active navigation, links and
+   * interactive/focus accents. Status colours (info/warning/success/danger
+   * in Badge.tsx) are a deliberately separate set of hues and are untouched.
+   */
+  --color-brand-50: var(--color-indigo-50);
+  --color-brand-100: var(--color-indigo-100);
+  --color-brand-200: var(--color-indigo-200);
+  --color-brand-300: var(--color-indigo-300);
+  --color-brand-400: var(--color-indigo-400);
+  --color-brand-500: var(--color-indigo-500);
+  --color-brand-600: var(--color-indigo-600);
+  --color-brand-700: var(--color-indigo-700);
+  --color-brand-800: var(--color-indigo-800);
+  --color-brand-900: var(--color-indigo-900);
+
+  /*
+   * Two elevation steps, paired with the existing border rather than
+   * replacing it: a subtle resting shadow for cards/panels, and a stronger
+   * one for transient overlays that must visually separate from the page
+   * beneath them (menus, toasts).
+   */
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-popover: 0 4px 6px -2px rgb(15 23 42 / 0.08), 0 12px 20px -4px rgb(15 23 42 / 0.12);
+
+  /* A softer radius than controls (which keep rounded-md), reserved for card/panel/toast surfaces. */
+  --radius-card: 0.75rem;
+}
+
+/*
  * Ticket descriptions and comment bodies are rendered as plain React text
  * nodes (never dangerouslySetInnerHTML). Multi-line user content keeps its
  * line breaks through CSS alone — no injected <br> elements.
