@@ -62,7 +62,10 @@ export function TicketAnalyticsPanel({
               />
             </StatGrid>
 
-            <section aria-labelledby="resolution-heading" className="flex flex-col gap-3">
+            <section
+              aria-labelledby="resolution-heading"
+              className="flex flex-col gap-3 border-t border-slate-100 pt-6"
+            >
               <h3 id="resolution-heading" className="text-sm font-semibold text-slate-900">
                 Time to resolution
               </h3>
@@ -90,7 +93,7 @@ export function TicketAnalyticsPanel({
               </StatGrid>
             </section>
 
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-6 border-t border-slate-100 pt-6 lg:grid-cols-2">
               <BarList
                 label="Tickets by status"
                 unit="tickets"

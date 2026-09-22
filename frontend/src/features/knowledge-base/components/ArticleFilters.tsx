@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
-import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import type { KnowledgeBaseCategory } from '../../../types/api';
 import { KNOWLEDGE_ARTICLE_STATUSES } from '../../../types/api';
@@ -66,24 +65,53 @@ export function ArticleFilters({
         Filter knowledge articles
       </h2>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="flex flex-col gap-1">
-          <label
-            htmlFor="article-filter-q"
-            className="text-sm font-medium text-slate-900"
+      {/*
+        Search leads the panel on its own row, larger than the other
+        filters: self-service search IS the knowledge base for an Employee,
+        so it gets more visual weight than an ordinary filter field rather
+        than sitting as one of several equal-weight grid columns.
+      */}
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor="article-filter-q"
+          className="text-sm font-medium text-slate-900"
+        >
+          Search
+        </label>
+        <div className="relative">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400"
           >
-            Search
-          </label>
-          <Input
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+          {/*
+            A bespoke className rather than extending the shared `Input`
+            (which hard-codes `px-3`): this project has no class-merging
+            utility (no tailwind-merge), so appending `pl-9` after `px-3`
+            in one string is not guaranteed to win the cascade. A complete,
+            self-contained class list sidesteps that instead of risking it.
+          */}
+          <input
             id="article-filter-q"
             type="search"
             placeholder="Words in the title or body"
             value={searchDraft}
             maxLength={SEARCH_MAX_LENGTH}
             onChange={(event) => setSearchDraft(event.target.value)}
+            className="w-full rounded-md border border-slate-300 bg-white py-2.5 pr-3 pl-9 text-base text-slate-900 shadow-xs placeholder:text-slate-400 focus:border-brand-700 focus:outline-2 focus:outline-offset-1 focus:outline-brand-700 disabled:bg-slate-100 disabled:text-slate-500"
           />
         </div>
+      </div>
 
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="flex flex-col gap-1">
           <label
             htmlFor="article-filter-category"

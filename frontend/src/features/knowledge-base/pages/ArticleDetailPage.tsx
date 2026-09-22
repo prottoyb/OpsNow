@@ -65,8 +65,11 @@ const CONFLICT_TEXT =
  * CSS (`whitespace-pre-wrap`), which cannot execute anything.
  */
 function ArticleBody({ content }: { content: string }) {
+  // `max-w-prose` (~65ch) and a slightly opened leading are a reading-comfort
+  // improvement only — an unconstrained full-bleed line at 7xl page width
+  // was measurably too wide to scan comfortably for runbook-length prose.
   return (
-    <p className="mt-3 text-sm whitespace-pre-wrap break-words text-slate-800">
+    <p className="mt-3 max-w-prose text-sm leading-relaxed whitespace-pre-wrap break-words text-slate-800">
       {content}
     </p>
   );

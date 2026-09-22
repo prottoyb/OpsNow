@@ -9,7 +9,7 @@ import type { KnowledgeArticleSummary } from '../../../types/api';
 import { ArticleStatusBadge } from './ArticleStatusBadge';
 
 const LINK_CLASSES =
-  'font-medium text-slate-900 underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700';
+  'text-base font-semibold text-slate-900 hover:text-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700';
 
 export interface ArticleListProps {
   articles: readonly KnowledgeArticleSummary[];
@@ -36,7 +36,10 @@ export function ArticleList({ articles, showStatus }: ArticleListProps) {
     // the page also carries the filter panel and the main navigation.
     <ul aria-label="Knowledge articles" className="flex flex-col gap-3">
       {articles.map((article) => (
-        <li key={article.id} className={CARD_SURFACE_CLASSES}>
+        <li
+          key={article.id}
+          className={`${CARD_SURFACE_CLASSES} transition-colors hover:border-slate-300`}
+        >
           <div className="flex flex-wrap items-center gap-2">
             <Link to={`/kb/${article.id}`} className={LINK_CLASSES}>
               {article.title}
@@ -45,12 +48,12 @@ export function ArticleList({ articles, showStatus }: ArticleListProps) {
           </div>
 
           {article.excerpt ? (
-            <p className="user-content mt-2 text-sm text-slate-700">
+            <p className="user-content mt-1.5 text-sm text-slate-600">
               {article.excerpt}
             </p>
           ) : null}
 
-          <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+          <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500">
             <div className="flex gap-1">
               <dt className="font-medium">Category</dt>
               <dd>{article.category?.name ?? 'Uncategorised'}</dd>

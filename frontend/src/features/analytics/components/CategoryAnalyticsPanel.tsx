@@ -30,33 +30,33 @@ export function CategoryAnalyticsPanel({
                 description="Widen the date range or clear a filter to see category statistics."
               />
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-card border border-slate-200 bg-white shadow-card">
                 <table className="w-full border-collapse text-left text-sm">
                   <caption className="sr-only">
                     Ticket volume and resolution by category, busiest first
                   </caption>
                   <thead>
-                    <tr className="border-b border-slate-300 text-slate-700">
-                      <th scope="col" className="px-3 py-2 font-semibold">Category</th>
-                      <th scope="col" className="px-3 py-2 font-semibold">Volume</th>
-                      <th scope="col" className="px-3 py-2 font-semibold">Resolved (of tickets created in window)</th>
-                      <th scope="col" className="px-3 py-2 font-semibold">Avg resolution</th>
-                      <th scope="col" className="px-3 py-2 font-semibold">SLA breaches</th>
+                    <tr className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase">
+                      <th scope="col" className="px-3 py-2.5">Category</th>
+                      <th scope="col" className="px-3 py-2.5">Volume</th>
+                      <th scope="col" className="px-3 py-2.5">Resolved (of tickets created in window)</th>
+                      <th scope="col" className="px-3 py-2.5">Avg resolution</th>
+                      <th scope="col" className="px-3 py-2.5">SLA breaches</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100">
                     {data.categories.map((category) => {
                       const name = category.categoryName ?? UNCATEGORISED_LABEL;
                       const width = maxVolume === 0 ? 0 : (category.volume / maxVolume) * 100;
                       return (
                         <tr
                           key={category.categoryId ?? 'uncategorised'}
-                          className="border-b border-slate-200 align-middle"
+                          className="align-middle transition-colors hover:bg-slate-50"
                         >
-                          <th scope="row" className="px-3 py-2 font-medium text-slate-800">
+                          <th scope="row" className="px-3 py-3 font-medium text-slate-800">
                             {name}
                           </th>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-3">
                             <div className="flex items-center gap-2">
                               <div className="h-2.5 w-24 rounded-full bg-slate-100">
                                 <div
@@ -75,13 +75,13 @@ export function CategoryAnalyticsPanel({
                               </span>
                             </div>
                           </td>
-                          <td className="px-3 py-2 tabular-nums text-slate-700">
+                          <td className="px-3 py-3 tabular-nums text-slate-700">
                             {formatCount(category.resolved)}
                           </td>
-                          <td className="px-3 py-2 text-slate-700">
+                          <td className="px-3 py-3 text-slate-700">
                             {formatAverageMinutes(category.avgResolutionMinutes)}
                           </td>
-                          <td className="px-3 py-2 tabular-nums text-slate-700">
+                          <td className="px-3 py-3 tabular-nums text-slate-700">
                             {formatCount(category.slaBreaches)}
                           </td>
                         </tr>

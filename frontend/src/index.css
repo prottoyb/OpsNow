@@ -14,13 +14,17 @@
    * hand-picked palette, so it inherits Tailwind's already-tuned contrast
    * and hue steps. Used for primary actions (Button's primary variant,
    * PRIMARY_LINK_CLASSES), active navigation, chart marks, and every
-   * interactive/focus ring app-wide. Deliberately NOT applied to inline
-   * text links (ticket subjects, article titles, "View details", ...),
-   * which stay text-slate-900 + underline — a quiet, data-table-friendly
-   * link treatment, common in dense enterprise UIs, chosen over a "sea of
-   * blue" rather than an oversight. Status colours (info/warning/success/
-   * danger in Badge.tsx) are a deliberately separate set of hues and are
-   * untouched.
+   * interactive/focus ring app-wide. Deliberately NOT applied to a data
+   * table's own row links (ticket subjects, asset tags, "View details",
+   * ...), which stay text-slate-900 + underline — a quiet, data-dense
+   * link treatment chosen over a "sea of blue" rather than an oversight.
+   * The one deliberate exception is a card-list heading that functions as
+   * the card's own title, not a table cell — ArticleList's article-title
+   * link — which drops the underline (redundant on something already the
+   * card's largest, boldest text) and gains a brand-700 hover, the same
+   * "dominant clickable element" treatment a heading link gets in most
+   * list/card UIs. Status colours (info/warning/success/danger in
+   * Badge.tsx) are a deliberately separate set of hues and are untouched.
    */
   --color-brand-50: var(--color-indigo-50);
   --color-brand-100: var(--color-indigo-100);
