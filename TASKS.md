@@ -1782,7 +1782,21 @@ real breakpoint walkthrough remains unperformed. See Phase 17c below.
 
 \- \[x] Prepare project demonstration — `docs/portfolio/demo-walkthrough.md`
 
-\- \[ ] Create final GitHub release — see Phase 17c below for status
+\- \[ ] Create final GitHub release — partially done. The annotated tag
+
+`v0.1.0` was created and pushed to `origin` (CI green on the commit it
+
+points to). The formal GitHub Release object — the one with a
+
+release-notes page on the repository's Releases tab — was NOT created,
+
+because no `gh` CLI and no GitHub API token are available in this
+
+environment. Release notes are written at `docs/releases/v0.1.0.md`; the
+
+exact manual step to finish (via the GitHub web UI or `gh release
+
+create`) is documented at the bottom of that file.
 
 
 
