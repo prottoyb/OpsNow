@@ -1702,39 +1702,49 @@ the application, so a different topology must replicate them.
 
 
 
-\- \[ ] Perform complete application review
+\- \[x] Perform complete application review — see Phase 17c below
 
-\- \[ ] Review security
+\- \[x] Review security — see Phase 17c below
 
-\- \[ ] Review performance
+\- \[x] Review performance — see Phase 17c below
 
-\- \[ ] Review accessibility
+\- \[ ] Review accessibility — still blocked on the same limitation as
 
-\- \[ ] Review responsive design
+Phase 17a/17a-2/17b: no browser automation tool is available in this
 
-\- \[ ] Remove unused dependencies
+environment, so no rendered/keyboard/screen-reader verification is
 
-\- \[ ] Remove debug code
+possible. See Phase 17c below for what a code-level pass could and could
 
-\- \[ ] Review environment configuration
+not cover.
 
-\- \[ ] Update README
+\- \[ ] Review responsive design — same blocker as accessibility above; a
 
-\- \[ ] Add architecture diagram
+real breakpoint walkthrough remains unperformed. See Phase 17c below.
 
-\- \[ ] Add database diagram
+\- \[x] Remove unused dependencies — none found; see Phase 17c below
 
-\- \[ ] Document API
+\- \[x] Remove debug code — none found; see Phase 17c below
 
-\- \[ ] Document technical decisions
+\- \[x] Review environment configuration — see Phase 17c below
 
-\- \[ ] Create demo data
+\- \[x] Update README
 
-\- \[ ] Prepare interview explanation
+\- \[x] Add architecture diagram — `docs/architecture/system-architecture.md`
 
-\- \[ ] Prepare project demonstration
+\- \[x] Add database diagram — `docs/architecture/database-erd.md`
 
-\- \[ ] Create final GitHub release
+\- \[x] Document API — `docs/api/README.md`
+
+\- \[x] Document technical decisions — `docs/decisions-summary.md`
+
+\- \[x] Create demo data — done in Phase 17b; reconfirmed current in 17c
+
+\- \[x] Prepare interview explanation — `docs/portfolio/interview-prep.md`
+
+\- \[x] Prepare project demonstration — `docs/portfolio/demo-walkthrough.md`
+
+\- \[ ] Create final GitHub release — see Phase 17c below for status
 
 
 
@@ -2069,4 +2079,30 @@ Deliberately NOT done, tracked rather than silently dropped:
 
 - [ ] `seed.ts`'s synthetic `resolvedAt` for a resolved/closed ticket is computed as `createdAt + multiplier × resolutionTargetMinutes` with no upper-bound clamp to "now". Senior Review traced every current generation path and confirmed no ticket in today's 48-template array can actually produce a future-dated `resolvedAt`, so this is latent, not live. A future edit to `generatedTemplates` (reordering, inserting a template, changing a template's priority) could silently reintroduce it. A `Math.min(resolvedAt, new Date())`-style clamp would close it; deferred because it is not a live bug and the file should not be re-touched just to add a guard against a hypothetical future edit.
 - [ ] Same open items as Phase 17a/17a-2: no rendered/visual verification was possible (no browser tool in this environment), so a real breakpoint walkthrough and a proper accessibility review remain folded into Phase 17's "Review accessibility"/"Review responsive design" items below, which stay unchecked.
+
+---
+
+### Phase 17c — Final Review, Documentation, Verification and Release Preparation
+
+The autonomous final-completion pass covering the remainder of Phase 17: security/performance/dependency/environment review, the architecture and database diagrams, API documentation, the decisions summary, interview/demo material, full verification, and release preparation. Recovered state first (17 local commits ahead of `origin/main`, working tree clean, no stale worktrees or branches) before changing anything, per the run's own recovery protocol.
+
+- [x] Security review (code-level, no new findings): confirmed rate limiting (ADR-026), default-deny routing (ADR-018), RBAC (ADR-006), Swagger's environment-gated default (ADR-027), and production env validation (`env.validation.ts` — `JWT_ACCESS_SECRET` minimum length enforced, `AI_PROVIDER` restricted to `disabled`/`anthropic` in production, `TRUST_PROXY_HOPS` required) are all still exactly as documented in their ADRs and in `progress.md`'s per-phase review entries. No CRITICAL/HIGH/MEDIUM gap found; the known, already-tracked LOW gaps (per-process throttle counter, no audit row on a 429, plain-text logs) are unchanged and still listed in their originating phases.
+- [x] Performance review (hot paths only, no speculative optimization): confirmed the ticket/asset/audit-log list queries are covered by the schema's compound indexes (`[status, priority]`, `[assigneeId, status]`, `[actorId, createdAt]`, etc.), analytics aggregates run as documented raw SQL with a visibility twin (ADR-024) rather than N+1 application-side loops, and knowledge-base search uses the generated `tsvector`/GIN index rather than a scan. No change made — nothing found that needed one.
+- [x] Dependency review: backend and frontend `package.json` dependency lists inspected line by line; every dependency is in active use and the lists are already minimal by design (ADR-002/008/016/017 — no state library, no form library, no component library, no axios). Nothing removed because nothing was unused.
+- [x] Debug-code review: `grep`-swept both `backend/src` and `frontend/src` for `console.log`/`console.debug`/`TODO`/`FIXME`/`XXX`. The only `console.log` usage is in `backend/src/cli/create-admin.ts`, an intentional CLI tool whose entire job is printing to the console — not debug residue. No TODO/FIXME/XXX comments anywhere. Nothing removed.
+- [x] Environment/config review: `backend/.env.example`, `.env.docker.example`, `docker-compose.yml`'s environment blocks, and `docs/deployment.md` re-read against the current code. All still accurate; no drift found; no real secret anywhere in the tree (`git ls-files | grep -i env` returns only the two `.example` templates).
+- [x] Accessibility / responsive design: re-confirmed no browser automation tool is available in this environment (checked via tool search — only a network `WebFetch`, which refuses `localhost`, is present; no Claude in Chrome, no built-in browser). No new rendered verification was possible, so these two Phase 17 items remain honestly unchecked above rather than marked complete on a code-level pass alone, exactly as Phase 17a/17a-2/17b already established. No UI code was changed in this pass — the instruction for this run was explicitly not to re-redesign absent a real defect, and none was found by static reading.
+- [x] `docs/architecture/system-architecture.md` — component diagram, request pipeline, refresh-token sequence diagram, and the AI provider boundary, all in Mermaid so they render directly on GitHub.
+- [x] `docs/architecture/database-erd.md` — two Mermaid ER diagrams (core ITSM tables; supporting knowledge-base/notification/audit/session tables) built directly from `backend/prisma/schema.prisma`, plus the constraints ERD notation can't express (CHECK constraints, the partial unique index on open asset assignments, the polymorphic audit-log reference).
+- [x] `docs/api/README.md` — conventions companion to Swagger (auth model, refresh-cookie behaviour, RBAC table, error envelope, 404-vs-403 rule, concurrency/409, pagination, AI endpoint configuration), built from the actual controller route map, not copied from memory.
+- [x] `docs/decisions-summary.md` — one-paragraph-per-decision fast reference into all 27 ADRs, organized by topic (application shape, data layer, auth, ticket/SLA, assets, AI isolation, Docker/CI, deployment posture). No new ADR written.
+- [x] `docs/portfolio/interview-prep.md` and `docs/portfolio/demo-walkthrough.md` — 60-second/2-3-minute explanations, one hard-problem walkthrough (the SLA pause/breach HIGH finding from Phase 7a), honest trade-offs, and a role-by-role demo script using the existing seeded `@opsnow.local` / `DevPassword123!` accounts (already a public, local-only dev credential — not newly disclosed).
+- [x] `README.md` updated: current test counts (864 backend unit / 44 suites, 350 backend e2e / 12 suites, 481 frontend / 39 files, 11 Playwright — all reverified in this pass, not copied from an older log), a Documentation Map table, and Phase 17 status language corrected to describe what's actually done versus externally blocked.
+- [x] Full verification gate — backend: `prisma validate` (valid), `prisma migrate status` (up to date, 1 migration), `tsc --noEmit` (clean), `eslint . --max-warnings 0` (clean), `npm test` (864/864), `npm run test:e2e` (350/350, real local `opsnow_dev`), `npm run build` (clean), `npm audit` (0 vulnerabilities, both full tree and the CI `--omit=dev --audit-level=high` gate). Frontend: `tsc --noEmit` (clean), `eslint .` (clean), `vitest run` (481/481), `vite build` (clean), `npm audit` (0 vulnerabilities), `npx playwright test` (11/11, against a locally started backend with `AUTH_THROTTLE_LIMIT` raised, teardown removed its own tagged data).
+- [x] Infrastructure verification, honestly bounded: Docker, `actionlint`, and `nginx` remain unavailable on this machine (re-confirmed, not assumed from the earlier phase notes) — `docker-compose.yml`, `.github/workflows/ci.yml`, both Dockerfiles, and `frontend/nginx.conf` were instead read in full and cross-checked (CI's `docker` job targets `runtime`/`migrator`/`runtime` match the Dockerfiles' actual build stages; the Compose service graph, health checks and `depends_on` conditions were re-inspected; nginx's proxy/header/cache-control blocks were re-read against their own documented invariants). No image has been built and CI had not run as of the start of this pass — see the Git/CI/Release items below for what changed by the end of it.
+- [x] Repository cleanup: `git worktree prune` run (no stale worktrees existed — the single worktree is `main` itself); no local branches other than `main`; `git status` confirmed a clean tree before this pass began; `.gitignore` re-verified to exclude secrets, `node_modules/`, build output and Playwright's `test-results/`. Nothing was found to remove.
+- [x] Demo data reconfirmed current: the Phase 17b seed (53 tickets / 20 assets / 11 KB articles / 7 accounts) is still what `backend/prisma/seed.ts` produces; row counts were not re-seeded or altered in this pass, only read.
+- [ ] Final GitHub release — see `progress.md`'s Phase 17c entry and this run's final report for exact status (push/CI/release outcome recorded there rather than duplicated here, since it's a one-time event, not a checklist state).
+
+Deliberately not re-done in this pass: the UI/UX workstream (Phase 17a/17a-2/17b) was treated as substantially complete per this run's own instructions, and no redesign was attempted absent a concrete, statically-found defect. None was found.
 

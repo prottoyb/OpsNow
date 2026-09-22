@@ -374,8 +374,24 @@ CORS is deliberately disabled (ADR-027).
 
 
 
-Phase 17 — Final Review & Portfolio Preparation is next and has NOT been
+Phase 17 — Final Review & Portfolio Preparation is complete for everything
 
-started. See `TASKS.md` for the current task list and `progress.md` for the
+achievable from inside this repository: UI/UX polish (17a/17a-2/17b), and
 
-full development log.
+final review, documentation, verification and release preparation (17c —
+
+security/performance/dependency/environment review, architecture and
+
+database diagrams under `docs/architecture/`, API conventions under
+
+`docs/api/`, a decisions summary at `docs/decisions-summary.md`, and
+
+interview/demo material under `docs/portfolio/`). What remains open needs
+
+something this repository cannot supply on its own: building the
+
+container images on a machine that has Docker, and the external steps in
+
+`docs/deployment.md`. See `TASKS.md` for the current task list and
+
+`progress.md` for the full development log.

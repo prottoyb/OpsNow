@@ -104,8 +104,14 @@ Completed so far:
 ## What Remains to Be Built
 
 **Phase 17 — Final Review & Portfolio Preparation** is the only phase
-left: a final review pass, architecture and database diagrams, API
-documentation, demo data and presentation material.
+left. Its review pass, architecture/database diagrams, API documentation,
+decisions summary, demo data and interview/demo material are complete —
+see the Documentation Map above and `TASKS.md`'s Phase 17 section for the
+line-by-line checklist. What's still open is only what genuinely can't be
+closed from inside this repository: building the container images (no
+Docker on the authoring machine) and everything in `docs/deployment.md`
+that needs a hosting account, a managed database, a registry, a domain or
+a credential — none of which exist.
 
 Everything else that remains needs something outside this repository. See
 `docs/deployment.md` for the full list; in short, a hosting platform, a
@@ -394,18 +400,23 @@ an optional current holder, and a full assignment history.
 Every completed phase carries its own test coverage, added alongside the
 feature rather than after it:
 
-- **Backend**: 823 Jest unit tests across 43 suites for
-  services/guards/pure logic, plus a Supertest e2e suite (13 spec files,
-  ~350 tests) run against a real local PostgreSQL database — not mocks —
+- **Backend**: 864 Jest unit tests across 44 suites for
+  services/guards/pure logic, plus a Supertest e2e suite (12 spec files,
+  350 tests) run against a real local PostgreSQL database — not mocks —
   covering the full role grid for every endpoint.
-- **Frontend**: Vitest + Testing Library component/unit tests, including
-  a repository-wide guard suite that fails the build on unsafe DOM
-  patterns or storage use.
-- **End-to-end**: Playwright specs (`frontend/e2e/`) drive the real
+- **Frontend**: 481 Vitest + Testing Library component/unit tests across
+  39 files, including a repository-wide guard suite that fails the build
+  on unsafe DOM patterns or storage use.
+- **End-to-end**: 11 Playwright specs (`frontend/e2e/`) drive the real
   running frontend against the real running backend and database for the
   ticket, SLA, asset, authentication and RBAC workflows, including a
   cross-role journey (an employee and a staff member in separate browser
   contexts, since the refresh cookie is httpOnly).
+
+These counts are current as of the Phase 17 final verification pass —
+every suite above (backend unit, backend e2e, frontend unit, Playwright)
+was run in full immediately before this README section was last updated,
+all green, against real local Postgres.
 - **Static gates**: both packages run `tsc --noEmit` and ESLint. The
   backend's lint is type-aware and treats the promise rules
   (`no-floating-promises`, `await-thenable`, `no-misused-promises`) as
@@ -490,7 +501,12 @@ OpsNow/
 │   └── e2e/                  Playwright specs
 ├── docs/
 │   ├── docker.md            Running the containerised stack
-│   └── deployment.md        Production posture and the remaining external steps
+│   ├── deployment.md        Production posture and the remaining external steps
+│   ├── decisions-summary.md Fast-reference trade-off summary of DECISIONS.md
+│   ├── architecture/        System architecture and database ERD (Mermaid)
+│   ├── api/                 Human-readable API conventions (companion to Swagger)
+│   ├── portfolio/           Interview prep and demo walkthrough
+│   └── releases/            Release notes per tag
 ├── database/               Reserved for standalone DB assets (currently empty)
 ├── .github/workflows/      CI pipeline (Phase 15)
 ├── docker-compose.yml      Full-stack local run (Phase 14)
@@ -646,18 +662,36 @@ The short version of the posture (ADR-027):
 
 See `TASKS.md` for the authoritative, task-level breakdown.
 
-Phases 0–16 are complete. **Phase 17 — Final Review & Portfolio
-Preparation** is next and is the last one: a full review pass,
-architecture and database diagrams, API documentation, demo data, and
-presentation material.
+Phases 0–16 are complete. Phase 17's checklist is complete for everything
+that can be finished from inside this repository: the review pass, the
+architecture and database diagrams, API documentation, the decisions
+summary, demo data, and interview/demo material. See `TASKS.md` for
+exactly which Phase 17 line items remain open and why.
 
-Two items carried out of Phases 14–16 are not Phase 17 work but block a
-real deployment, and are tracked in `TASKS.md`:
+Two items are not Phase 17 work in the ordinary sense — they don't need
+more engineering, they need resources this repository can't supply on its
+own — and are tracked as such in `TASKS.md`:
 
 1. Build and start the container stack on a machine that has Docker, and
    fix whatever the first run surfaces.
 2. Work through the external steps in `docs/deployment.md` — they all
    need an account, a credential or a card.
+
+## Documentation Map
+
+| Document | What it's for |
+| --- | --- |
+| `docs/architecture/system-architecture.md` | Component/request-pipeline diagram, refresh-token flow, the AI provider boundary |
+| `docs/architecture/database-erd.md` | Entity-relationship diagrams (core ITSM + supporting tables) matching the actual Prisma schema |
+| `docs/api/README.md` | API conventions — auth model, RBAC, error envelope, 404-vs-403, concurrency/409, pagination — companion to Swagger, not a duplicate of it |
+| `docs/decisions-summary.md` | One-paragraph-per-decision fast reference into the full `DECISIONS.md` ADRs |
+| `docs/portfolio/interview-prep.md` | 60-second/2-3-minute explanations, a walked-through hard problem, honest trade-offs |
+| `docs/portfolio/demo-walkthrough.md` | A live-demo/recording script, with the seeded demo accounts |
+| `docs/docker.md` | Running the containerised stack |
+| `docs/deployment.md` | Production posture and the external steps a real deployment would need |
+| `docs/releases/v0.1.0.md` | Release notes for the current tag |
+| `DECISIONS.md` | The full Architecture Decision Records, ADR-001 through ADR-027 |
+| `TASKS.md` / `progress.md` | Phase-by-phase task checklist and full development log |
 
 ## Engineering Decisions / Design Principles
 

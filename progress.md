@@ -12,11 +12,13 @@ Project status: In Progress
 
 Current phase: Phases 13–16 complete; Phase 17 — Final Review & Portfolio
 
-Preparation is in progress. Its primary workstream, Phase 17a/17a-2/17b
+Preparation is complete for everything achievable from inside this
 
-(UI/UX Product Polish, inserted by project owner direction, across three
+repository. Phase 17a/17a-2/17b (UI/UX Product Polish) and Phase 17c
 
-passes), is complete.
+(final review, documentation, verification and release preparation) have
+
+both landed.
 
 
 
@@ -24,23 +26,23 @@ Current task: none
 
 
 
-Last completed task: Phase 17b — Further UI/UX Polish and Demo Data. See
+Last completed task: Phase 17c — Final Review, Documentation, Verification
 
-the dated log entry below for the full account.
+and Release Preparation. See the dated log entry below for the full
+
+account, including the final push/CI/release outcome.
 
 
 
-Next task: the remainder of Phase 17's checklist (security/performance/
+Next task: none from inside this repository. What remains needs something
 
-accessibility/responsive review, dependency and debug-code cleanup,
+this repository cannot supply on its own — building the container images
 
-README, diagrams, API docs, technical-decision documentation, interview/
+on a machine that has Docker, and the external steps in
 
-demo prep, final GitHub release) — see TASKS.md. Demo data was
+`docs/deployment.md` (a hosting account, a managed database, a registry,
 
-substantially addressed by Phase 17b, so that item is largely closed
-
-going into the rest of Phase 17.
+a domain, a credential). See TASKS.md's Phase 14/16 sections.
 
 
 
@@ -5380,6 +5382,34 @@ addressed, narrowing what's left in that item to future maintenance
 rather than a from-scratch task.
 
 
+
+\---
+
+
+
+### 2026-09-23 — Phase 17c: Final Review, Documentation, Verification and Release Preparation
+
+An autonomous final-completion run covering the rest of Phase 17. Recovery first: `git status` (17 local commits ahead of `origin/main`, nothing pushed yet), current branch, recent log, `git worktree list` (only `main`, no stale worktrees), no stray local branches — confirmed before anything was changed. Phases 0–16 and Phase 17a/17a-2/17b were treated as done per their own entries above; no completed phase was reopened and no re-architecture was attempted.
+
+Completed:
+
+\- Security/performance/dependency/environment review (code-level, no new findings): rate limiting (ADR-026), default-deny routing (ADR-018), RBAC (ADR-006), Swagger's environment-gated default (ADR-027) and production env validation (`env.validation.ts`) all confirmed still exactly as documented. Hot paths (ticket/asset/audit-log list queries, analytics raw-SQL aggregates, KB `tsvector` search) confirmed covered by existing indexes/design, no speculative optimization attempted. Both `package.json` dependency lists inspected line by line — nothing unused, nothing removed. `backend/src` and `frontend/src` swept for `console.log`/`TODO`/`FIXME`/`XXX` — the only `console.log` usage is the intentional `create-admin` CLI; nothing else found, nothing removed. `.env.example`, `.env.docker.example`, `docker-compose.yml`'s env blocks and `docs/deployment.md` re-read against current code — no drift, no real secret anywhere in the tree.
+
+\- Accessibility/responsive design: re-confirmed no browser automation tool is available in this environment (checked directly via tool search, not assumed from the earlier phase notes) — still only a network `WebFetch` that refuses `localhost`. No rendered verification was possible, so both items remain honestly unchecked in TASKS.md rather than marked complete on a code-level pass alone. No UI code was touched in this pass.
+
+\- New documentation: `docs/architecture/system-architecture.md` (Mermaid component diagram, request pipeline, refresh-token sequence diagram, the AI provider boundary), `docs/architecture/database-erd.md` (two Mermaid ER diagrams built directly from `schema.prisma`, plus the CHECK-constraint/partial-index/generated-column notes ERD notation can't express), `docs/api/README.md` (conventions companion to Swagger — auth model, RBAC table, error envelope, 404-vs-403, concurrency/409, pagination, AI endpoint configuration — built from the actual controller route map), `docs/decisions-summary.md` (one-paragraph-per-decision index into all 27 ADRs, no new ADR written), `docs/portfolio/interview-prep.md` and `docs/portfolio/demo-walkthrough.md` (using the existing, already-local-only seeded `@opsnow.local`/`DevPassword123!` accounts).
+
+\- `README.md` updated: reverified test counts (864/44 backend unit, 350/12 backend e2e, 481/39 frontend, 11 Playwright — all from a real run in this session, not copied forward), a Documentation Map table, and Phase 17 status language corrected to distinguish "done" from "externally blocked."
+
+\- Full verification gate, all green: backend `prisma validate`, `prisma migrate status` (up to date), `tsc --noEmit`, `eslint . --max-warnings 0`, `npm test` (864/864), `npm run test:e2e` (350/350, real local `opsnow_dev`), `npm run build`, `npm audit` (0 vulnerabilities, full tree and the CI `--omit=dev --audit-level=high` gate). Frontend `tsc --noEmit`, `eslint .`, `vitest run` (481/481), `vite build`, `npm audit` (0 vulnerabilities), `npx playwright test` (11/11 — backend started locally with `AUTH_THROTTLE_LIMIT` raised per the README caveat, teardown removed its own tagged data, background process stopped afterward). Docker/`actionlint`/`nginx` confirmed still unavailable on this machine; `docker-compose.yml`, `.github/workflows/ci.yml`, both Dockerfiles and `frontend/nginx.conf` were instead read in full and cross-checked against each other (CI's `docker` job targets match the Dockerfiles' actual build stages; the Compose service graph and health-check/`depends_on` chain re-inspected; nginx's load-bearing invariants re-read against their own header comments) rather than executed.
+
+\- Repository cleanup: `git worktree prune` (nothing to prune), no local branches besides `main`, `.gitignore` re-verified to cover secrets/`node_modules`/build output/Playwright's `test-results/`. Nothing found to remove.
+
+\- Independent review: a Senior Reviewer agent checked the entire documentation-only diff against the real codebase rather than reviewing prose in isolation — the database ERD against `schema.prisma` field-by-field, the API RBAC table against the actual `@Roles()` decorators in `users.controller.ts`/`audit.controller.ts`/`analytics.controller.ts`, six spot-checked ADR summaries against `DECISIONS.md`, the request-pipeline order against `configure-app.ts`/`auth.module.ts`, and the demo walkthrough's seeded credentials against `seed.ts` field-by-field (including reconciling the "10 breaching tickets" figure against the seed's own generation logic). No CRITICAL/HIGH/MEDIUM/LOW finding. Verdict: approve.
+
+\- Release preparation: no prior git tags existed; both `package.json` files declare `0.1.0`, so `v0.1.0` was chosen as the tag rather than inventing a different scheme. `docs/releases/v0.1.0.md` written as the release notes (highlights, what's not included, a pointer to the documentation set). No `gh` CLI and no GitHub API token are available in this environment, so the formal GitHub Release object could not be created automatically — see this entry's Git/CI/Release outcome below for exactly what was done instead and what remains a manual step.
+
+No backend or frontend source file was touched in this pass — `git diff --stat` against `backend/` and `frontend/` for the whole of Phase 17c is empty; every change is documentation, `TASKS.md`/`progress.md`/`CLAUDE.md`/`README.md` status text, and the new `docs/` tree.
 
 \---
 
