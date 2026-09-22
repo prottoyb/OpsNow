@@ -81,46 +81,108 @@ async function main() {
   const network = await prisma.ticketCategory.create({ data: { name: 'Network' } });
   const accessRequest = await prisma.ticketCategory.create({ data: { name: 'Access Request' } });
   const laptopCategory = await prisma.ticketCategory.create({ data: { name: 'Laptop', parentId: hardware.id } });
-  await prisma.ticketCategory.create({ data: { name: 'Desktop', parentId: hardware.id } });
+  const desktopCategory = await prisma.ticketCategory.create({ data: { name: 'Desktop', parentId: hardware.id } });
   const businessApps = await prisma.ticketCategory.create({ data: { name: 'Business Applications', parentId: software.id } });
-  await prisma.ticketCategory.create({ data: { name: 'Operating System', parentId: software.id } });
+  const operatingSystem = await prisma.ticketCategory.create({ data: { name: 'Operating System', parentId: software.id } });
 
   // ---------------------------------------------------------------------
   // Asset types & assets
   // ---------------------------------------------------------------------
-  const [laptopType, desktopType, monitorType, phoneType] = await Promise.all([
+  const [laptopType, desktopType, monitorType, phoneType, peripheralType, licenseType] = await Promise.all([
     prisma.assetType.create({ data: { name: 'Laptop' } }),
     prisma.assetType.create({ data: { name: 'Desktop' } }),
     prisma.assetType.create({ data: { name: 'Monitor' } }),
     prisma.assetType.create({ data: { name: 'Phone' } }),
+    prisma.assetType.create({ data: { name: 'Peripheral' } }),
+    prisma.assetType.create({ data: { name: 'Software License' } }),
   ]);
-  await prisma.assetType.create({ data: { name: 'Peripheral' } });
-  await prisma.assetType.create({ data: { name: 'Software License' } });
 
   const laptop1 = await prisma.asset.create({
     data: { assetTag: 'LAPTOP-0001', name: 'Dell Latitude 5440', assetTypeId: laptopType.id, status: AssetStatus.Assigned, serialNumber: 'DL5440-0001', currentAssigneeId: employee1.id },
   });
-  await prisma.asset.create({
+  const laptop2 = await prisma.asset.create({
     data: { assetTag: 'LAPTOP-0002', name: 'Dell Latitude 5440', assetTypeId: laptopType.id, status: AssetStatus.InStock, serialNumber: 'DL5440-0002' },
   });
-  await prisma.asset.create({
+  const laptop3 = await prisma.asset.create({
+    data: { assetTag: 'LAPTOP-0003', name: 'Lenovo ThinkPad T14', assetTypeId: laptopType.id, status: AssetStatus.Assigned, serialNumber: 'TP14-0003', currentAssigneeId: employee3.id },
+  });
+  const laptop4 = await prisma.asset.create({
+    data: { assetTag: 'LAPTOP-0004', name: 'Dell Latitude 5420', assetTypeId: laptopType.id, status: AssetStatus.Retired, serialNumber: 'DL5420-0004' },
+  });
+  const laptop5 = await prisma.asset.create({
+    data: { assetTag: 'LAPTOP-0005', name: 'MacBook Pro 14"', assetTypeId: laptopType.id, status: AssetStatus.Lost, serialNumber: 'MBP14-0005' },
+  });
+
+  const desktop1 = await prisma.asset.create({
     data: { assetTag: 'DESKTOP-0001', name: 'HP EliteDesk 800', assetTypeId: desktopType.id, status: AssetStatus.Assigned, serialNumber: 'HP800-0001', currentAssigneeId: employee2.id },
   });
+  await prisma.asset.create({
+    data: { assetTag: 'DESKTOP-0002', name: 'HP EliteDesk 800', assetTypeId: desktopType.id, status: AssetStatus.InStock, serialNumber: 'HP800-0002' },
+  });
+  const desktop3 = await prisma.asset.create({
+    data: { assetTag: 'DESKTOP-0003', name: 'Dell OptiPlex 7010', assetTypeId: desktopType.id, status: AssetStatus.InRepair, serialNumber: 'OP7010-0003' },
+  });
+
   const monitor1 = await prisma.asset.create({
     data: { assetTag: 'MONITOR-0001', name: 'Dell 24" Monitor', assetTypeId: monitorType.id, status: AssetStatus.Assigned, currentAssigneeId: employee1.id },
   });
+  await prisma.asset.create({
+    data: { assetTag: 'MONITOR-0002', name: 'Dell 24" Monitor', assetTypeId: monitorType.id, status: AssetStatus.InStock },
+  });
+  const monitor3 = await prisma.asset.create({
+    data: { assetTag: 'MONITOR-0003', name: 'LG 27" UltraWide Monitor', assetTypeId: monitorType.id, status: AssetStatus.Assigned, currentAssigneeId: employee2.id },
+  });
+
   const phone1 = await prisma.asset.create({
     data: { assetTag: 'PHONE-0001', name: 'iPhone 13', assetTypeId: phoneType.id, status: AssetStatus.InRepair, serialNumber: 'IP13-0001' },
   });
+  const phone2 = await prisma.asset.create({
+    data: { assetTag: 'PHONE-0002', name: 'iPhone 13', assetTypeId: phoneType.id, status: AssetStatus.Assigned, serialNumber: 'IP13-0002', currentAssigneeId: employee3.id },
+  });
+  const phone3 = await prisma.asset.create({
+    data: { assetTag: 'PHONE-0003', name: 'Samsung Galaxy S21', assetTypeId: phoneType.id, status: AssetStatus.Retired, serialNumber: 'GS21-0003' },
+  });
 
-  await prisma.assetAssignment.create({
-    data: { assetId: laptop1.id, assignedToId: employee1.id, assignedById: admin.id, assignedAt: daysAgo(120) },
+  const peripheral1 = await prisma.asset.create({
+    data: { assetTag: 'PERIPH-0001', name: 'Logitech MX Keys Keyboard', assetTypeId: peripheralType.id, status: AssetStatus.InStock, serialNumber: 'MXKEYS-0001' },
   });
-  await prisma.assetAssignment.create({
-    data: { assetId: monitor1.id, assignedToId: employee1.id, assignedById: admin.id, assignedAt: daysAgo(120) },
+  const peripheral2 = await prisma.asset.create({
+    data: { assetTag: 'PERIPH-0002', name: 'Logitech Brio Webcam', assetTypeId: peripheralType.id, status: AssetStatus.Assigned, serialNumber: 'BRIO-0002', currentAssigneeId: employee2.id },
   });
-  await prisma.assetAssignment.create({
-    data: { assetId: phone1.id, assignedToId: employee3.id, assignedById: admin.id, assignedAt: daysAgo(200), returnedAt: daysAgo(2) },
+  const peripheral3 = await prisma.asset.create({
+    data: { assetTag: 'PERIPH-0003', name: 'Logitech MX Master Mouse', assetTypeId: peripheralType.id, status: AssetStatus.Lost, serialNumber: 'MXMASTER-0003' },
+  });
+
+  const license1 = await prisma.asset.create({
+    data: { assetTag: 'LICENSE-0001', name: 'Adobe Creative Cloud Seat', assetTypeId: licenseType.id, status: AssetStatus.Assigned, currentAssigneeId: employee1.id },
+  });
+  const license2 = await prisma.asset.create({
+    data: { assetTag: 'LICENSE-0002', name: 'AutoCAD Seat (Legacy)', assetTypeId: licenseType.id, status: AssetStatus.Retired },
+  });
+  await prisma.asset.create({
+    data: { assetTag: 'LICENSE-0003', name: 'Microsoft 365 E3 Seat (Spare)', assetTypeId: licenseType.id, status: AssetStatus.InStock },
+  });
+
+  await prisma.assetAssignment.createMany({
+    data: [
+      // Currently assigned — open assignment rows matching currentAssigneeId.
+      { assetId: laptop1.id, assignedToId: employee1.id, assignedById: admin.id, assignedAt: daysAgo(120) },
+      { assetId: monitor1.id, assignedToId: employee1.id, assignedById: admin.id, assignedAt: daysAgo(120) },
+      { assetId: desktop1.id, assignedToId: employee2.id, assignedById: admin.id, assignedAt: daysAgo(150) },
+      { assetId: laptop3.id, assignedToId: employee3.id, assignedById: admin.id, assignedAt: daysAgo(60) },
+      { assetId: monitor3.id, assignedToId: employee2.id, assignedById: admin.id, assignedAt: daysAgo(50) },
+      { assetId: phone2.id, assignedToId: employee3.id, assignedById: admin.id, assignedAt: daysAgo(40) },
+      { assetId: peripheral2.id, assignedToId: employee2.id, assignedById: admin.id, assignedAt: daysAgo(70) },
+      { assetId: license1.id, assignedToId: employee1.id, assignedById: admin.id, assignedAt: daysAgo(90) },
+      // Previously assigned, now returned — asset moved to InRepair/Retired/Lost.
+      { assetId: phone1.id, assignedToId: employee3.id, assignedById: admin.id, assignedAt: daysAgo(200), returnedAt: daysAgo(2) },
+      { assetId: laptop4.id, assignedToId: employee2.id, assignedById: admin.id, assignedAt: daysAgo(300), returnedAt: daysAgo(30) },
+      { assetId: laptop5.id, assignedToId: agent1.id, assignedById: admin.id, assignedAt: daysAgo(250), returnedAt: daysAgo(10) },
+      { assetId: desktop3.id, assignedToId: employee3.id, assignedById: admin.id, assignedAt: daysAgo(180), returnedAt: daysAgo(15) },
+      { assetId: phone3.id, assignedToId: employee1.id, assignedById: admin.id, assignedAt: daysAgo(220), returnedAt: daysAgo(20) },
+      { assetId: peripheral3.id, assignedToId: employee3.id, assignedById: admin.id, assignedAt: daysAgo(150), returnedAt: daysAgo(5) },
+      { assetId: license2.id, assignedToId: employee2.id, assignedById: admin.id, assignedAt: daysAgo(400), returnedAt: daysAgo(60) },
+    ],
   });
 
   // ---------------------------------------------------------------------
@@ -138,6 +200,8 @@ async function main() {
   // ---------------------------------------------------------------------
   const gettingStarted = await prisma.knowledgeBaseCategory.create({ data: { name: 'Getting Started' } });
   const troubleshooting = await prisma.knowledgeBaseCategory.create({ data: { name: 'Troubleshooting' } });
+  const policies = await prisma.knowledgeBaseCategory.create({ data: { name: 'Policies' } });
+  const howTo = await prisma.knowledgeBaseCategory.create({ data: { name: 'How-To' } });
 
   await prisma.knowledgeBaseArticle.create({
     data: {
@@ -168,6 +232,94 @@ async function main() {
       title: 'VPN Connection Issues',
       slug: 'vpn-connection-issues',
       content: 'Draft notes: check split-tunnel config and client version before escalating. Most drops are caused by an outdated VPN client.',
+      status: KnowledgeArticleStatus.Draft,
+    },
+  });
+
+  const printerArticle = await prisma.knowledgeBaseArticle.create({
+    data: {
+      categoryId: troubleshooting.id,
+      authorId: agent2.id,
+      title: 'Fixing Printer Spooler Errors',
+      slug: 'fixing-printer-spooler-errors',
+      content: 'Restart the Print Spooler service, clear the spool folder, and reinstall the printer driver if jobs remain stuck in the queue.',
+      status: KnowledgeArticleStatus.Published,
+      publishedAt: daysAgo(38),
+    },
+  });
+  await prisma.knowledgeBaseArticle.create({
+    data: {
+      categoryId: troubleshooting.id,
+      authorId: agent1.id,
+      title: 'Old Ticketing System Migration Notes',
+      slug: 'old-ticketing-system-migration-notes',
+      content: 'Historical notes from the migration off the legacy help desk tool. Retained for reference only; the process described here no longer applies.',
+      status: KnowledgeArticleStatus.Archived,
+      publishedAt: daysAgo(240),
+    },
+  });
+  await prisma.knowledgeBaseArticle.create({
+    data: {
+      categoryId: gettingStarted.id,
+      authorId: teamLead.id,
+      title: 'IT Service Desk Contact Guide',
+      slug: 'it-service-desk-contact-guide',
+      content: 'This guide previously listed phone extensions for the old on-call rotation. Superseded by the current escalation policy article.',
+      status: KnowledgeArticleStatus.Archived,
+      publishedAt: daysAgo(300),
+    },
+  });
+  await prisma.knowledgeBaseArticle.create({
+    data: {
+      categoryId: policies.id,
+      authorId: admin.id,
+      title: 'Acceptable Use Policy Overview',
+      slug: 'acceptable-use-policy-overview',
+      content: 'Company devices and accounts are provided for business use. Summarizes the acceptable-use rules every employee agrees to at onboarding.',
+      status: KnowledgeArticleStatus.Published,
+      publishedAt: daysAgo(90),
+    },
+  });
+  const remoteEquipmentArticle = await prisma.knowledgeBaseArticle.create({
+    data: {
+      categoryId: policies.id,
+      authorId: admin.id,
+      title: 'Remote Work Equipment Policy',
+      slug: 'remote-work-equipment-policy',
+      content: 'Explains which assets (laptop, monitor, peripherals) remote employees are eligible for, and the return process when equipment is retired or reassigned.',
+      status: KnowledgeArticleStatus.Published,
+      publishedAt: daysAgo(70),
+    },
+  });
+  const licenseRequestArticle = await prisma.knowledgeBaseArticle.create({
+    data: {
+      categoryId: howTo.id,
+      authorId: teamLead.id,
+      title: 'Requesting New Software Licenses',
+      slug: 'requesting-new-software-licenses',
+      content: 'Submit an Access Request ticket with the software name and business justification. Manager approval is required for paid seats such as Adobe Creative Cloud.',
+      status: KnowledgeArticleStatus.Published,
+      publishedAt: daysAgo(25),
+    },
+  });
+  await prisma.knowledgeBaseArticle.create({
+    data: {
+      categoryId: howTo.id,
+      authorId: agent2.id,
+      title: 'How to Submit a Ticket the Right Way',
+      slug: 'how-to-submit-a-ticket-the-right-way',
+      content: 'Include the affected asset tag, exact error text, and steps already tried. Tickets with this detail are resolved noticeably faster.',
+      status: KnowledgeArticleStatus.Published,
+      publishedAt: daysAgo(15),
+    },
+  });
+  await prisma.knowledgeBaseArticle.create({
+    data: {
+      categoryId: howTo.id,
+      authorId: agent1.id,
+      title: 'Connecting to the Guest Wi-Fi',
+      slug: 'connecting-to-the-guest-wifi',
+      content: 'Draft: guest network SSID and voucher process, pending confirmation from facilities before publishing.',
       status: KnowledgeArticleStatus.Draft,
     },
   });
@@ -359,14 +511,271 @@ async function main() {
     data: { ticketId: ticket5.id, authorId: employee2.id, body: 'This jammed again in the exact same spot — reopening.', visibility: CommentVisibility.Public, createdAt: daysAgo(1) },
   });
 
+  // ---------------------------------------------------------------------
+  // Generated tickets — ~48 additional, index-driven (deterministic, not
+  // Math.random()) so a re-run of this seed always yields the same data.
+  // This is what gives Analytics/SLA/Tickets pages a believable volume and
+  // date spread instead of five hand-typed rows.
+  // ---------------------------------------------------------------------
+  type GeneratedTemplate = {
+    subject: string;
+    description: string;
+    category: { id: string };
+    priority: TicketPriority;
+  };
+
+  const generatedTemplates: GeneratedTemplate[] = [
+    { subject: "VPN client won't connect after Windows update", description: 'Since the latest Windows update, the corporate VPN client fails to connect with a generic error.', category: network, priority: TicketPriority.High },
+    { subject: 'Need admin rights to install Figma', description: 'Design team member needs local admin rights to install and update Figma desktop app.', category: businessApps, priority: TicketPriority.Medium },
+    { subject: 'New hire onboarding — accounts and equipment', description: 'New employee starts Monday and needs accounts provisioned plus a laptop and monitor ready.', category: accessRequest, priority: TicketPriority.Medium },
+    { subject: 'Monitor flickering intermittently', description: 'External monitor flickers a few times an hour, especially under fluorescent lighting.', category: desktopCategory, priority: TicketPriority.Low },
+    { subject: "Can't print to 3rd floor printer", description: 'Print jobs sent to the 3rd floor printer sit in the queue and never print.', category: hardware, priority: TicketPriority.Low },
+    { subject: 'Outlook rules not syncing across devices', description: 'Inbox rules created on desktop Outlook do not show up on the mobile app.', category: businessApps, priority: TicketPriority.Medium },
+    { subject: 'Laptop fan making loud grinding noise', description: 'Fan noise has gotten progressively louder over the past week, especially under load.', category: laptopCategory, priority: TicketPriority.Medium },
+    { subject: 'Password reset for locked account', description: 'Account locked out after too many failed login attempts, needs a reset.', category: accessRequest, priority: TicketPriority.High },
+    { subject: 'Slack notifications not showing on desktop', description: 'Desktop notifications for Slack stopped appearing after the last app update.', category: businessApps, priority: TicketPriority.Low },
+    { subject: 'Wi-Fi drops in conference room B', description: 'Wi-Fi disconnects every few minutes specifically in conference room B, other rooms are fine.', category: network, priority: TicketPriority.Medium },
+    { subject: 'Blue screen error on startup', description: 'Desktop shows a blue screen with a memory management error on every boot.', category: desktopCategory, priority: TicketPriority.Critical },
+    { subject: 'Need access to shared Marketing drive', description: 'Recently transferred to Marketing and cannot open the shared department drive.', category: accessRequest, priority: TicketPriority.Medium },
+    { subject: 'Windows update stuck at 40%', description: 'Windows update has been stuck at 40 percent for over an hour, machine will not restart cleanly.', category: operatingSystem, priority: TicketPriority.Medium },
+    { subject: 'External monitor not detected', description: 'Docking station is connected but the external monitor is not detected by the laptop.', category: hardware, priority: TicketPriority.Low },
+    { subject: 'Zoom camera not working', description: 'Camera shows a black screen in Zoom calls even though it works in other apps.', category: businessApps, priority: TicketPriority.Low },
+    { subject: 'Phone not receiving calls', description: 'Company mobile stopped receiving inbound calls since yesterday, texts still work.', category: hardware, priority: TicketPriority.Medium },
+    { subject: 'Email bouncing to external clients', description: 'Emails to several external clients are bouncing back with a delivery failure notice.', category: network, priority: TicketPriority.High },
+    { subject: 'Request for a second monitor', description: 'Would like a second monitor added to the current desk setup for a new role.', category: accessRequest, priority: TicketPriority.Low },
+    { subject: 'Keyboard keys sticking', description: 'The spacebar and E key stick intermittently on the laptop keyboard.', category: laptopCategory, priority: TicketPriority.Low },
+    { subject: 'VPN certificate expired', description: 'VPN client shows a certificate expired error and refuses to connect.', category: network, priority: TicketPriority.High },
+    { subject: 'Software license expired — Adobe Creative Cloud', description: 'Adobe Creative Cloud shows the license as expired even though it should still be active.', category: businessApps, priority: TicketPriority.Medium },
+    { subject: 'Laptop overheating during video calls', description: 'Laptop gets very hot and throttles noticeably during long video calls.', category: laptopCategory, priority: TicketPriority.Medium },
+    { subject: 'Cannot access payroll system', description: 'Payroll portal returns an access denied error since this morning.', category: accessRequest, priority: TicketPriority.High },
+    { subject: "Desktop won't boot past BIOS screen", description: 'Desktop hangs on the manufacturer logo screen and never reaches Windows.', category: desktopCategory, priority: TicketPriority.Critical },
+    { subject: 'Request elevated permissions for deployment', description: 'Engineer needs elevated permissions on the deployment server for an upcoming release.', category: accessRequest, priority: TicketPriority.High },
+    { subject: 'Battery draining extremely fast', description: 'Laptop battery drops from full to empty in under two hours even when idle.', category: laptopCategory, priority: TicketPriority.Medium },
+    { subject: 'Teams calls dropping mid-meeting', description: 'Microsoft Teams calls disconnect abruptly a few minutes into most meetings.', category: businessApps, priority: TicketPriority.Medium },
+    { subject: 'Guest Wi-Fi not working for visitors', description: 'Visitors cannot connect to the guest Wi-Fi network, the voucher page never loads.', category: network, priority: TicketPriority.Low },
+    { subject: 'New employee needs laptop provisioned', description: 'Laptop needs to be imaged and provisioned ahead of a start date next week.', category: accessRequest, priority: TicketPriority.Medium },
+    { subject: 'Excel crashing when opening large files', description: 'Excel crashes consistently when opening the shared finance workbook.', category: businessApps, priority: TicketPriority.Medium },
+    { subject: 'Printer toner low, need replacement', description: '2nd floor printer is showing a low toner warning and needs a replacement cartridge.', category: hardware, priority: TicketPriority.Low },
+    { subject: 'Suspicious phishing email reported', description: 'Received an email impersonating IT asking to confirm a password — reporting as phishing.', category: network, priority: TicketPriority.Critical },
+    { subject: 'Cannot connect to company VPN from home', description: 'VPN client times out every attempt to connect from home network, worked fine last week.', category: network, priority: TicketPriority.High },
+    { subject: 'Software installation blocked by policy', description: 'Attempting to install a required tool triggers a group policy block.', category: operatingSystem, priority: TicketPriority.Medium },
+    { subject: 'Docking station not charging laptop', description: 'Laptop no longer charges through the docking station, only via the direct charger.', category: laptopCategory, priority: TicketPriority.Medium },
+    { subject: 'Request access to Salesforce', description: 'New sales rep needs a Salesforce account with standard sales-rep permissions.', category: accessRequest, priority: TicketPriority.Medium },
+    { subject: 'Screen resolution reset after every reboot', description: 'Display resolution reverts to a low default every time the desktop restarts.', category: desktopCategory, priority: TicketPriority.Low },
+    { subject: 'Shared calendar not syncing', description: 'Team shared calendar shows different events depending on which device is used.', category: businessApps, priority: TicketPriority.Low },
+    { subject: 'Two-factor authentication codes not arriving', description: 'SMS codes for two-factor login are not arriving, blocking sign-in entirely.', category: accessRequest, priority: TicketPriority.High },
+    { subject: 'Laptop screen cracked after drop', description: 'Laptop was dropped and the screen now has a visible crack across the display.', category: laptopCategory, priority: TicketPriority.High },
+    { subject: 'OS update caused audio driver failure', description: 'No audio output on the desktop since the latest OS update installed.', category: operatingSystem, priority: TicketPriority.Medium },
+    { subject: 'Network drive mapping lost after reboot', description: 'Mapped network drives disappear every time the machine is restarted.', category: network, priority: TicketPriority.Medium },
+    { subject: 'Request temporary contractor account', description: 'Contractor starting a two-week engagement needs a temporary scoped account.', category: accessRequest, priority: TicketPriority.Medium },
+    { subject: 'Desktop fans running at full speed constantly', description: 'Desktop fans run at full speed even at idle, unusually loud compared to before.', category: desktopCategory, priority: TicketPriority.Medium },
+    { subject: 'Spam filter blocking legitimate emails', description: 'Several legitimate vendor emails are being routed to spam and missed.', category: network, priority: TicketPriority.Medium },
+    { subject: 'Need software license reassigned from departed employee', description: 'A departed employee still holds a paid software seat that should be reassigned.', category: businessApps, priority: TicketPriority.Low },
+    { subject: "Conference room display won't connect via HDMI", description: 'Laptops cannot get the conference room display to detect an HDMI signal.', category: hardware, priority: TicketPriority.Low },
+    { subject: 'Old laptop retirement and data migration', description: 'Old laptop is being replaced and needs local files migrated before retirement.', category: laptopCategory, priority: TicketPriority.Medium },
+  ];
+
+  type Scenario = {
+    status: TicketStatus;
+    shape:
+      | 'unstarted'
+      | 'onTrackResponded'
+      | 'inFlightBreach'
+      | 'inFlightBreachNeverResponded'
+      | 'completedOnTimeShort'
+      | 'completedOnTimeLong'
+      | 'completedOnTimeMedium'
+      | 'completedBreach'
+      | 'completedBreachClosed'
+      | 'respondedLateCompleted';
+  };
+
+  const scenarios: Scenario[] = [
+    { status: TicketStatus.New, shape: 'unstarted' },
+    { status: TicketStatus.Open, shape: 'onTrackResponded' },
+    { status: TicketStatus.InProgress, shape: 'onTrackResponded' },
+    { status: TicketStatus.OnHold, shape: 'onTrackResponded' },
+    { status: TicketStatus.InProgress, shape: 'inFlightBreach' },
+    { status: TicketStatus.New, shape: 'inFlightBreachNeverResponded' },
+    { status: TicketStatus.Resolved, shape: 'completedOnTimeShort' },
+    { status: TicketStatus.Resolved, shape: 'completedOnTimeLong' },
+    { status: TicketStatus.Closed, shape: 'completedOnTimeMedium' },
+    { status: TicketStatus.Resolved, shape: 'completedBreach' },
+    { status: TicketStatus.Closed, shape: 'completedBreachClosed' },
+    { status: TicketStatus.Closed, shape: 'respondedLateCompleted' },
+  ];
+
+  const requesterPool = [employee1, employee2, employee3];
+  const agentPool = [agent1, agent2];
+  const linkAssets = [laptop2, monitor3, desktop3, phone2, peripheral1, license1, laptop5];
+  const linkArticles = [printerArticle, remoteEquipmentArticle, licenseRequestArticle, vpnArticle];
+
+  const generatedTickets: { id: string; ticketNumber: number; status: TicketStatus }[] = [];
+
+  for (let i = 0; i < generatedTemplates.length; i++) {
+    const template = generatedTemplates[i];
+    const scenario = scenarios[i % scenarios.length];
+    const resolvedLikeStatuses: TicketStatus[] = [TicketStatus.Resolved, TicketStatus.Closed];
+    const unresolved = !resolvedLikeStatuses.includes(scenario.status);
+    const rawAgeDays = 1 + ((i * 13) % 59);
+    const ageDays = unresolved ? 1 + (rawAgeDays % 21) : rawAgeDays;
+    const createdAt = daysAgo(ageDays);
+    const createdMs = createdAt.getTime();
+
+    const policy = slaByPriority[template.priority];
+    const responseTargetMinutes = policy.responseTimeMinutes;
+    const resolutionTargetMinutes = policy.resolutionTimeMinutes;
+    const responseDueAt = new Date(createdMs + responseTargetMinutes * 60 * 1000);
+    const resolutionDueAt = new Date(createdMs + resolutionTargetMinutes * 60 * 1000);
+
+    const requester = requesterPool[i % requesterPool.length];
+    const isUnassignedNew = scenario.status === TicketStatus.New && i % 3 === 0;
+    const assignee = isUnassignedNew ? undefined : agentPool[i % agentPool.length];
+
+    let responseAt: Date | undefined;
+    let responseBreached = false;
+    let resolutionBreached = false;
+    let resolvedAt: Date | undefined;
+    let closedAt: Date | undefined;
+    let onHoldStartedAt: Date | undefined;
+
+    switch (scenario.shape) {
+      case 'unstarted':
+        break;
+      case 'onTrackResponded':
+        responseAt = new Date(createdMs + responseTargetMinutes * 0.3 * 60 * 1000);
+        if (scenario.status === TicketStatus.OnHold) {
+          onHoldStartedAt = new Date(createdMs + 2 * HOUR);
+        }
+        break;
+      case 'inFlightBreach':
+        responseAt = new Date(createdMs + responseTargetMinutes * 0.5 * 60 * 1000);
+        resolutionBreached = true;
+        break;
+      case 'inFlightBreachNeverResponded':
+        responseBreached = true;
+        resolutionBreached = true;
+        break;
+      case 'completedOnTimeShort':
+        responseAt = new Date(createdMs + responseTargetMinutes * 0.3 * 60 * 1000);
+        resolvedAt = new Date(createdMs + resolutionTargetMinutes * 0.4 * 60 * 1000);
+        break;
+      case 'completedOnTimeLong':
+        responseAt = new Date(createdMs + responseTargetMinutes * 0.6 * 60 * 1000);
+        resolvedAt = new Date(createdMs + resolutionTargetMinutes * 0.9 * 60 * 1000);
+        break;
+      case 'completedOnTimeMedium':
+        responseAt = new Date(createdMs + responseTargetMinutes * 0.4 * 60 * 1000);
+        resolvedAt = new Date(createdMs + resolutionTargetMinutes * 0.6 * 60 * 1000);
+        closedAt = new Date(resolvedAt.getTime() + 4 * HOUR);
+        break;
+      case 'completedBreach':
+        responseAt = new Date(createdMs + responseTargetMinutes * 0.4 * 60 * 1000);
+        resolvedAt = new Date(createdMs + resolutionTargetMinutes * 1.8 * 60 * 1000);
+        resolutionBreached = true;
+        break;
+      case 'completedBreachClosed':
+        responseAt = new Date(createdMs + responseTargetMinutes * 0.4 * 60 * 1000);
+        resolvedAt = new Date(createdMs + resolutionTargetMinutes * 2.2 * 60 * 1000);
+        resolutionBreached = true;
+        closedAt = new Date(resolvedAt.getTime() + 3 * HOUR);
+        break;
+      case 'respondedLateCompleted':
+        responseAt = new Date(createdMs + responseTargetMinutes * 2.5 * 60 * 1000);
+        responseBreached = true;
+        resolvedAt = new Date(createdMs + resolutionTargetMinutes * 1.1 * 60 * 1000);
+        resolutionBreached = true;
+        closedAt = new Date(resolvedAt.getTime() + 2 * HOUR);
+        break;
+    }
+
+    const ticket = await prisma.ticket.create({
+      data: {
+        subject: template.subject,
+        description: template.description,
+        requesterId: requester.id,
+        assigneeId: assignee?.id,
+        categoryId: template.category.id,
+        priority: template.priority,
+        status: scenario.status,
+        createdAt,
+        resolvedAt,
+        closedAt,
+      },
+    });
+    generatedTickets.push({ id: ticket.id, ticketNumber: ticket.ticketNumber, status: ticket.status });
+
+    await prisma.ticketSla.create({
+      data: {
+        ticketId: ticket.id,
+        slaPolicyId: policy.id,
+        responseTargetMinutes,
+        resolutionTargetMinutes,
+        responseDueAt,
+        responseAt,
+        responseBreached,
+        resolutionDueAt,
+        resolutionBreached,
+        onHoldStartedAt,
+      },
+    });
+
+    // A minority get an explicit creation/status history row.
+    if (i % 3 === 0) {
+      await prisma.ticketHistory.create({
+        data: { ticketId: ticket.id, actorId: requester.id, fieldName: 'status', oldValue: null, newValue: 'New', createdAt },
+      });
+      if (scenario.status !== TicketStatus.New) {
+        await prisma.ticketHistory.create({
+          data: {
+            ticketId: ticket.id,
+            actorId: assignee?.id ?? teamLead.id,
+            fieldName: 'status',
+            oldValue: 'New',
+            newValue: scenario.status,
+            createdAt: resolvedAt ?? new Date(createdMs + 3 * HOUR),
+          },
+        });
+      }
+    }
+
+    // A minority get a public comment so ticket detail pages aren't empty.
+    if (i % 4 === 0) {
+      await prisma.ticketComment.create({
+        data: {
+          ticketId: ticket.id,
+          authorId: requester.id,
+          body: 'Following up — please let me know if you need anything else from my side.',
+          visibility: CommentVisibility.Public,
+          createdAt: new Date(createdMs + 1 * HOUR),
+        },
+      });
+    }
+
+    // A minority link to an existing asset or KB article.
+    if (i % 7 === 0) {
+      const asset = linkAssets[Math.floor(i / 7) % linkAssets.length];
+      await prisma.ticketAsset.create({ data: { ticketId: ticket.id, assetId: asset.id, linkedById: assignee?.id ?? teamLead.id } });
+    }
+    if (i % 9 === 0) {
+      const article = linkArticles[Math.floor(i / 9) % linkArticles.length];
+      await prisma.ticketKnowledgeArticle.create({ data: { ticketId: ticket.id, articleId: article.id, linkedById: assignee?.id ?? teamLead.id } });
+    }
+  }
+
+  const inFlightBreachedCount = generatedTickets.filter(
+    (t, i) => scenarios[i % scenarios.length].shape === 'inFlightBreach' || scenarios[i % scenarios.length].shape === 'inFlightBreachNeverResponded',
+  ).length;
+
   console.log('Seed complete:', {
     users: 7,
     ticketCategories: 8,
     assetTypes: 6,
-    assets: 5,
+    assets: 20,
     slaPolicies: 4,
-    knowledgeBaseArticles: 3,
-    tickets: 5,
+    knowledgeBaseArticles: 11,
+    tickets: 5 + generatedTickets.length,
+    generatedInFlightBreachedTickets: inFlightBreachedCount,
   });
 }
 
