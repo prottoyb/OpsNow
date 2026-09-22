@@ -495,6 +495,8 @@ OpsNow/
 ├── .github/workflows/      CI pipeline (Phase 15)
 ├── docker-compose.yml      Full-stack local run (Phase 14)
 ├── .env.docker.example     Environment template for the Compose stack
+├── scripts/
+│   └── setup-ai-team.ps1   Links .claude/ to the shared AI team framework (see below)
 ├── .claude/                Structured AI-development workflow (see below)
 ├── TASKS.md                Phase-by-phase task checklist (source of truth for status)
 ├── progress.md             Full development log, phase by phase
@@ -703,6 +705,29 @@ The supporting structure lives under `.claude/`:
 - **`.claude/agent-memory`** — persisted, per-role notes that carry
   context forward between sessions, so review standards stay consistent
   phase over phase.
+
+`.claude/framework`, `.claude/agents`, `.claude/rules` and `.claude/skills`
+are not files committed to this repository — they are local Windows
+directory junctions into a separate, shared `AI-Software-Team` framework
+repository that OpsNow consumes but doesn't fork or duplicate. This keeps
+the framework's own history, versioning and reuse across other projects
+intact instead of forking it per-project. `.gitignore` excludes `.claude/`,
+and none of these junctions (or `.claude/` itself) are tracked in Git.
+
+`CLAUDE.md` pulls in the framework's own constitution with the stable,
+relative `@.claude/framework/CLAUDE.md` import rather than an absolute
+path, so the tracked project config never hard-codes any one developer's
+local checkout location.
+
+Run `.\scripts\setup-ai-team.ps1` to create or repair all four junctions —
+including creating `.claude/` itself on a fresh checkout, since it won't
+exist until this script runs. It defaults to this developer's local
+framework checkout path but accepts `-TeamPath` for a different location,
+validates the source before touching anything, never overwrites a real
+directory, and is safe to run repeatedly. This is a development-time
+dependency only: OpsNow the application has no runtime dependency on
+Claude Code or the framework repository, and none of this affects
+`backend/` or `frontend/`.
 
 In practice, every completed phase in this repository went through this
 same cycle: an implementation pass, followed by independent QA/security

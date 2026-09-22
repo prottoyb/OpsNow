@@ -6,21 +6,25 @@
 
 
 
-@D:\Projects\Claude\AI-Software-Team\CLAUDE.md
+@.claude/framework/CLAUDE.md
 
 
 
 The shared engineering constitution, mandatory gates, policy precedence,
 
-and agent/rule/skill definitions above are maintained as the single
+and agent/rule/skill definitions above are maintained in a separate
 
-source of truth at D:\Projects\Claude\AI-Software-Team and made
+`AI-Software-Team` repository and made available here via local Windows
 
-available here via the symlinked `.claude\agents`, `.claude\rules`, and
+directory junctions: `.claude\framework` (the repository itself, imported
 
-`.claude\skills` directories. OpsNow-specific instructions below are
+above), `.claude\agents`, `.claude\rules`, and `.claude\skills`. Run
 
-additive and must not contradict it.
+`.\scripts\setup-ai-team.ps1` to create or repair these on a fresh
+
+checkout — see README.md's "AI-Assisted Development Workflow" section.
+
+OpsNow-specific instructions below are additive and must not contradict it.
 
 
 
