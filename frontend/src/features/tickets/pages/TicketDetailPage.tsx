@@ -4,7 +4,7 @@ import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
 import { ErrorState, InlineNotice } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
-import { FullPageSpinner, Spinner } from '../../../components/ui/Spinner';
+import { DetailPageSkeleton, Spinner } from '../../../components/ui/Spinner';
 import { Tabs } from '../../../components/ui/Tabs';
 import { toApiError } from '../../../lib/api/errors';
 import { formatDateTime, fullName, toDateTimeAttribute } from '../../../lib/format';
@@ -121,7 +121,7 @@ export function TicketDetailPage() {
   }
 
   if (ticketQuery.isPending) {
-    return <FullPageSpinner label="Loading ticket" />;
+    return <DetailPageSkeleton label="Loading ticket" />;
   }
 
   if (ticketQuery.isError) {

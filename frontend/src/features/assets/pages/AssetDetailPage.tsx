@@ -4,7 +4,7 @@ import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
 import { ErrorState, InlineNotice } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
-import { FullPageSpinner, Spinner } from '../../../components/ui/Spinner';
+import { DetailPageSkeleton, Spinner } from '../../../components/ui/Spinner';
 import { Tabs } from '../../../components/ui/Tabs';
 import { toApiError } from '../../../lib/api/errors';
 import {
@@ -125,7 +125,7 @@ export function AssetDetailPage() {
   }
 
   if (assetQuery.isPending) {
-    return <FullPageSpinner label="Loading asset" />;
+    return <DetailPageSkeleton label="Loading asset" />;
   }
 
   if (assetQuery.isError) {
