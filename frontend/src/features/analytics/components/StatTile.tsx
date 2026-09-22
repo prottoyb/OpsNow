@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { CARD_SURFACE_CLASSES } from '../../../components/ui/Card';
 
 export interface StatTileProps {
   label: string;
@@ -16,7 +17,7 @@ export interface StatTileProps {
  */
 export function StatTile({ label, value, noData = false, hint }: StatTileProps) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-3">
+    <div className={CARD_SURFACE_CLASSES}>
       <dt className="text-sm text-slate-600">{label}</dt>
       <dd
         className={

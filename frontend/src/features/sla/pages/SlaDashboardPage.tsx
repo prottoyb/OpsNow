@@ -1,3 +1,4 @@
+import { Card } from '../../../components/ui/Card';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
@@ -51,11 +52,7 @@ export function SlaDashboardPage() {
     <section className="flex flex-col gap-6">
       <PageHeading>SLA</PageHeading>
 
-      <section className="rounded-md border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">
-          Service level metrics
-        </h2>
-
+      <Card heading="Service level metrics">
         {/*
           `isLoading`, not `isPending`: a DISABLED query stays `pending`
           forever, so a non-staff render that somehow got past the route gate
@@ -101,11 +98,10 @@ export function SlaDashboardPage() {
             </p>
           </>
         ) : null}
-      </section>
+      </Card>
 
-      <section className="rounded-md border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold text-slate-900">SLA policies</h2>
-        <p className="mt-1 text-xs text-slate-600">
+      <Card heading="SLA policies">
+        <p className="mb-3 text-xs text-slate-600">
           A ticket keeps the targets that were active when it was created, so
           editing a policy never changes a ticket that already exists.
         </p>
@@ -180,7 +176,7 @@ export function SlaDashboardPage() {
             </table>
           </div>
         ) : null}
-      </section>
+      </Card>
     </section>
   );
 }

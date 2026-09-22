@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import {
@@ -90,10 +91,7 @@ export function AuditFilterBar({
 }: AuditFilterBarProps) {
   const today = todayUtcDay();
   return (
-    <section
-      aria-labelledby="audit-filters-heading"
-      className="rounded-md border border-slate-200 bg-white p-4"
-    >
+    <Card aria-labelledby="audit-filters-heading">
       <h2 id="audit-filters-heading" className="sr-only">
         Filter audit log
       </h2>
@@ -242,6 +240,6 @@ export function AuditFilterBar({
           </Button>
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }

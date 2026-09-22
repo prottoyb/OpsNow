@@ -1,4 +1,5 @@
 import { Button } from '../../../components/ui/Button';
+import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import type { TicketCategory } from '../../../types/api';
@@ -38,10 +39,7 @@ export function AnalyticsFilterBar({
 }: AnalyticsFilterBarProps) {
   const today = todayUtcDay();
   return (
-    <section
-      aria-labelledby="analytics-filters-heading"
-      className="rounded-md border border-slate-200 bg-white p-4"
-    >
+    <Card aria-labelledby="analytics-filters-heading">
       <h2 id="analytics-filters-heading" className="sr-only">
         Filter analytics
       </h2>
@@ -172,6 +170,6 @@ export function AnalyticsFilterBar({
           </Button>
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }

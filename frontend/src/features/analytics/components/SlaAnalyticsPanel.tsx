@@ -1,3 +1,4 @@
+import { Card } from '../../../components/ui/Card';
 import type { SlaClockAnalytics } from '../../../types/api';
 import { formatCount } from '../analyticsFormat';
 import { useSlaAnalytics } from '../useAnalytics';
@@ -19,15 +20,8 @@ function ClockCard({
   title: string;
   clock: SlaClockAnalytics;
 }) {
-  const headingId = `sla-clock-${title.toLowerCase()}`;
   return (
-    <section
-      aria-labelledby={headingId}
-      className="flex flex-col gap-4 rounded-md border border-slate-200 bg-white p-4"
-    >
-      <h3 id={headingId} className="text-base font-semibold text-slate-900">
-        {title}
-      </h3>
+    <Card heading={title} className="flex flex-col gap-4">
       <ComplianceMeter
         label={`${title} SLA compliance`}
         rate={clock.complianceRate}
@@ -51,7 +45,7 @@ function ClockCard({
           hint="Running, not yet late, nearly out of time. Paused clocks are never at risk."
         />
       </StatGrid>
-    </section>
+    </Card>
   );
 }
 
