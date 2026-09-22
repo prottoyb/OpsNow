@@ -2050,3 +2050,23 @@ throughout this pass (Vite/Nest watch mode live-reloaded every change)
 
 so the project owner can inspect the corrected app without a restart.
 
+---
+
+### Phase 17b — Further UI/UX Polish and Demo Data
+
+A third, smaller increment requested by the project owner on top of 17a/17a-2, using a fuller 20-area brief as a checklist. A concise design review (not a repeat of the full audit) inspected the current code against that brief and found most of it already satisfied by 17a/17a-2; it returned 5 concrete remaining gaps plus a data-shape recommendation. `git diff --stat` against `backend/src/` for the UI commit, and against `frontend/` for the seed commit, are both empty.
+
+- [x] Design review against the full 20-area brief, confirming what 17a/17a-2 already closed and returning 5 concrete gaps + 1 data recommendation (not a re-audit)
+- [x] SLA dashboard (`SlaDashboardPage.tsx`): the two remaining raw `rounded-md border` surfaces (the metric tiles and the lead "Open tickets with an SLA" figure) now use the shared `Card` surface classes; the policy table's Status column now renders a `Badge` (success/neutral) instead of plain text
+- [x] Analytics dashboard: `StatTile` gained an `emphasis` prop (a red left-accent border + a `Badge tone="danger"` "Needs attention" label, never colour alone) wired to the SLA panel's in-flight-breach tile — the one concrete "what needs attention" signal the design review could add without a new backend aggregate or a charting dependency
+- [x] Login page (`LoginPage.tsx`): brand wordmark badge, form wrapped in `Card`, page background raised so the form reads as a surface — closes the one page 17a explicitly left untouched
+- [x] AI assistant panel: a small `aria-hidden` sparkle icon beside the heading, so it reads as visually distinct AI-generated territory. A `border-brand-200` alternative was considered and deliberately rejected — `Card`'s `className` prop is appended after its own hardcoded border color with no tailwind-merge in this codebase to resolve the conflict, and there is no existing precedent overriding it this way, so the outcome could not be verified without a browser
+- [x] Demo seed data (`backend/prisma/seed.ts`): expanded from 5→53 tickets, 5→20 assets, 3→11 KB articles, deterministically (index-driven variation, no `Math.random()`). The 5 original hand-crafted narrative tickets are kept byte-for-byte. 10 of the new tickets are an in-flight SLA breach specifically so the new Analytics "Needs attention" tile is non-zero in fresh seed data, not just decorative volume. The 7 seeded accounts (email/password) are unchanged.
+- [x] Senior Review of both commits (STANDARD tier, agreed): no CRITICAL/HIGH/MEDIUM findings. 5 LOW notes, all either confirmed already-safe-as-implemented (emphasis scoping, the Badge swap's test compatibility, `LoginPage`'s accessibility regions, the AI panel's accessible name) or a documented, explicitly non-blocking latent fragility — see the Deferred item below.
+- [x] Full regression: frontend `tsc --noEmit`, `eslint .`, `vitest run` (481/481, unchanged), `vite build`; backend `prisma validate`, `tsc --noEmit`, `npm test` (864/864, unchanged), `npm run test:e2e` (350/350, unchanged) against the live reseeded `opsnow_dev`. Row counts spot-checked directly against the database, not just trusted from a subagent's report.
+
+Deliberately NOT done, tracked rather than silently dropped:
+
+- [ ] `seed.ts`'s synthetic `resolvedAt` for a resolved/closed ticket is computed as `createdAt + multiplier × resolutionTargetMinutes` with no upper-bound clamp to "now". Senior Review traced every current generation path and confirmed no ticket in today's 48-template array can actually produce a future-dated `resolvedAt`, so this is latent, not live. A future edit to `generatedTemplates` (reordering, inserting a template, changing a template's priority) could silently reintroduce it. A `Math.min(resolvedAt, new Date())`-style clamp would close it; deferred because it is not a live bug and the file should not be re-touched just to add a guard against a hypothetical future edit.
+- [ ] Same open items as Phase 17a/17a-2: no rendered/visual verification was possible (no browser tool in this environment), so a real breakpoint walkthrough and a proper accessibility review remain folded into Phase 17's "Review accessibility"/"Review responsive design" items below, which stay unchecked.
+

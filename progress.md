@@ -12,9 +12,11 @@ Project status: In Progress
 
 Current phase: Phases 13–16 complete; Phase 17 — Final Review & Portfolio
 
-Preparation is in progress. Its primary workstream, Phase 17a (UI/UX
+Preparation is in progress. Its primary workstream, Phase 17a/17a-2/17b
 
-Product Polish, inserted by project owner direction), is complete.
+(UI/UX Product Polish, inserted by project owner direction, across three
+
+passes), is complete.
 
 
 
@@ -22,9 +24,9 @@ Current task: none
 
 
 
-Last completed task: Phase 17a — UI/UX Product Polish. See the dated log
+Last completed task: Phase 17b — Further UI/UX Polish and Demo Data. See
 
-entry below for the full account.
+the dated log entry below for the full account.
 
 
 
@@ -32,9 +34,13 @@ Next task: the remainder of Phase 17's checklist (security/performance/
 
 accessibility/responsive review, dependency and debug-code cleanup,
 
-README, diagrams, API docs, technical-decision documentation, demo data,
+README, diagrams, API docs, technical-decision documentation, interview/
 
-interview/demo prep, final GitHub release) — see TASKS.md.
+demo prep, final GitHub release) — see TASKS.md. Demo data was
+
+substantially addressed by Phase 17b, so that item is largely closed
+
+going into the rest of Phase 17.
 
 
 
@@ -5062,6 +5068,316 @@ Next:
 unless the project owner's next round of manual inspection surfaces
 
 further correction work first.
+
+
+
+\---
+
+
+
+### 2026-09-23 — Phase 17b: Further UI/UX Polish and Demo Data
+
+
+
+A third, smaller polish increment on top of Phase 17a/17a-2, run from a
+
+fresh Claude Code session that first read CLAUDE.md, TASKS.md,
+
+progress.md, `.claude/rules/ui-design.md` and the `ui-polish` skill
+
+before touching anything, and confirmed via `git status`/`git log` that
+
+Phases 0–16 and 17a/17a-2 were exactly as documented. The project owner
+
+supplied a fuller 20-area brief as a checklist for this pass.
+
+
+
+No browser automation tool was connected in this session either (the
+
+`claude-in-chrome` skill is listed but `ToolSearch` found no
+
+`mcp__claude-in-chrome__*`/`Claude_Browser` tools actually available),
+
+so this remained code-level review, same disclosed limitation as
+
+17a/17a-2.
+
+
+
+A concise design review (`ui-ux-product-designer`, explicitly instructed
+
+not to repeat the full audit) read the current code against all 20 brief
+
+areas and found most of it already closed by 17a/17a-2 — the app shell,
+
+the page-header pattern (`PageHeading`, already consistent), content
+
+width, all six tables, forms, ticket detail's main+aside layout, KB,
+
+audit log and the shared feedback pattern needed no further work. It
+
+returned 5 concrete remaining gaps plus a data-shape recommendation:
+
+
+
+1\. `SlaDashboardPage.tsx` had two un-migrated raw `rounded-md border`
+
+surfaces (the metric tiles and the lead figure) and a plain-text policy
+
+Status column instead of a `Badge` — leftover from before the `Card`
+
+primitive existed.
+
+2\. The Analytics dashboard had no "what needs attention" signal at all,
+
+undercutting its role as the strongest portfolio screen.
+
+3\. `LoginPage.tsx` — TASKS.md already flagged this as untouched by 17a —
+
+was still a generic centered form with no brand treatment.
+
+4\. The AI assistant panel was structurally indistinguishable from the
+
+ticket-detail cards around it.
+
+5\. Seed data (5 tickets/5 assets/3 KB articles) was sparse enough that
+
+even a well-composed dashboard would look empty.
+
+
+
+Implemented directly (no `fullstack-engineer` needed for the frontend
+
+items; the seed-data expansion was delegated to `fullstack-engineer` as
+
+a large, mostly-mechanical, isolated workstream, per the ui-polish
+
+skill's step C):
+
+
+
+\- SLA dashboard: the two raw surfaces now use `CARD_SURFACE_CLASSES`/
+
+`rounded-card`+`shadow-card`; the policy Status column now renders a
+
+`Badge` (success/neutral).
+
+\- Analytics: `StatTile` gained an `emphasis?: boolean` prop — a red
+
+left-accent border plus a `Badge tone="danger"` "Needs attention" label
+
+(never colour alone), wired only to the SLA panel's in-flight-breach
+
+tile (`clock.inFlightBreached > 0`), not applied broadly.
+
+\- `LoginPage.tsx`: a brand wordmark badge, the form wrapped in `Card`,
+
+the page background raised to `bg-slate-50` so the white Card reads as
+
+a surface.
+
+\- `TicketAiAssistantPanel.tsx`: a small `aria-hidden` inline-SVG sparkle
+
+icon beside the "AI assistant" heading. A `border-brand-200` alternative
+
+was considered and deliberately rejected: `Card.tsx` appends a passed
+
+`className` after its own hardcoded `border-slate-200` in one template
+
+string, this codebase has no tailwind-merge to resolve that
+
+deterministically, and there is no existing precedent overriding a
+
+`Card`'s border color this way — with no browser available to verify
+
+the actual cascade outcome, the icon-only, structurally unambiguous fix
+
+was judged safer.
+
+\- `backend/prisma/seed.ts`: expanded from 5→53 tickets, 5→20 assets,
+
+3→11 KB articles, deterministically (index-derived variation throughout,
+
+no `Math.random()` anywhere). The 5 original hand-crafted narrative
+
+tickets are kept byte-for-byte — they demonstrate specific documented
+
+behaviors (the reopen-without-a-new-SLA-cycle case, a paused-past-due
+
+clock) that would have been a real regression to lose. 48 generated
+
+tickets add a real spread across all 6 statuses, 4 priorities, 8
+
+categories and ~60 days of creation time; 10 of them carry an in-flight
+
+SLA breach specifically so the new Analytics "Needs attention" tile is
+
+non-zero in fresh seed data, not just decorative volume. Assets span all
+
+6 types and all 5 statuses with a consistent `AssetAssignment` ledger
+
+(one open row per assigned asset, `returnedAt` set for the rest). KB
+
+articles mix Draft/Published/Archived across 4 categories (2 new). The 7
+
+seeded accounts (email/password) are unchanged — every e2e suite still
+
+logs in as the same fixed users. Before touching this, confirmed no
+
+backend or frontend e2e test hardcodes an exact seed row count or a
+
+specific generated-ticket subject; the one real constraint found (the
+
+`ticket-categories` e2e suite asserting "Hardware" and its child
+
+"Laptop" exist) was preserved.
+
+
+
+The seed-data subagent needed two mid-task resumes to finish (it hit its
+
+own turn limit twice while writing the ~425-line generator and again
+
+while running verification) — both resumed correctly via `SendMessage`
+
+to the same agent id after the first resume attempt was mistakenly sent
+
+as a **new** `Agent` call instead (caught immediately via `ListAgents`,
+
+the accidental duplicate stopped before it did any work, no lost or
+
+conflicting work resulted). The agent did its implementation and
+
+verification work inside its own git worktree; since it never committed
+
+there, the finished file was copied from the worktree's working tree
+
+into the main checkout by hand rather than merged via git history, then
+
+independently re-verified from the main checkout rather than trusted
+
+as-is.
+
+
+
+Independent review (Mandatory Gate #2 — separate `ui-ux-product-designer`
+
+second-pass and `senior-reviewer` passes, neither reused from
+
+implementation without being asked to independently re-check):
+
+
+
+\- \*\*Design review\*\*: confirmed all 5 items match spec with no new issue
+
+introduced, explicitly agreed the `border-brand-200` rejection was the
+
+right call for the reason given, and flagged one near-miss it ruled out
+
+after checking (`StatTile`'s `<dt>` gained `flex flex-wrap items-center
+
+gap-1.5` unconditionally, not just under `emphasis` — confirmed visually
+
+inert for the non-emphasis case, not a regression). No correction pass
+
+needed.
+
+\- \*\*Senior Review\*\* (STANDARD tier, agreed — no auth/RBAC/business-logic
+
+file touched by either commit, confirmed via `git diff --stat` against
+
+`backend/src/` and against `frontend/` respectively, both empty): \*\*no
+
+CRITICAL, HIGH or MEDIUM findings.\*\* 5 LOW notes: four are direct
+
+confirmations that a specific risk does NOT exist (emphasis scoping,
+
+the Badge swap's test compatibility, `LoginPage`'s accessibility
+
+regions, the AI panel's accessible name via `aria-hidden`) rather than
+
+defects; the fifth documents a latent, non-live fragility — `seed.ts`'s
+
+synthetic `resolvedAt` for a resolved/closed ticket has no explicit
+
+upper-bound clamp to "now", and while every current generation path was
+
+traced and confirmed not to trigger it, a future edit to the template
+
+array (reordering, inserting a template, changing a priority) could
+
+silently reintroduce a future-dated `resolvedAt`. Recorded as a tracked,
+
+deliberately-deferred TASKS.md item (a `Math.min(resolvedAt, new
+
+Date())`-style clamp) rather than fixed now, since it is not a live bug
+
+and the reviewer explicitly did not treat it as blocking.
+
+
+
+Verification: frontend `npx tsc --noEmit`, `npx eslint .`,
+
+`npx vitest run` (481/481 across all 39 files, unchanged from the
+
+Phase 17a-2 baseline), `npx vite build`, all clean. Backend
+
+`npx prisma validate`, `npx tsc --noEmit`, `npm test` (864/864,
+
+unchanged), `npm run test:e2e` (350/350, unchanged) — run fresh from the
+
+main checkout against the actually-reseeded local `opsnow_dev`, not just
+
+trusted from the subagent's report. Final row counts (53 tickets/20
+
+assets/11 KB articles/10 in-flight-breached) were independently
+
+spot-checked with a direct Prisma query against the live database before
+
+committing, rather than taken on the subagent's word.
+
+
+
+Git status: two commits, both local on `main`, not pushed — `46cb254`
+
+(the five frontend fixes) and `f2d2b83` (the seed-data expansion). The
+
+seed-data agent's now-merged scratch worktree and branch
+
+(`worktree-agent-ae403f7ec2a975556`) were removed after the merge was
+
+confirmed.
+
+
+
+\*\*Still no visual/rendered verification was possible\*\* — no browser
+
+automation tool was actually connected in this session, despite the
+
+`ui-polish`/`claude-in-chrome` skills being listed. Folded into Phase
+
+17's existing "Review accessibility"/"Review responsive design" items,
+
+which remain unchecked, same as every prior UI-polish pass.
+
+
+
+Next:
+
+
+
+\- The remainder of Phase 17's checklist (security/performance/
+
+accessibility/responsive review, dependency and debug-code cleanup,
+
+README, diagrams, API docs, technical-decision documentation,
+
+interview/demo prep, final GitHub release) — demo data is now largely
+
+addressed, narrowing what's left in that item to future maintenance
+
+rather than a from-scratch task.
 
 
 
