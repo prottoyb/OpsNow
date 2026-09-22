@@ -20,15 +20,19 @@ Current task: none
 
 
 
-Last completed task: Phase 16 — Deployment posture (Swagger gated off in
+Last completed task: closing the Phases 13–16 milestone — the Senior
 
-production, split liveness/readiness probes, production log policy, the
+Review's one HIGH finding fixed (nginx was dropping every security header
 
-same-origin/CORS decision, and operator documentation — recorded as
+on `/` and `/assets/`, because a location that sets any `add_header`
 
-ADR-027). OpsNow is NOT deployed anywhere and no deployment credential
+discards the whole inherited set), the `create-admin` CLI added so a real
 
-exists.
+deployment can be given its first administrator without hand-written SQL,
+
+and one full regression run across both packages. OpsNow is NOT deployed
+
+anywhere and no deployment credential exists.
 
 
 
@@ -4102,6 +4106,266 @@ settable, and the seed script must never touch a deployment. A first real
 deployment needs a one-off SQL promotion. A small `create-admin` CLI is
 
 the right fix and is recorded as a gap.
+
+
+
+Next:
+
+
+
+\- Phase 17 — Final Review & Portfolio Preparation. NOT started.
+
+
+
+\### 2026-09-22 — Milestone close: review fix, admin bootstrap, regression
+
+
+
+Three things close the Phases 13–16 milestone. None of them is a new
+
+feature.
+
+
+
+\#### The Senior Review finding, and its fix
+
+
+
+An independent Senior Review over the whole milestone found one HIGH and
+
+nothing else outstanding. It is worth recording precisely because the bug
+
+was in a file that reads as obviously correct.
+
+
+
+`frontend/nginx.conf` set four security response headers —
+
+`X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options` and a CSP
+
+— on the `server` block, and both the `/assets/` and `/` locations set
+
+their own `Cache-Control`. nginx does not merge `add_header` down the
+
+block hierarchy: a `location` that declares even ONE `add_header` of its
+
+own discards the ENTIRE inherited set, not merely the directive it
+
+overrides. So `index.html` and the whole JS bundle were being served with
+
+no CSP, no framing protection and no nosniff, while the file looked as
+
+though it set them globally — the only location that actually got them
+
+was `/api/`, which declares no `add_header` and therefore still inherits.
+
+
+
+Both locations now repeat all four headers verbatim alongside their
+
+`Cache-Control`, the file header explains the inheritance rule so the
+
+repetition is not "tidied up" later, and ADR-027's decision 7 records it.
+
+Fixed in `5297e9c`, before this entry.
+
+
+
+This has still never been checked by nginx itself: `nginx -t` is not
+
+available on this machine, and CI's `docker` job is the first place the
+
+config will be parsed.
+
+
+
+\#### `create-admin` — the last recorded implementation gap
+
+
+
+Phase 16 recorded that there was no way to create the first administrator
+
+on a real deployment: `POST /auth/register` always makes an `Employee`
+
+and does not accept a role, and `prisma db seed` calls `resetData()`,
+
+which empties every table. The only bootstrap path was hand-written SQL
+
+against production.
+
+
+
+`backend/src/cli/create-admin.ts` replaces it. It promotes an existing,
+
+non-deleted account to `Administrator` by email and does nothing else.
+
+
+
+It promotes rather than creates so that it never sets a password, and
+
+therefore never needs a second copy of the argon2 parameters or the
+
+password policy — account creation stays entirely with the register flow.
+
+It is a CLI rather than an endpoint because an endpoint that grants
+
+`Administrator` must be guarded by something, and on a new deployment
+
+there is no administrator to do the guarding; every way out of that
+
+circle (a setup token, first-caller-wins, an env-gated route) is a
+
+permanent privilege-escalation surface bought for a one-time need. Shell
+
+access is already the higher privilege.
+
+
+
+It lives under `src/cli/` rather than a `scripts/` directory so that
+
+`nest build` ships it in the production image — `tsconfig.build.json`
+
+excludes `**/*spec.ts`, so the test does not ship — and so Jest picks the
+
+spec up with no configuration change. `node dist/cli/create-admin.js
+
+<email> --yes`, or under Compose
+
+`docker compose run --rm backend node dist/cli/create-admin.js <email> --yes`.
+
+
+
+The safety posture is the substance of it, because this is aimed at a
+
+real database at an awkward hour: an exact-match `yes` confirmation; a
+
+refusal, not an auto-confirm, when stdin is not a terminal; `--dry-run`
+
+that looks the account up and writes and prompts nothing; a disabled
+
+account refused unless `--allow-inactive`, since promoting one produces
+
+an administrator nobody can use and leaves a dormant privileged account
+
+behind; an unknown flag treated as an error rather than ignored, so a
+
+mistyped `--dry-runn` cannot turn a rehearsal into a real promotion; the
+
+password hash never named in the `select`, so it is not read out of the
+
+database at all; and a conditional `updateMany` pinned to the role that
+
+was read, the same compare-and-set the ticket and asset services use, so
+
+a row changed under the operator's confirmation loses the race instead of
+
+being silently overwritten.
+
+
+
+Verified against the real development database with dry runs only, with
+
+all seven seeded users' roles snapshotted before and after and confirmed
+
+identical: a padded mixed-case argument found `employee3@opsnow.local`
+
+(proving the shared `normalizeEmail` path works against the
+
+case-sensitive unique index), `admin@opsnow.local` reported the
+
+idempotent no-op, an unknown address reported not-found with exit 1, and
+
+the no-TTY invocation refused. `--help` exits 0; every malformed command
+
+line exits 2.
+
+
+
+Stated plainly rather than glossed: **the promotion is not written to
+
+`audit_logs`.** `AuditAction` is a closed set mirrored into
+
+`frontend/src/types/api.ts` behind a drift-guard test, so giving role
+
+changes a first-class audit action is a cross-package change and was
+
+judged out of scope for a bootstrap gap. The command prints a single
+
+`RECORD` line — timestamp, user id, email, previous and new role — for
+
+the operator to file in the deployment's change record, the file header
+
+and the usage text both say so, and a test asserts the usage text keeps
+
+saying so. It is tracked as its own deferred item in `TASKS.md`.
+
+
+
+\#### The full regression
+
+
+
+Run once, at the end, after the CLI landed. Everything below passed.
+
+
+
+\- Backend: `prisma validate`; `prisma migrate status` (in sync, one
+
+migration); typecheck; ESLint at `--max-warnings 0`; 864 unit tests
+
+across 44 suites (41 of them new, from the CLI); 350 e2e tests across 12
+
+suites; `nest build`.
+
+
+
+\- Frontend: typecheck; ESLint; 481 vitest tests across 39 files;
+
+`tsc --noEmit && vite build`; 11 Playwright tests in chromium.
+
+
+
+\- `npm audit` on both packages: 0 vulnerabilities, both at the full tree
+
+and at CI's `--omit=dev --audit-level=high` gate.
+
+
+
+Four checks could NOT be run, and the milestone's claims are limited
+
+accordingly. Docker is still not installed — confirmed again from both
+
+the bash and the PowerShell PATH and at all three Docker Desktop install
+
+locations — so no image was built and `docker compose config` was not
+
+run. `nginx` is not installed, so `nginx -t` was not run. `actionlint` is
+
+not installed. Instead, `.github/workflows/ci.yml` and
+
+`docker-compose.yml` were both parsed as YAML and read line by line; the
+
+workflow's five jobs, triggers and explicit `permissions: contents: read`
+
+check out, every compose interpolation either carries a default or a
+
+`:?` error (only `POSTGRES_PASSWORD` and `JWT_ACCESS_SECRET` are
+
+required, and CI supplies both), and each Dockerfile build target CI and
+
+Compose reference — backend `runtime`, backend `migrator`, frontend
+
+`runtime` — was confirmed to exist. CI remains the first place all four
+
+of those actually run.
+
+
+
+The dev database was left as found. The Playwright teardown removed the
+
+3 tickets and 1 asset its own run created, and nothing else; no seed was
+
+run and no role was changed.
 
 
 

@@ -1080,7 +1080,39 @@ per-instance and would not hold behind more than one backend replica
 
 \- \[x] Test important security scenarios
 
-\- \[ ] Run complete test suite
+\- \[x] Run complete test suite — run in full on 2026-09-22 at the close of
+
+the milestone, after the `create-admin` CLI landed. Backend: `prisma
+
+validate`, `prisma migrate status` (in sync), typecheck, ESLint at
+
+`--max-warnings 0`, 864 unit tests across 44 suites, 350 e2e tests across
+
+12 suites, `nest build`. Frontend: typecheck, ESLint, 481 vitest tests
+
+across 39 files, `tsc --noEmit && vite build`, and 11 Playwright tests in
+
+chromium. `npm audit` reports 0 vulnerabilities on both packages, at the
+
+full tree and at CI's `--omit=dev --audit-level=high` gate. Everything
+
+passed; nothing was skipped or marked as expected-to-fail.
+
+
+
+What this does NOT cover, because the tooling is absent from this machine:
+
+the container images (no Docker — see Phase 14), `docker compose config`,
+
+`nginx -t` on `frontend/nginx.conf`, and `actionlint` over the CI
+
+workflow. `.github/workflows/ci.yml` and `docker-compose.yml` were parsed
+
+as YAML and read line by line instead, and every Dockerfile build target
+
+CI references was confirmed to exist. CI remains the first place those
+
+four run.
 
 
 
@@ -1586,17 +1618,55 @@ not in the logs, a pre-launch security checklist, and the external steps.
 
 
 
-\- \[ ] **No way to create the first administrator.**
+\- \[x] (Done) **No way to create the first administrator.**
 
 `POST /auth/register` always creates an `Employee` and the role is not
 
 settable through the API, while the seed script wipes the database and
 
-must never run against a deployment. A first real deployment therefore
+must never run against a deployment, so a first real deployment needed a
 
-needs a one-off SQL promotion. A small `create-admin` CLI is the right
+one-off SQL promotion. Closed by `backend/src/cli/create-admin.ts`:
 
-fix.
+`node dist/cli/create-admin.js <email> --yes` promotes an existing,
+
+non-deleted account. It ships in the backend image, never sets a
+
+password, refuses rather than auto-confirms when stdin is not a terminal,
+
+rehearses with `--dry-run`, refuses a disabled account unless
+
+`--allow-inactive`, and writes with a conditional `updateMany` pinned to
+
+the role it read. 41 unit tests. `docs/deployment.md` step 8 has the
+
+operator instructions.
+
+
+
+\- \[ ] A role change is not an auditable action. The `create-admin`
+
+promotion above writes nothing to `audit_logs`, so the single most
+
+permission-sensitive change in the system leaves no trace in the
+
+application's own audit trail — the command prints a `RECORD` line for
+
+the operator to file out-of-band instead. Closing this means adding a
+
+role-change action to the closed `AuditAction` set in
+
+`backend/src/audit/audit.constants.ts`, which is mirrored into
+
+`frontend/src/types/api.ts` and held in step by
+
+`frontend/src/features/audit/auditActions.test.ts` — a cross-package
+
+change, and deliberately out of scope for the bootstrap gap. It would
+
+also cover role changes made any other way, if an admin-facing role
+
+endpoint is ever added.
 
 
 

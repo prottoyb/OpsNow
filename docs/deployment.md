@@ -271,6 +271,9 @@ frontend's error boundary logs to the browser console only.
       runs this).
 - [ ] Database backups configured and a restore actually tested.
 - [ ] The seed script is not wired into any deployment step.
+- [ ] Exactly the intended accounts hold `Administrator`, and every
+      promotion made with `create-admin` has had its `RECORD` line filed in
+      the change record — those promotions are not in the audit log.
 
 ---
 
@@ -296,10 +299,30 @@ the order they have to happen.
    release step, before the first application start.
 8. **Create the first administrator.** The database starts empty and the
    seed script must not be used. `POST /api/v1/auth/register` creates an
-   `Employee` — the role is not settable through the API — so the first
-   administrator's role has to be promoted with a one-off SQL statement
-   against the production database. This is a genuine gap and is recorded as
-   such; a small `create-admin` CLI would be the right fix.
+   `Employee` — the role is not settable through the API — so register the
+   account normally, then promote it with the `create-admin` CLI, which
+   ships in the backend image:
+
+   ```
+   # rehearse first: looks the account up, writes nothing, never prompts
+   node dist/cli/create-admin.js someone@example.com --dry-run
+
+   # then promote
+   node dist/cli/create-admin.js someone@example.com --yes
+   ```
+
+   Under Compose that is
+   `docker compose run --rm backend node dist/cli/create-admin.js <email> --yes`.
+   `--yes` is required whenever stdin is not a terminal: without it the
+   command refuses rather than auto-confirming somewhere nobody is
+   watching. `--help` lists the rest.
+
+   **The promotion is not recorded in the audit log.** The command prints a
+   one-line `RECORD` entry naming the timestamp, user id, email and the
+   role it changed from and to; file that line in this deployment's change
+   record, because it is the only durable evidence the promotion happened.
+   See the deferred item in `TASKS.md` for why role changes have no audit
+   action yet.
 9. **Add the deployment job to CI.** Only once steps 1–5 exist. Until then,
    `.github/workflows/ci.yml` deliberately has no deploy job and no empty
    secret references — configuration that has never been executed is worse
