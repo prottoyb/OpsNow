@@ -1,12 +1,13 @@
 ---
 name: project-review-scope
-description: OpsNow review scope rule — ADR-001..021 are settled; phases deliberately reuse existing ticket/RBAC patterns, so do not propose new abstractions during review
+description: OpsNow review scope rule — ADR-001..027 are settled; phases deliberately reuse existing ticket/RBAC patterns, so do not propose new abstractions during review
 metadata:
   type: project
 ---
 
-When reviewing an OpsNow phase, ADR-001 through ADR-021 in `DECISIONS.md` are
-settled and approved. Phases from 8 onward are deliberately scoped to reuse the
+When reviewing an OpsNow phase, ADR-001 through ADR-027 in `DECISIONS.md` are
+settled and approved (ADR-026 auth throttle + proxy trust and ADR-027
+deployment posture were accepted in the Phases 13–16 milestone). Phases from 8 onward are deliberately scoped to reuse the
 existing ticket/RBAC patterns (visibility helper + `updateMany` CAS +
 `{data,total}` envelope + `@Roles` guard plus a service-level re-check) rather
 than introduce new machinery.

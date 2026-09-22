@@ -3925,9 +3925,25 @@ this deployment publish" is not a question to leave unverified.
 
 `X-Frame-Options` and a Content-Security-Policy that permits no inline
 
-script, and those apply to the proxied `/api` responses too because the API
+script. The proxied `/api/` location declares no `add_header` of its own,
 
-location declares no `add_header` of its own and therefore inherits them.
+so it inherits them from the `server` block untouched. `/assets/` and `/`
+
+each set their own `Cache-Control`, and nginx does not merge `add_header`
+
+down the block hierarchy — a location with even one `add_header` of its
+
+own discards the entire inherited set, not just the header being
+
+overridden — so both locations repeat all four security headers verbatim
+
+alongside their `Cache-Control`. An earlier draft of this file missed that
+
+rule and claimed inheritance applied everywhere; Senior Review caught that
+
+`index.html` and the JS bundle were shipping with no security headers at
+
+all, and `frontend/nginx.conf` was corrected to repeat them.
 
 
 
