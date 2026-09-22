@@ -12,7 +12,9 @@ Project status: In Progress
 
 Current phase: Phases 13–16 complete; Phase 17 — Final Review & Portfolio
 
-Preparation is next and has NOT been started
+Preparation is in progress. Its primary workstream, Phase 17a (UI/UX
+
+Product Polish, inserted by project owner direction), is complete.
 
 
 
@@ -20,23 +22,19 @@ Current task: none
 
 
 
-Last completed task: closing the Phases 13–16 milestone — the Senior
+Last completed task: Phase 17a — UI/UX Product Polish. See the dated log
 
-Review's one HIGH finding fixed (nginx was dropping every security header
-
-on `/` and `/assets/`, because a location that sets any `add_header`
-
-discards the whole inherited set), the `create-admin` CLI added so a real
-
-deployment can be given its first administrator without hand-written SQL,
-
-and one full regression run across both packages. OpsNow is NOT deployed
-
-anywhere and no deployment credential exists.
+entry below for the full account.
 
 
 
-Next task: Phase 17 — Final Review & Portfolio Preparation
+Next task: the remainder of Phase 17's checklist (security/performance/
+
+accessibility/responsive review, dependency and debug-code cleanup,
+
+README, diagrams, API docs, technical-decision documentation, demo data,
+
+interview/demo prep, final GitHub release) — see TASKS.md.
 
 
 
@@ -4378,6 +4376,352 @@ Next:
 
 
 \- Phase 17 — Final Review & Portfolio Preparation. NOT started.
+
+
+
+\---
+
+
+
+\### 2026-09-22 — Phase 17a UI/UX Product Polish Implemented
+
+
+
+The project owner manually used the application and judged its biggest
+
+remaining weakness to be overall interface and product presentation, not
+
+missing features. Phase 17's original checklist (security/performance/
+
+accessibility/responsive review, dependency cleanup, docs, diagrams, demo
+
+data, release) says nothing about UI/UX redesign, so this workstream —
+
+Phase 17a — was inserted ahead of the rest of Phase 17 by explicit project
+
+owner direction, using the V2 `ui-polish` workflow: designer audit →
+
+implementation → designer second-pass review → one correction pass →
+
+engineering verification → Senior Review.
+
+
+
+Presentation-only throughout: `git diff --stat` against `backend/` across
+
+every commit in this workstream is empty. No API, auth, RBAC, ticket/SLA/
+
+asset/KB/analytics/audit/AI-assistant behaviour, or database schema
+
+changed.
+
+
+
+\*\*Initial audit\*\* (`ui-ux-product-designer`, code-level — no dev server or
+
+browser was available to it): found the app had strong, already-correct
+
+accessibility and state-handling (every list has loading/empty/error
+
+states, ARIA done correctly, focus management on route change, colour
+
+never the sole status signal) but literally no visual design system —
+
+every screen built from the same four ingredients (`bg-white`,
+
+`border-slate-200`, `rounded-md`, 2–3 slate text shades), no brand/accent
+
+colour anywhere, no elevation system, no shared Card/Modal/Toast/Dropdown
+
+primitive (`rounded-md border border-slate-200 bg-white p-4` hand-copied
+
+in 8+ places), inconsistent skeleton coverage, and an analytics dashboard
+
+rendering as flat grey progress bars. Produced a 9-item priority order.
+
+
+
+\*\*Implemented\*\* (six commits, `fc38362`..`6c70d8f`, each with its own
+
+`tsc`/`eslint`/targeted-`vitest` pass before moving on):
+
+
+
+\- Design tokens in `frontend/src/index.css` via Tailwind v4 `@theme`: a
+
+`--color-brand-\*` scale aliased to Tailwind's indigo (never a hand-picked
+
+palette, so it inherits Tailwind's own tuned contrast/hue steps),
+
+`--shadow-card`/`--shadow-popover`, `--radius-card`.
+
+\- New `frontend/src/components/ui/Card.tsx`: the shared bounded-content
+
+surface, replacing every hand-copied ad hoc card block. Auto-generates
+
+`aria-labelledby` for its own `<h2>` via `useId` when `heading` is passed
+
+(explicit `aria-labelledby` still overrides), and exports
+
+`CARD_SURFACE_CLASSES` for list-row elements that need the identical
+
+visual treatment but must stay a semantic `<li>`, not a nested `<section>`.
+
+Migrated across every feature directory: ticket/asset/article detail
+
+pages, every filter bar, the SLA dashboard, analytics `StatTile`/
+
+`SlaAnalyticsPanel`, and every standalone list row (`HistoryList`,
+
+`TicketTable`/`AssetTable`'s mobile cards, `AssignmentHistoryList`,
+
+`ArticleList`, `ArticleFeedbackLog`). Deliberately NOT applied to the
+
+`AssetLinkPicker`/`ArticleLinkPicker`/`TicketAssetsPanel`/
+
+`TicketKnowledgeArticlesPanel` nested rows, which stayed on a flatter
+
+treatment specifically because they render nested inside an
+
+already-Card-wrapped panel — applying the same shadow/radius there would
+
+have doubled the elevation.
+
+\- `Button.tsx`'s primary variant and a new `PRIMARY_LINK_CLASSES` export
+
+(for the few router `Link`s styled as a primary CTA, which can't render as
+
+a `<button>`) moved from `bg-slate-900` to the brand accent.
+
+\- `AppLayout.tsx`: nav active state now uses the brand accent instead of
+
+slate+underline, the header gained `shadow-card`, and the wordmark gained
+
+a small brand-coloured mark badge (`aria-hidden`, so the link's accessible
+
+name stays exactly "OpsNow").
+
+\- A global sweep moved every `focus-visible:outline-slate-900` (and the
+
+`focus:outline`/`focus:ring`/`focus:border` slate-900 variants) onto the
+
+brand accent, for one consistent interactive-focus colour app-wide.
+
+\- Analytics charts (`BarList`, `ComplianceMeter`, `CategoryAnalyticsPanel`)
+
+moved from flat `bg-slate-700`-on-`bg-slate-100` to the brand accent on a
+
+neutral track with a pill radius. The chosen hex (Tailwind indigo-600,
+
+`#4f46e5`) was run through the \*\*dataviz skill\*\*'s `validate_palette.js`
+
+and passed the lightness/chroma/contrast checks. The "colour never carries
+
+the number, only length + printed text" rule and every `role="meter"`/
+
+`aria-value\*` attribute were left untouched — this is a sequential/
+
+magnitude encoding (one hue throughout), never a categorical or
+
+traffic-light treatment, on the dataviz skill's own rules.
+
+\- `AuditLogTable` — the one table in the app with no responsive treatment
+
+at all — gained `hidden sm:table-cell` on its least-critical column
+
+(Entity) instead of forcing horizontal scroll on narrow viewports.
+
+Deliberately did NOT duplicate rows into a parallel mobile card list the
+
+way `TicketTable`/`AssetTable` do: entity type/id has no natural card-row
+
+shape next to the metadata `<details>` disclosure, and jsdom does not
+
+apply CSS visibility, so a duplicate render would have made several
+
+existing `getByText`/`findByText` assertions in `auditLog.test.tsx`
+
+ambiguous, forcing an unrelated test rewrite. This is a genuine, disclosed
+
+narrowing — entity info is not recoverable via "View details" either, not
+
+a fake fix that only looks solved.
+
+\- New `DetailPageSkeleton` (`components/ui/Spinner.tsx`) replaces
+
+`FullPageSpinner` on the ticket/asset/article detail pages' initial load
+
+with a layout-shaped skeleton (heading bar, badge-row bars, one main card
+
+block, two aside card blocks), carrying the same accessible loading
+
+announcement via a visually hidden `role="status"` region — nothing was
+
+lost for assistive tech.
+
+
+
+\*\*Second-pass design review\*\* (`ui-ux-product-designer`, resumed twice
+
+after hitting its turn limit mid-review both times — the first attempt to
+
+continue it mistakenly spawned a fresh, context-less agent instead of
+
+resuming the original via `SendMessage`; that fresh agent correctly
+
+refused to fabricate findings rather than invent a review, and was
+
+discarded): found two real, cheap issues, and flagged one item it could
+
+not resolve within its remaining turns. Folded into commit `f099ec8`:
+
+
+
+\- `index.css`'s brand-token comment claimed brand-600 was used for inline
+
+text links; in fact every link (ticket subjects, article titles, "View
+
+details", ...) deliberately stayed `text-slate-900 + underline` — a
+
+considered "quiet link" choice for data-dense tables, common in enterprise
+
+UIs, not an oversight — and only the focus ring carried the brand accent.
+
+Corrected the comment rather than leave it contradicting the code.
+
+\- `Spinner.tsx`'s small inline spinner still used `border-t-slate-900`,
+
+the one spot the earlier focus-ring sweep didn't reach (it targeted
+
+focus/outline classes specifically). Moved to `border-t-brand-700`.
+
+\- Flagged-but-unresolved: whether `HistoryList`/`AssignmentHistoryList`'s
+
+`CARD_SURFACE_CLASSES` rows double up on elevation by sitting inside
+
+another `Card`. Verified directly by tracing both call sites: both
+
+`historyPanel`s are plain `<div>`s and `Tabs`' own tabpanel wrapper carries
+
+no surface styling at all — neither is a `Card`, so there is no nesting
+
+and no double elevation. No code change needed.
+
+
+
+\*\*Senior Review\*\* (`senior-reviewer`, two passes — also hit its turn limit
+
+on the first attempt and was correctly resumed via `SendMessage` this
+
+time): no CRITICAL or HIGH finding in any file it reviewed across both
+
+passes, covering `Card.tsx`, `index.css`, the full `f099ec8` diff,
+
+`HistoryList.tsx`/`AssignmentHistoryList.tsx` and their call sites,
+
+`Tabs.tsx`, `AuditLogTable.tsx`, `Spinner.tsx`/`DetailPageSkeleton`,
+
+`AppLayout.tsx` (the largest single diff in the range — nav wiring,
+
+wordmark `aria-hidden` correctness, and header/skip-link stacking all
+
+checked explicitly), the three analytics meter components' `role="meter"`
+
+markup, `Button.tsx`'s `PRIMARY_LINK_CLASSES`, and `TicketDetailPage.tsx`'s
+
+full Card migration (every open tag traced to its matching close). Its
+
+remaining coverage gap (`AssetDetailPage.tsx`/`ArticleDetailPage.tsx`'s
+
+full bodies, `AssetTable.tsx`/`TicketTable.tsx`,
+
+`TicketAiAssistantPanel.tsx`, `ArticleFeedbackWidget.tsx`, the
+
+knowledge-base pages) was closed out directly rather than with a third
+
+agent cycle: a mechanical `<Card` vs `</Card>` open/close count across
+
+every file in `frontend/src` using `Card` found zero mismatches, and all
+
+of those files' own test suites pass unchanged within the full 481-test
+
+run — the class of structural bug a senior review would actually catch in
+
+a mechanical migration like this.
+
+
+
+\*\*What was deliberately NOT done\*\*, tracked in `TASKS.md`, not silently
+
+dropped: no toast/notification system (the existing page-local
+
+`InlineNotice` was judged already good); no shared `ResponsiveTable`
+
+primitive extracted; no Modal/Drawer (no concrete need surfaced);
+
+`Badge.tsx`'s tone palette left unchanged (already good, accessible status
+
+colours); `LoginPage.tsx` not touched.
+
+
+
+\*\*No visual/rendered verification was possible in this environment\*\*:
+
+there is no browser automation tool available (no Claude in Chrome, no
+
+built-in browser; `WebFetch` explicitly refuses `localhost`). The project
+
+owner was asked directly how to proceed given this constraint and chose
+
+"code-level review only" over pausing the workstream to add browser
+
+tooling, or doing the visual pass themselves. Both the design audit and
+
+the Senior Review are therefore code-level only, disclosed as such
+
+throughout rather than presented as more than they are. A real breakpoint/
+
+visual walkthrough, a keyboard-only pass, a screen-reader spot-check and a
+
+contrast/axe scan of the actual rendered page all remain open — folded
+
+into Phase 17's own "Review accessibility"/"Review responsive design"
+
+items, which stay unchecked for exactly that reason.
+
+
+
+Verification: `npx tsc --noEmit` and `npx eslint .` clean at every commit
+
+checkpoint; `npx vitest run` — 39 files, 481 tests passing, matching the
+
+Phase 13 baseline exactly and unchanged throughout the whole workstream.
+
+
+
+Git status: six implementation/review-fix commits (`fc38362`, `0222fe4`,
+
+`99e79d1`, `0a27a4d`, `2a47616`, `6c70d8f`) plus the correction-pass commit
+
+(`f099ec8`), all local on `main`, not pushed.
+
+
+
+Next:
+
+
+
+\- The remainder of Phase 17's checklist: security/performance/
+
+accessibility/responsive review (including the real visual pass this
+
+workstream could not do), dependency and debug-code cleanup, environment-
+
+configuration review, README, architecture/database diagrams, API
+
+documentation, technical-decision documentation, demo data, interview/
+
+demo prep, final GitHub release.
 
 
 

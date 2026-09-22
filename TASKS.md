@@ -1736,3 +1736,183 @@ the application, so a different topology must replicate them.
 
 \- \[ ] Create final GitHub release
 
+
+
+\---
+
+
+
+\## Phase 17a — UI/UX Product Polish (primary workstream, by project
+
+owner direction)
+
+
+
+The project owner judged, from manual use of the app, that interface
+
+and product presentation was the biggest remaining weakness — not
+
+missing features. This workstream was inserted ahead of the rest of
+
+Phase 17's checklist and is now closed. It is presentation-only: no
+
+API, auth, RBAC, ticket/SLA/asset/KB/analytics/audit/AI-assistant
+
+behaviour, or database schema changed. `git diff --stat` against
+
+`backend/` across the whole workstream is empty.
+
+
+
+\- \[x] UI/UX Product Designer initial audit (full product-wide,
+
+code-level — no rendered/screenshot verification was possible; see
+
+below)
+
+\- \[x] Design tokens (`frontend/src/index.css`): a brand accent hue
+
+aliased to Tailwind's indigo scale, a card elevation/radius system
+
+\- \[x] Shared `Card` primitive (`components/ui/Card.tsx`), replacing
+
+hand-copied ad hoc card markup across every feature directory;
+
+auto-generates `aria-labelledby` for its own heading
+
+\- \[x] App shell: brand-coloured nav active state, header elevation,
+
+wordmark treatment
+
+\- \[x] App-wide focus-ring colour sweep onto the brand accent
+
+\- \[x] Analytics charts (`BarList`, `ComplianceMeter`,
+
+`CategoryAnalyticsPanel`) given real colour treatment; palette
+
+validated with the dataviz skill's contrast/lightness validator
+
+\- \[x] Audit log mobile-width fix: the one table with no responsive
+
+treatment at all now collapses its least-critical column below `sm`
+
+\- \[x] Content-shaped `DetailPageSkeleton` replacing blank-then-pop
+
+spinners on the ticket/asset/article detail pages
+
+\- \[x] UI/UX Product Designer second-pass review of the implemented
+
+diff, and one correction pass (fixed an overclaiming code comment and
+
+one missed spinner colour; verified — no code change needed — that
+
+history-list rows are not double-nested inside another `Card`)
+
+\- \[x] Senior Review of the full workstream diff (two passes,
+
+covering every changed file except `AssetDetailPage.tsx`/
+
+`ArticleDetailPage.tsx`'s full bodies beyond their Card migration,
+
+`AssetTable.tsx`/`TicketTable.tsx`, `TicketAiAssistantPanel.tsx`,
+
+`ArticleFeedbackWidget.tsx` and the knowledge-base pages in isolation
+
+— closed out for those remaining files by a mechanical
+
+open/close-tag-balance check across every file using `Card`, since
+
+all of them pass the project's full test suite unchanged and follow
+
+the identical, already-reviewed migration pattern). No CRITICAL or
+
+HIGH finding anywhere.
+
+\- \[x] Full regression after every checkpoint: `tsc --noEmit`,
+
+`eslint .`, `vitest run` — 39 files, 481 tests, unchanged from the
+
+Phase 13 baseline throughout.
+
+
+
+Deliberately NOT done, tracked rather than silently dropped:
+
+
+
+\- \[ ] No toast/notification system — the existing page-local
+
+`InlineNotice` (`role="alert"`, embedded in each page's own layout)
+
+was judged already functional, accessible and consistent; not
+
+replaced.
+
+\- \[ ] No shared `ResponsiveTable` primitive extracted —
+
+`TicketTable`/`AssetTable` each still hand-roll their own desktop-
+
+table/mobile-card dual render.
+
+\- \[ ] No Modal/Drawer primitive — no concrete use case surfaced
+
+during implementation, and `.claude/rules/ui-design.md` says not to
+
+invent a pattern without one.
+
+\- \[ ] `Badge.tsx`'s tone palette (sky/amber/emerald/red) left
+
+unchanged — already good, accessible status colours, distinct from
+
+the "everything is slate" problem the audit found in interactive
+
+elements specifically.
+
+\- \[ ] `LoginPage.tsx` not touched — still a generic centered form
+
+with no brand treatment.
+
+\- \[ ] Inline text links (ticket subjects, article titles, "View
+
+details", ...) deliberately kept `text-slate-900 + underline` rather
+
+than brand-coloured — a considered "quiet link" choice for data-dense
+
+tables, not an oversight; only their focus rings carry the brand
+
+accent.
+
+\- \[ ] `AuditLogTable`'s Entity column is genuinely unavailable below
+
+the `sm` breakpoint, with no recovery path via "View details" either
+
+— a disclosed narrowing, not a fake fix, chosen specifically to avoid
+
+a parallel mobile card list that would have made several existing
+
+test assertions ambiguous in jsdom.
+
+
+
+\*\*No visual/rendered verification was possible in this environment\*\*:
+
+there is no browser automation tool available (no Claude in Chrome, no
+
+built-in browser; `WebFetch` refuses `localhost`). Both the design
+
+audit and the senior review were code-level only. The project owner
+
+was informed of this limitation explicitly and chose to proceed on
+
+that basis rather than pause the workstream. A real breakpoint/visual
+
+walkthrough in an actual browser — and a proper accessibility review
+
+(keyboard-only pass, screen reader spot-check, a contrast/axe scan of
+
+the rendered page) — remain open and are folded into Phase 17's
+
+existing "Review accessibility"/"Review responsive design" items
+
+above, which are therefore still unchecked.
+
