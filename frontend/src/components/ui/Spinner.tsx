@@ -11,7 +11,7 @@ export function Spinner({ label = 'Loading' }: SpinnerProps) {
     <span role="status" className="inline-flex items-center gap-2 text-sm text-slate-600">
       <span
         aria-hidden="true"
-        className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900"
+        className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-brand-700"
       />
       {label}
     </span>

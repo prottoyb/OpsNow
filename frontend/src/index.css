@@ -12,9 +12,15 @@
   /*
    * Brand accent, aliased to Tailwind's own indigo scale rather than a
    * hand-picked palette, so it inherits Tailwind's already-tuned contrast
-   * and hue steps. Used for primary actions, active navigation, links and
-   * interactive/focus accents. Status colours (info/warning/success/danger
-   * in Badge.tsx) are a deliberately separate set of hues and are untouched.
+   * and hue steps. Used for primary actions (Button's primary variant,
+   * PRIMARY_LINK_CLASSES), active navigation, chart marks, and every
+   * interactive/focus ring app-wide. Deliberately NOT applied to inline
+   * text links (ticket subjects, article titles, "View details", ...),
+   * which stay text-slate-900 + underline — a quiet, data-table-friendly
+   * link treatment, common in dense enterprise UIs, chosen over a "sea of
+   * blue" rather than an oversight. Status colours (info/warning/success/
+   * danger in Badge.tsx) are a deliberately separate set of hues and are
+   * untouched.
    */
   --color-brand-50: var(--color-indigo-50);
   --color-brand-100: var(--color-indigo-100);
