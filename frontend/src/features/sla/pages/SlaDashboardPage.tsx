@@ -1,4 +1,5 @@
-import { Card } from '../../../components/ui/Card';
+import { Badge } from '../../../components/ui/Badge';
+import { Card, CARD_SURFACE_CLASSES } from '../../../components/ui/Card';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
@@ -94,7 +95,7 @@ function MetricToneGlyph({ tone }: { tone: MetricTone }) {
 
 function MetricTile({ definition, value }: { definition: MetricDefinition; value: number }) {
   return (
-    <div className="rounded-md border border-slate-200 p-4">
+    <div className={CARD_SURFACE_CLASSES}>
       <dt className="flex items-center gap-1.5 text-sm text-slate-600">
         <MetricToneGlyph tone={definition.tone} />
         {definition.label}
@@ -137,7 +138,7 @@ export function SlaDashboardPage() {
                 resolution count, it's the denominator both groups below are
                 drawn from. */}
             <dl>
-              <div className="max-w-xs rounded-md border border-slate-200 bg-slate-50 p-4">
+              <div className="max-w-xs rounded-card border border-slate-200 bg-slate-50 p-4 shadow-card">
                 <dt className="text-sm text-slate-600">
                   Open tickets with an SLA
                 </dt>
@@ -259,8 +260,10 @@ export function SlaDashboardPage() {
                     <td className="px-3 py-3 text-slate-700">
                       {formatDurationMinutes(policy.resolutionTimeMinutes)}
                     </td>
-                    <td className="px-3 py-3 text-slate-700">
-                      {policy.isActive ? 'Active' : 'Inactive'}
+                    <td className="px-3 py-3">
+                      <Badge tone={policy.isActive ? 'success' : 'neutral'}>
+                        {policy.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
                     </td>
                   </tr>
                 ))}

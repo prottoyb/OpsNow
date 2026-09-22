@@ -244,6 +244,29 @@ export function TicketAiAssistantPanel({
   );
 }
 
+/**
+ * Marks the panel heading as AI-generated territory, distinct from the
+ * ticket's own Details/Status/Triage cards around it — a purely visual cue,
+ * never the only signal (the `REVIEW_NOTICE`/mode badges carry the actual
+ * meaning in text).
+ */
+function SparkleIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="size-4 text-brand-600"
+    >
+      <path d="M12 3v4m0 10v4m9-9h-4M7 12H3m14.5-6.5-2.5 2.5m-9 9-2.5 2.5m14-.5-2.5-2.5m-9-9L5.5 5.5" />
+    </svg>
+  );
+}
+
 function AssistantCard({
   children,
   mode,
@@ -253,7 +276,12 @@ function AssistantCard({
 }) {
   return (
     <Card
-      heading="AI assistant"
+      heading={
+        <span className="inline-flex items-center gap-1.5">
+          <SparkleIcon />
+          AI assistant
+        </span>
+      }
       // The badge's text carries the whole meaning; the tone is redundant.
       actions={
         mode === 'mock' ? (

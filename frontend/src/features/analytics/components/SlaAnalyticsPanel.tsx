@@ -38,6 +38,7 @@ function ClockCard({
           label="Overdue (still open)"
           value={formatCount(clock.inFlightBreached)}
           hint="Running clocks already past due."
+          emphasis={clock.inFlightBreached > 0}
         />
         <StatTile
           label="At risk"
