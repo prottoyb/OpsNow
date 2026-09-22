@@ -1,0 +1,34 @@
+---
+title: OpsNow — Ticket Update & Concurrency Flow
+---
+flowchart TB
+    classDef fail fill:#FEE2E2,stroke:#DC2626
+    classDef ok fill:#D1FAE5,stroke:#0F766E
+    classDef note fill:#F5F6FA,stroke:#D1D5DB,text-align:left
+
+    REQ["React UI<br/>PATCH /tickets/:id<br/>(field edit, assign, priority change,<br/>or a status transition)"]
+    AUTH{"JwtAuthGuard:<br/>valid access token?"}
+    REQ --> AUTH
+    AUTH -->|no| E401["401 Unauthorized"]:::fail
+    AUTH -->|yes| LOAD["getVisibleTicketOrThrow(user, id)<br/>RBAC- and row-level-visibility-scoped read"]
+    LOAD --> FOUND{"Ticket exists and is<br/>visible to this caller?"}
+    FOUND -->|no| E404["404 Not Found"]:::fail
+    FOUND -->|yes| OWNCHECK{"Role / ownership check<br/>(e.g. a non-staff requester is blocked<br/>once status has left New; reopening<br/>Resolved→Open is their only<br/>self-service transition)"}
+    OWNCHECK -->|fails| E403a["403 Forbidden"]:::fail
+    OWNCHECK -->|passes| VALIDATE["Request validation (ValidationPipe)"]
+    VALIDATE -->|malformed body| E400a["400 Bad Request"]:::fail
+    VALIDATE -->|valid| TRANSCHECK{"Status change?<br/>Is it in the allowed<br/>transition matrix?"}
+    TRANSCHECK -->|"not allowed"| E403b["403 Forbidden<br/>(invalid transition — not a 400)"]:::fail
+    TRANSCHECK -->|"already in that status"| E400b["400 Bad Request (no-op)"]:::fail
+    TRANSCHECK -->|"allowed, or not a status change"| CAS
+
+    CAS["Prisma $transaction begins:<br/>ticket.updateMany WHERE id = :id<br/>AND ticketVisibilityWhere(user)<br/>AND &lt;the specific field just read&gt; = &lt;value just read&gt;<br/>— a targeted compare-and-swap predicate on that<br/>field (updatedAt for plain edits, assigneeId for<br/>assign, priority for updatePriority, status for a<br/>transition) — there is no version column"]
+    CAS --> CASCHECK{"Rows updated === 1?"}
+    CASCHECK -->|"0 rows —<br/>someone else changed<br/>that field first"| E409["409 Conflict<br/>'Ticket was modified by another<br/>request; reload and retry'"]:::fail
+    CASCHECK -->|"1 row"| SLAHOOK["SLA side effect — only when this<br/>operation triggers one (OnHold pause/<br/>resume, resolution, reopen, priority<br/>change). A plain subject/description/<br/>category edit triggers none."]
+    SLAHOOK --> HIST["TicketHistory row(s) written<br/>— same $transaction as the update,<br/>same commit"]
+    HIST --> COMMIT["Transaction commits<br/>(ticket update + SLA row + history<br/>are atomic together)"]:::ok
+    COMMIT --> AUDITLOG["AuditService.record(...)<br/>deliberately OUTSIDE the transaction —<br/>AuditService never throws, so a failed<br/>audit write can't fail or undo the update"]
+    AUDITLOG --> RESP["200 OK — updated ticket"]:::ok
+
+    PRISMAERR["Underlying Prisma errors are mapped, not left raw:<br/>P2003 (FK violation) -&gt; 400 · P2025 (record not found) -&gt; 404.<br/>No separate generic transaction-failure path exists beyond<br/>these mapped errors and the CAS conflict above."]:::note

@@ -1,0 +1,39 @@
+---
+title: OpsNow — SLA Clock Lifecycle
+---
+flowchart TB
+    classDef pause fill:#FEF3C7,stroke:#D97706
+    classDef met fill:#D1FAE5,stroke:#0F766E
+    classDef breach fill:#FEE2E2,stroke:#DC2626
+    classDef note fill:#F5F6FA,stroke:#D1D5DB,text-align:left
+
+    START["Ticket created<br/>SLA policy snapshotted onto the ticket<br/>(response + resolution targets, in minutes)"]
+    RUNNING(("Both clocks running<br/>each evaluated live on every read"))
+
+    START --> RUNNING
+
+    RUNNING --> ONHOLD["Ticket set to On Hold<br/>onHoldStartedAt = now() (DB clock)<br/>due dates are not shifted yet"]:::pause
+    ONHOLD --> RESUME["Ticket resumes<br/>due dates += (now − onHoldStartedAt)<br/>— an additive shift, not a separate<br/>elapsed-time counter"]:::pause
+    RESUME --> RUNNING
+
+    RUNNING --> LIVESTATE["Live state per clock — recomputed on every<br/>read, never persisted while incomplete:<br/>Running (on track) → AtRisk (≤20% of target<br/>time remaining) → Breached (now past due)<br/>· Paused while On Hold<br/>· response clock only: NoResponse"]
+
+    RUNNING --> FIRSTRESP["First response recorded<br/>response clock completes"]
+    RUNNING --> RESOLVEDEV["ticket.resolvedAt is set<br/>(→ Resolved, or a direct → Closed)<br/>resolution clock completes"]
+
+    FIRSTRESP --> COMPLETE1{"Was the clock already<br/>past its due date<br/>at the moment it completed?"}
+    RESOLVEDEV --> COMPLETE2{"Was the clock already<br/>past its due date<br/>at the moment it completed?"}
+
+    COMPLETE1 -->|yes| BREACH1["Persisted forever: Breached"]:::breach
+    COMPLETE1 -->|no| MET1["Persisted forever: Met"]:::met
+    COMPLETE2 -->|yes| BREACH2["Persisted forever: Breached"]:::breach
+    COMPLETE2 -->|no| MET2["Persisted forever: Met"]:::met
+
+    RESOLVEDEV --> REOPEN["Ticket reopened from Resolved<br/>resolution clock resumes; time spent<br/>'resolved' is credited back via the same<br/>resume mechanism, anchored to the<br/>database clock (not the app server's clock).<br/>An already-completed response clock stays completed."]:::pause
+    REOPEN --> RUNNING
+
+    BREACH1 -.-> FRONTEND
+    MET1 -.-> FRONTEND
+    BREACH2 -.-> FRONTEND
+    MET2 -.-> FRONTEND
+    LIVESTATE -.-> FRONTEND["Frontend never re-derives these states.<br/>It only ages the backend's minutesRemaining<br/>locally between refetches — that can shrink<br/>toward 'due now', never flip a state.<br/>The backend's responseState / resolutionState<br/>strings are always authoritative."]:::note

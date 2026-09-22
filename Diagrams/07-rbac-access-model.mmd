@@ -1,0 +1,36 @@
+---
+title: OpsNow — Roles & Access Model (Cumulative)
+---
+flowchart LR
+    classDef note fill:#FEF3C7,stroke:#D97706,text-align:left
+
+    subgraph EMP["EMPLOYEE — baseline"]
+        direction TB
+        E1["Create & view own<br/>tickets, add comments"]
+        E2["View assets currently<br/>assigned to them"]
+        E3["Read published<br/>knowledge base articles"]
+    end
+
+    subgraph SA["+ SUPPORT AGENT"]
+        direction TB
+        S1["View & triage ALL tickets,<br/>assign, change status/priority"]
+        S2["Internal notes &<br/>full ticket history"]
+        S3["Manage assets:<br/>assign, return, track"]
+        S4["Author knowledge<br/>base articles"]
+        S5["SLA dashboard &<br/>AI assistant panel"]
+    end
+
+    subgraph TL["+ TEAM LEAD"]
+        direction TB
+        T1["Agent performance<br/>analytics (per-person)"]
+    end
+
+    subgraph ADM["+ ADMINISTRATOR"]
+        direction TB
+        A1["User directory<br/>(GET /users)"]
+        A2["Audit log<br/>(append-only trail)"]
+    end
+
+    NOTE["Effective access is cumulative because each role's route list<br/>is a superset of the previous role's — not a coded inheritance<br/>chain. Every rule above is enforced on the backend (RolesGuard<br/>+ per-row ownership/visibility checks) — the frontend's<br/>role-aware UI is a convenience layer, never the security boundary."]:::note
+
+    EMP --> SA --> TL --> ADM --> NOTE

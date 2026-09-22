@@ -1,0 +1,28 @@
+---
+title: OpsNow — CI/CD Pipeline (GitHub Actions)
+---
+flowchart LR
+    classDef gate fill:#FEF3C7,stroke:#D97706
+    classDef pass fill:#D1FAE5,stroke:#0F766E
+    classDef fail fill:#FEE2E2,stroke:#DC2626
+
+    PUSH["git push<br/>(main / feature / fix / ...)"]
+    TRIGGER{"CI workflow<br/>triggered"}
+
+    FRONTEND["Frontend<br/>typecheck · eslint<br/>vitest (unit/component) · production build"]
+    BACKEND["Backend<br/>prisma validate → migrate deploy → migrate<br/>status (drift check) → seed<br/>typecheck · eslint · unit · API e2e · build<br/>(real ephemeral postgres:16-alpine service)"]
+    E2E["Browser E2E<br/>builds & boots the compiled API (dist/main),<br/>polls /api/v1/health, then runs Playwright<br/>against the real frontend + backend"]
+    AUDIT["Dependency Audit<br/>npm audit --omit=dev<br/>--audit-level=high (backend + frontend)"]
+    DOCKER["Container Images<br/>builds backend runtime + migrator images<br/>and the frontend runtime image (3 total),<br/>validates docker compose config, and runs<br/>nginx -t (nginx:1.27-alpine, DNS-resolved<br/>via --add-host so the standalone check<br/>doesn't need the other containers running)"]
+
+    PUSH --> TRIGGER
+    TRIGGER --> FRONTEND --> GATE
+    TRIGGER --> BACKEND --> GATE
+    TRIGGER --> E2E --> GATE
+    TRIGGER --> AUDIT --> GATE
+    TRIGGER --> DOCKER --> GATE
+
+    GATE{"All 5 jobs green?"}:::gate
+    GATE -->|yes| PASS["Meets the project's release/merge<br/>acceptance criterion<br/>(GitHub branch-protection status<br/>was not independently verified)"]:::pass
+    GATE -->|no| FAIL["Fix & push again"]:::fail
+    FAIL --> TRIGGER

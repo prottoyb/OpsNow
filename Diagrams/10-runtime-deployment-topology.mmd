@@ -1,0 +1,50 @@
+---
+title: OpsNow — Runtime / Deployment Topology
+---
+flowchart TB
+    classDef note fill:#F5F6FA,stroke:#D1D5DB,text-align:left
+    classDef external fill:#FFF7ED,stroke:#D97706,stroke-dasharray: 4 3
+
+    DEVLABEL["DEVELOPMENT — what actually runs on this machine today"]:::note
+
+    subgraph DEV[" "]
+        direction LR
+        DBrowser["Browser"] --> ViteDev["Vite dev server — :5173<br/>proxy rule: /api -&gt; http://localhost:3000<br/>(no changeOrigin, no rewrite — deliberate;<br/>'vite preview' on :4173 needs its own<br/>separate preview.proxy entry)"]
+        ViteDev --> DevAPI["NestJS — :3000<br/>nest start --watch"]
+        DevAPI --> DevPG[("PostgreSQL — :5432<br/>opsnow_dev<br/>developer-run, not containerized")]
+    end
+    DEVLABEL --- DEV
+
+    RUNLABEL["CONTAINER / RUNTIME TOPOLOGY — built and validated by CI on every push<br/>(docker compose config, nginx -t). Docker itself has never been installed or<br/>run on this development machine, so this stack has never actually been<br/>started with a local docker compose up."]:::note
+
+    subgraph RUNTIME[" "]
+        direction LR
+        RBrowser["Browser"] -->|"published<br/>8080 -&gt; 80"| FrontendC
+
+        subgraph DockerNet["Docker network — docker-compose.yml"]
+            direction TB
+            FrontendC["frontend container<br/>(frontend/Dockerfile, target: runtime)<br/>nginx serving the built SPA<br/>+ reverse-proxies /api -&gt; http://backend:3000<br/>healthcheck: wget --spider http://127.0.0.1/"]
+            BackendC["backend container<br/>(backend/Dockerfile, target: runtime)<br/>NestJS API — internal-only,<br/>NOT published to the host<br/>healthcheck: GET /api/v1/health (also pings DB)"]
+            MigrateC["migrate container (one-shot)<br/>(backend/Dockerfile, target: migrator)<br/>prisma migrate deploy, then exits<br/>restart: 'no'"]
+            PGC[("postgres container<br/>(postgres:16-alpine)<br/>published 127.0.0.1:5433 -&gt; 5432<br/>(loopback-only)<br/>volume: opsnow-postgres-data<br/>healthcheck: pg_isready")]
+        end
+
+        FrontendC -->|"depends_on:<br/>backend<br/>service_healthy"| BackendC
+        BackendC -->|"depends_on: postgres service_healthy,<br/>migrate service_completed_successfully"| PGC
+        MigrateC -->|"depends_on:<br/>postgres<br/>service_healthy"| PGC
+    end
+    RUNLABEL --- RUNTIME
+
+    subgraph EXTERNAL["Optional external boundary"]
+        PROVIDER["AI provider (Anthropic)<br/>outbound-only HTTPS call,<br/>off by default — ADR-023"]:::external
+    end
+
+    DevAPI -.->|"only when<br/>AI_PROVIDER is set"| PROVIDER
+    BackendC -.->|"only when<br/>AI_PROVIDER is set"| PROVIDER
+
+    ENVNOTE["Key environment variables (names only) — backend: DATABASE_URL ·<br/>JWT_ACCESS_SECRET (32+ chars, no default) · JWT_ACCESS_EXPIRES_IN ·<br/>REFRESH_TOKEN_TTL_SECONDS · AUTH_THROTTLE_TTL_SECONDS / LIMIT ·<br/>TRUST_PROXY_HOPS=1 (ADR-026) · SWAGGER_ENABLED (false by default in<br/>prod, ADR-027) · AI_PROVIDER / AI_API_KEY (empty by default; 'mock'<br/>rejected when NODE_ENV=production) — postgres: POSTGRES_USER /<br/>POSTGRES_PASSWORD (no default, compose fails fast without it) / POSTGRES_DB"]:::note
+
+    SAMEORIGIN["Same-origin edge, both environments: nginx plays in the container/runtime case exactly the role Vite's<br/>dev proxy plays in development — the backend is never dual-published or reachable at a second,<br/>cross-origin address in either environment."]:::note
+
+    RUNTIME --- ENVNOTE
+    RUNTIME --- SAMEORIGIN

@@ -1,0 +1,34 @@
+---
+title: OpsNow — What It Does
+---
+flowchart TB
+    classDef center fill:#5B57D1,stroke:#3F3BA8,color:#FFFFFF,font-weight:bold
+    classDef note fill:#F5F6FA,stroke:#D1D5DB,stroke-dasharray: 3 3
+
+    CENTER["OpsNow<br/>IT Service Management Platform"]:::center
+
+    TIX["Ticket Management<br/>Raise, triage, assign,<br/>resolve & track issues"]
+    SLA["SLA Management<br/>Response & resolution clocks,<br/>breach / at-risk detection"]
+    ASSET["Asset Management<br/>Inventory, assignment history,<br/>link to tickets"]
+    KB["Knowledge Base<br/>Self-service articles,<br/>full-text search, feedback"]
+    DASH["Dashboard & Analytics<br/>Ticket, SLA, category and<br/>agent performance metrics"]
+    AUDIT["Audit Log<br/>Append-only trail of every<br/>sensitive action"]
+    AI["AI Assistant (optional)<br/>Triage, draft replies,<br/>resolution summaries — advisory only"]
+
+    ROLES["Four roles, one system<br/>Employee → Support Agent → Team Lead → Administrator<br/>each seeing more of the same data,<br/>enforced on the backend"]:::note
+
+    CENTER --> TIX
+    CENTER --> SLA
+    CENTER --> ASSET
+    CENTER --> KB
+    CENTER --> DASH
+    CENTER --> AUDIT
+    CENTER --> AI
+
+    TIX -.-> ROLES
+    SLA -.-> ROLES
+    ASSET -.-> ROLES
+    KB -.-> ROLES
+    DASH -.-> ROLES
+    AUDIT -.-> ROLES
+    AI -.-> ROLES

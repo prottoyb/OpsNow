@@ -1,0 +1,47 @@
+---
+title: OpsNow — System Architecture
+---
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}}}%%
+flowchart TB
+    subgraph client["Browser"]
+        SPA["React SPA (Vite)<br/>React Router · TanStack Query<br/>Auth: access token held in memory only"]
+    end
+
+    subgraph edge["Same-origin edge (deliberate design, ADR-027)"]
+        direction TB
+        DEVPROXY["Dev: Vite dev-server proxy<br/>/api -> localhost:3000"]
+        NGINX["Prod/Docker: nginx<br/>serves the built SPA, reverse-proxies /api"]
+    end
+
+    subgraph api["NestJS API — /api/v1"]
+        direction TB
+        GUARDS["Global API protections<br/>(concerns applied to every request — not a literal sequence)<br/>• Authentication — JwtAuthGuard, default-deny (ADR-018)<br/>• RBAC — RolesGuard, role-list based (ADR-006)<br/>• Request validation — ValidationPipe (whitelist + transform)<br/>• Standardized errors — AllExceptionsFilter (catch-all wrapper)<br/>• Row-level visibility checks inside each service"]
+        subgraph modules["Feature modules"]
+            direction LR
+            AUTH["Auth / Users"]
+            TIX["Tickets / Categories"]
+            SLA["SLA"]
+            ASSET["Assets / Asset Types"]
+            KB["Knowledge Base"]
+            ANALYTICS["Analytics"]
+            AUDIT["Audit Log"]
+            AI["AI Assistant"]
+        end
+        GUARDS --> modules
+    end
+
+    subgraph data["Data layer"]
+        PRISMA["Prisma Client"]
+        PG[("PostgreSQL — 18 tables")]
+    end
+
+    subgraph external["Optional external boundary"]
+        PROVIDER["AI provider (Anthropic)<br/>outbound-only HTTP call, off by default — ADR-023"]
+    end
+
+    SPA -->|"fetch, same-origin"| DEVPROXY
+    SPA -->|"fetch, same-origin"| NGINX
+    DEVPROXY --> GUARDS
+    NGINX --> GUARDS
+    modules --> PRISMA --> PG
+    AI -.->|"only when AI_PROVIDER is set"| PROVIDER

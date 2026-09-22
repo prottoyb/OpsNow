@@ -1,0 +1,42 @@
+---
+title: OpsNow — Ticket Lifecycle (Status State Machine)
+---
+stateDiagram-v2
+    [*] --> New : ticket created
+
+    New --> Open
+    Open --> InProgress
+    InProgress --> Open
+    InProgress --> OnHold : waiting on requester
+    OnHold --> InProgress : work resumes
+    InProgress --> Resolved
+    Resolved --> Open : reopen
+    Resolved --> Closed
+    Closed --> [*]
+
+    note right of New
+        Shortcut, not drawn above: New, Open,
+        InProgress or OnHold may all also jump
+        straight to Resolved or Closed — e.g. a
+        duplicate or mistaken ticket doesn't have
+        to walk every step. OnHold may also go
+        directly back to Open, not only InProgress.
+    end note
+
+    note right of OnHold
+        SLA clocks pause here; due dates shift
+        forward by the exact paused duration
+        when the ticket resumes.
+    end note
+
+    note right of Resolved
+        Only status a ticket can reopen from.
+        Reopen is the one transition a non-staff
+        requester may trigger themselves; staff
+        may perform any matrix-allowed transition.
+    end note
+
+    note right of Closed
+        Terminal for every role, including
+        Administrator. No transition leaves it.
+    end note

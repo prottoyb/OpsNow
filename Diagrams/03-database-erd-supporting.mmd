@@ -1,0 +1,76 @@
+---
+title: OpsNow — Supporting Data Model (Knowledge Base, Notifications, Audit, Sessions)
+---
+erDiagram
+    USER ||--o{ REFRESH_TOKEN : "owns"
+    REFRESH_TOKEN ||--o| REFRESH_TOKEN : "rotates to"
+
+    USER ||--o{ KNOWLEDGE_BASE_ARTICLE : "authors"
+    USER ||--o{ KNOWLEDGE_BASE_ARTICLE_FEEDBACK : "gives"
+    KNOWLEDGE_BASE_CATEGORY ||--o{ KNOWLEDGE_BASE_CATEGORY : "parent of"
+    KNOWLEDGE_BASE_CATEGORY ||--o{ KNOWLEDGE_BASE_ARTICLE : "classifies"
+    KNOWLEDGE_BASE_ARTICLE ||--o{ KNOWLEDGE_BASE_ARTICLE_FEEDBACK : "receives"
+    TICKET }o--o{ KNOWLEDGE_BASE_ARTICLE : "linked via TICKET_KNOWLEDGE_ARTICLE"
+
+    USER ||--o{ NOTIFICATION : "receives (schema only — no code reads/writes this table)"
+    TICKET ||--o{ NOTIFICATION : "concerns"
+
+    USER ||--o{ AUDIT_LOG : "acts (nullable FK)"
+
+    REFRESH_TOKEN {
+        uuid id PK
+        uuid userId FK
+        string tokenHash UK "SHA-256 of the random token, not Argon2id"
+        timestamptz expiresAt
+        timestamptz revokedAt "nullable"
+        uuid replacedById FK "nullable, self-referencing, onDelete SetNull"
+        inet ipAddress "nullable"
+    }
+
+    KNOWLEDGE_BASE_CATEGORY {
+        uuid id PK
+        string name
+        uuid parentId FK "nullable, self-referencing"
+        boolean isActive
+    }
+
+    KNOWLEDGE_BASE_ARTICLE {
+        uuid id PK
+        uuid categoryId FK "nullable"
+        uuid authorId FK
+        string title
+        string slug UK
+        text content
+        KnowledgeArticleStatus status "Draft|Published|Archived"
+        int viewCount
+        tsvector searchVector "generated, GIN-indexed"
+        timestamptz deletedAt "soft delete, unused by API"
+    }
+
+    KNOWLEDGE_BASE_ARTICLE_FEEDBACK {
+        uuid id PK
+        uuid articleId FK
+        uuid userId FK
+        boolean isHelpful
+        text comment "nullable"
+    }
+
+    NOTIFICATION {
+        uuid id PK
+        uuid recipientId FK
+        NotificationType type
+        string title
+        uuid ticketId FK "nullable"
+        timestamptz readAt "nullable"
+    }
+
+    AUDIT_LOG {
+        uuid id PK
+        uuid actorId FK "nullable"
+        string action
+        string entityType "nullable, polymorphic, no FK"
+        uuid entityId "nullable, polymorphic, no FK"
+        json metadata "nullable, structurally redacted"
+        inet ipAddress "nullable"
+        timestamptz createdAt "append-only, no update/delete route"
+    }

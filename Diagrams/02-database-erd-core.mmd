@@ -1,0 +1,125 @@
+---
+title: OpsNow — Core ITSM Data Model
+---
+erDiagram
+    USER ||--o{ TICKET : "requests"
+    USER ||--o{ TICKET : "is assigned"
+    USER ||--o{ TICKET_COMMENT : "authors"
+    USER ||--o{ TICKET_HISTORY : "acts as"
+    USER ||--o{ ASSET : "currently holds"
+    USER ||--o{ ASSET_ASSIGNMENT : "receives"
+    USER ||--o{ ASSET_ASSIGNMENT : "grants"
+
+    TICKET_CATEGORY ||--o{ TICKET_CATEGORY : "parent of"
+    TICKET_CATEGORY ||--o{ TICKET : "classifies"
+
+    TICKET ||--o{ TICKET_COMMENT : "has"
+    TICKET ||--o{ TICKET_HISTORY : "has"
+    TICKET ||--o| TICKET_SLA : "has one"
+    TICKET }o--o{ ASSET : "linked via TICKET_ASSET"
+
+    SLA_POLICY ||--o{ TICKET_SLA : "snapshotted onto"
+
+    ASSET_TYPE ||--o{ ASSET : "classifies"
+    ASSET ||--o{ ASSET_ASSIGNMENT : "has (ledger)"
+
+    USER {
+        uuid id PK
+        string email UK
+        string passwordHash
+        Role role
+        boolean isActive
+        timestamptz deletedAt "soft delete"
+    }
+
+    TICKET {
+        uuid id PK
+        int ticketNumber UK "separate field, human-facing, autoincrement — not the PK"
+        string subject
+        text description
+        uuid requesterId FK
+        uuid assigneeId FK "nullable"
+        uuid categoryId FK "nullable"
+        TicketPriority priority
+        TicketStatus status
+        int reopenedCount
+        timestamptz resolvedAt "nullable"
+        timestamptz closedAt "nullable"
+        timestamptz deletedAt "soft delete"
+    }
+
+    TICKET_COMMENT {
+        uuid id PK
+        uuid ticketId FK
+        uuid authorId FK
+        text body
+        CommentVisibility visibility "Public | Internal"
+        timestamptz updatedAt "schema supports edits"
+        timestamptz deletedAt "schema supports soft-delete"
+    }
+
+    TICKET_HISTORY {
+        uuid id PK
+        uuid ticketId FK
+        uuid actorId FK "nullable"
+        string fieldName
+        string oldValue "nullable"
+        string newValue "nullable"
+        timestamptz createdAt "append-only — no update/delete column exists"
+    }
+
+    TICKET_CATEGORY {
+        uuid id PK
+        string name
+        uuid parentId FK "nullable, self-referencing"
+        boolean isActive
+    }
+
+    SLA_POLICY {
+        uuid id PK
+        string name UK
+        TicketPriority priority
+        int responseTimeMinutes
+        int resolutionTimeMinutes
+        boolean isActive
+    }
+
+    TICKET_SLA {
+        uuid id PK
+        uuid ticketId FK,UK "one-to-one"
+        uuid slaPolicyId FK "nullable, snapshotted, onDelete SetNull"
+        int responseTargetMinutes "copied at creation"
+        int resolutionTargetMinutes "copied at creation"
+        timestamptz responseDueAt
+        timestamptz responseAt "nullable"
+        boolean responseBreached
+        timestamptz resolutionDueAt
+        boolean resolutionBreached
+        timestamptz onHoldStartedAt "nullable, dual-purpose anchor"
+        int totalPausedMinutes
+    }
+
+    ASSET {
+        uuid id PK
+        string assetTag UK
+        string name
+        uuid assetTypeId FK
+        AssetStatus status
+        uuid currentAssigneeId FK "nullable"
+        timestamptz deletedAt "soft delete"
+    }
+
+    ASSET_TYPE {
+        uuid id PK
+        string name UK
+        boolean isActive
+    }
+
+    ASSET_ASSIGNMENT {
+        uuid id PK
+        uuid assetId FK
+        uuid assignedToId FK
+        uuid assignedById FK
+        timestamptz assignedAt
+        timestamptz returnedAt "nullable — null means open"
+    }

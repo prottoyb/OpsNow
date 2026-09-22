@@ -1,0 +1,34 @@
+---
+title: OpsNow — Authentication & Refresh Token Flow
+---
+sequenceDiagram
+    participant B as Browser (SPA)
+    participant A as NestJS Auth Module
+    participant D as PostgreSQL
+
+    B->>A: POST /auth/login (email + password)
+    A->>D: load user row (incl. passwordHash)
+    D-->>A: user + passwordHash
+    Note over A: Node/Nest verifies Argon2id hash<br/>(argon2.verify) — the database never<br/>performs the verification itself
+    A-->>B: short-lived access token (response body)<br/>+ refresh cookie (httpOnly, Secure in prod,<br/>SameSite=Strict, path=/api/v1/auth)
+
+    Note over B: access token held in memory only,<br/>never written to storage
+
+    B->>A: API request, Authorization: Bearer (access token)
+    A-->>B: 401 Unauthorized (access token expired)
+
+    B->>A: POST /auth/refresh (cookie sent automatically)
+    Note over A: assertTrustedOrigin(): Origin header must<br/>match Host, or the request is rejected —<br/>defense-in-depth alongside SameSite=Strict
+    A->>D: atomic transaction:<br/>validate + rotate token
+    alt token already rotated (reuse detected)
+        A->>D: revoke entire token family
+        A-->>B: 401 — session ended
+    else token still valid
+        A-->>B: new access token + new refresh cookie
+    end
+
+    B->>A: POST /auth/logout
+    A->>D: revoke the one presented token
+    A-->>B: 204 (no-op if already unknown/revoked)
+
+    Note over B,D: Presenting an already-rotated token is treated as suspected theft — revoking<br/>the whole family, not just the reused token. Two browser tabs racing a refresh<br/>are serialized client-side via navigator.locks (with an in-memory fallback),<br/>so a legitimate second tab never triggers the reuse/theft path.
