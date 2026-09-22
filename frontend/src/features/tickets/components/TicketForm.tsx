@@ -137,64 +137,72 @@ export function TicketForm({
         )}
       </FormField>
 
-      <FormField
-        id="ticket-category"
-        label="Category"
-        hint={
-          mode === 'edit' && initialValues.categoryId !== ''
-            ? 'A category can be changed but not removed.'
-            : undefined
-        }
-      >
-        {({ id, describedBy }) => (
-          <CategorySelect
-            id={id}
-            value={values.categoryId}
-            categories={categories}
-            describedBy={describedBy}
-            // Offered only while no category is set yet. Once one exists the
-            // API cannot clear it (categoryId has no null allowance), so the
-            // option is withheld rather than offered and rejected.
-            noneLabel={
-              mode === 'create' || initialValues.categoryId === ''
-                ? 'No category'
-                : undefined
-            }
-            onChange={(categoryId) =>
-              setValues((current) => ({ ...current, categoryId }))
-            }
-          />
-        )}
-      </FormField>
-
       {/*
-        Any role may choose the initial priority on creation. After creation
-        it is staff-only and lives on its own endpoint, so it is not part of
-        the edit form.
+        A visual break between "what's wrong" (subject/description, above)
+        and "how to route it" (category/priority, below) — two conceptually
+        different steps that previously ran together as one undifferentiated
+        field list.
       */}
-      {mode === 'create' ? (
-        <FormField id="ticket-priority" label="Priority">
+      <div className="flex flex-col gap-4 border-t border-slate-100 pt-4">
+        <FormField
+          id="ticket-category"
+          label="Category"
+          hint={
+            mode === 'edit' && initialValues.categoryId !== ''
+              ? 'A category can be changed but not removed.'
+              : undefined
+          }
+        >
           {({ id, describedBy }) => (
-            <Select
+            <CategorySelect
               id={id}
-              value={values.priority}
-              aria-describedby={describedBy}
-              onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  priority: event.target.value as TicketPriority,
-                }))
+              value={values.categoryId}
+              categories={categories}
+              describedBy={describedBy}
+              // Offered only while no category is set yet. Once one exists the
+              // API cannot clear it (categoryId has no null allowance), so the
+              // option is withheld rather than offered and rejected.
+              noneLabel={
+                mode === 'create' || initialValues.categoryId === ''
+                  ? 'No category'
+                  : undefined
               }
-            >
-              {TICKET_PRIORITIES.map((priority) => (
-                <option key={priority} value={priority}>
-                  {priority}
-                </option>
-              ))}
-            </Select>
+              onChange={(categoryId) =>
+                setValues((current) => ({ ...current, categoryId }))
+              }
+            />
           )}
         </FormField>
-      ) : null}
+
+        {/*
+          Any role may choose the initial priority on creation. After
+          creation it is staff-only and lives on its own endpoint, so it is
+          not part of the edit form.
+        */}
+        {mode === 'create' ? (
+          <FormField id="ticket-priority" label="Priority">
+            {({ id, describedBy }) => (
+              <Select
+                id={id}
+                value={values.priority}
+                aria-describedby={describedBy}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    priority: event.target.value as TicketPriority,
+                  }))
+                }
+              >
+                {TICKET_PRIORITIES.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priority}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </FormField>
+        ) : null}
+      </div>
 
       <div aria-live="assertive">
         {serverMessages.length > 0 ? (
@@ -211,12 +219,12 @@ export function TicketForm({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
         <Button type="submit" disabled={submitting}>
           {submitting ? 'Saving…' : submitLabel}
         </Button>
         {onCancel ? (
-          <Button variant="secondary" onClick={onCancel} disabled={submitting}>
+          <Button variant="ghost" onClick={onCancel} disabled={submitting}>
             Cancel
           </Button>
         ) : null}

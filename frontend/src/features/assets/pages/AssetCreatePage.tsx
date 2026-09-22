@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Card } from '../../../components/ui/Card';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
 import { Spinner } from '../../../components/ui/Spinner';
@@ -55,24 +56,26 @@ export function AssetCreatePage() {
       ) : null}
 
       {assetTypesQuery.isSuccess ? (
-        <AssetForm
-          mode="create"
-          initialValues={{
-            assetTag: '',
-            name: '',
-            assetTypeId: '',
-            serialNumber: '',
-            purchaseDate: '',
-            warrantyExpiresAt: '',
-            notes: '',
-          }}
-          assetTypes={assetTypesQuery.data}
-          submitting={createAsset.isPending}
-          serverMessages={serverMessages}
-          submitLabel="Create asset"
-          onSubmit={handleSubmit}
-          onCancel={() => navigate('/assets')}
-        />
+        <Card>
+          <AssetForm
+            mode="create"
+            initialValues={{
+              assetTag: '',
+              name: '',
+              assetTypeId: '',
+              serialNumber: '',
+              purchaseDate: '',
+              warrantyExpiresAt: '',
+              notes: '',
+            }}
+            assetTypes={assetTypesQuery.data}
+            submitting={createAsset.isPending}
+            serverMessages={serverMessages}
+            submitLabel="Create asset"
+            onSubmit={handleSubmit}
+            onCancel={() => navigate('/assets')}
+          />
+        </Card>
       ) : null}
     </section>
   );

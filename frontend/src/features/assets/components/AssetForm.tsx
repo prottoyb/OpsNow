@@ -195,88 +195,96 @@ export function AssetForm({
         )}
       </FormField>
 
-      <FormField
-        id="asset-serial-number"
-        label="Serial number"
-        error={fieldErrors.serialNumber}
-        hint={`Up to ${FIELD_LIMITS.serialNumber} characters. Optional.`}
-      >
-        {({ id, describedBy }) => (
-          <Input
-            id={id}
-            name="serialNumber"
-            value={values.serialNumber}
-            maxLength={FIELD_LIMITS.serialNumber}
-            aria-describedby={describedBy}
-            aria-invalid={fieldErrors.serialNumber ? true : undefined}
-            onChange={(event) =>
-              setValues((current) => ({
-                ...current,
-                serialNumber: event.target.value,
-              }))
-            }
-          />
-        )}
-      </FormField>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormField id="asset-purchase-date" label="Purchase date">
+      {/*
+        A visual break between identity fields (tag/name/type, above) and
+        record-keeping fields (serial/dates/notes, below) — two
+        conceptually different steps that previously ran together as one
+        undifferentiated field list.
+      */}
+      <div className="flex flex-col gap-4 border-t border-slate-100 pt-4">
+        <FormField
+          id="asset-serial-number"
+          label="Serial number"
+          error={fieldErrors.serialNumber}
+          hint={`Up to ${FIELD_LIMITS.serialNumber} characters. Optional.`}
+        >
           {({ id, describedBy }) => (
             <Input
               id={id}
-              name="purchaseDate"
-              type="date"
-              value={values.purchaseDate}
+              name="serialNumber"
+              value={values.serialNumber}
+              maxLength={FIELD_LIMITS.serialNumber}
               aria-describedby={describedBy}
+              aria-invalid={fieldErrors.serialNumber ? true : undefined}
               onChange={(event) =>
                 setValues((current) => ({
                   ...current,
-                  purchaseDate: event.target.value,
+                  serialNumber: event.target.value,
                 }))
               }
             />
           )}
         </FormField>
 
-        <FormField id="asset-warranty-expires" label="Warranty expires">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField id="asset-purchase-date" label="Purchase date">
+            {({ id, describedBy }) => (
+              <Input
+                id={id}
+                name="purchaseDate"
+                type="date"
+                value={values.purchaseDate}
+                aria-describedby={describedBy}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    purchaseDate: event.target.value,
+                  }))
+                }
+              />
+            )}
+          </FormField>
+
+          <FormField id="asset-warranty-expires" label="Warranty expires">
+            {({ id, describedBy }) => (
+              <Input
+                id={id}
+                name="warrantyExpiresAt"
+                type="date"
+                value={values.warrantyExpiresAt}
+                aria-describedby={describedBy}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    warrantyExpiresAt: event.target.value,
+                  }))
+                }
+              />
+            )}
+          </FormField>
+        </div>
+
+        <FormField
+          id="asset-notes"
+          label="Notes"
+          error={fieldErrors.notes}
+          hint={`Up to ${FIELD_LIMITS.assetNotes} characters. Optional.`}
+        >
           {({ id, describedBy }) => (
-            <Input
+            <Textarea
               id={id}
-              name="warrantyExpiresAt"
-              type="date"
-              value={values.warrantyExpiresAt}
+              name="notes"
+              value={values.notes}
+              maxLength={FIELD_LIMITS.assetNotes}
               aria-describedby={describedBy}
+              aria-invalid={fieldErrors.notes ? true : undefined}
               onChange={(event) =>
-                setValues((current) => ({
-                  ...current,
-                  warrantyExpiresAt: event.target.value,
-                }))
+                setValues((current) => ({ ...current, notes: event.target.value }))
               }
             />
           )}
         </FormField>
       </div>
-
-      <FormField
-        id="asset-notes"
-        label="Notes"
-        error={fieldErrors.notes}
-        hint={`Up to ${FIELD_LIMITS.assetNotes} characters. Optional.`}
-      >
-        {({ id, describedBy }) => (
-          <Textarea
-            id={id}
-            name="notes"
-            value={values.notes}
-            maxLength={FIELD_LIMITS.assetNotes}
-            aria-describedby={describedBy}
-            aria-invalid={fieldErrors.notes ? true : undefined}
-            onChange={(event) =>
-              setValues((current) => ({ ...current, notes: event.target.value }))
-            }
-          />
-        )}
-      </FormField>
 
       <div aria-live="assertive">
         {serverMessages.length > 0 ? (
@@ -293,12 +301,12 @@ export function AssetForm({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
         <Button type="submit" disabled={submitting}>
           {submitting ? 'Saving…' : submitLabel}
         </Button>
         {onCancel ? (
-          <Button variant="secondary" onClick={onCancel} disabled={submitting}>
+          <Button variant="ghost" onClick={onCancel} disabled={submitting}>
             Cancel
           </Button>
         ) : null}

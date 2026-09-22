@@ -130,32 +130,40 @@ export function ArticleForm({
         )}
       </FormField>
 
-      <FormField
-        id="article-content"
-        label="Body"
-        required
-        error={fieldErrors.content}
-        hint="Plain text. Line breaks are kept; Markdown and HTML are shown exactly as typed, not formatted."
-      >
-        {({ id, describedBy, required }) => (
-          <Textarea
-            id={id}
-            name="content"
-            rows={14}
-            required={required}
-            value={values.content}
-            maxLength={FIELD_LIMITS.articleContent}
-            aria-describedby={describedBy}
-            aria-invalid={fieldErrors.content ? true : undefined}
-            onChange={(event) =>
-              setValues((current) => ({
-                ...current,
-                content: event.target.value,
-              }))
-            }
-          />
-        )}
-      </FormField>
+      {/*
+        A visual break between identifying the article (title/category,
+        above) and writing it (body, below) — two conceptually different
+        steps that previously ran together as one undifferentiated field
+        list.
+      */}
+      <div className="border-t border-slate-100 pt-4">
+        <FormField
+          id="article-content"
+          label="Body"
+          required
+          error={fieldErrors.content}
+          hint="Plain text. Line breaks are kept; Markdown and HTML are shown exactly as typed, not formatted."
+        >
+          {({ id, describedBy, required }) => (
+            <Textarea
+              id={id}
+              name="content"
+              rows={14}
+              required={required}
+              value={values.content}
+              maxLength={FIELD_LIMITS.articleContent}
+              aria-describedby={describedBy}
+              aria-invalid={fieldErrors.content ? true : undefined}
+              onChange={(event) =>
+                setValues((current) => ({
+                  ...current,
+                  content: event.target.value,
+                }))
+              }
+            />
+          )}
+        </FormField>
+      </div>
 
       <div aria-live="assertive">
         {serverMessages.length > 0 ? (
@@ -172,12 +180,12 @@ export function ArticleForm({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
         <Button type="submit" disabled={submitting}>
           {submitting ? 'Saving…' : submitLabel}
         </Button>
         {onCancel ? (
-          <Button variant="secondary" onClick={onCancel} disabled={submitting}>
+          <Button variant="ghost" onClick={onCancel} disabled={submitting}>
             Cancel
           </Button>
         ) : null}

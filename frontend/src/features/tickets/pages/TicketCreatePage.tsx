@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Card } from '../../../components/ui/Card';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
 import { Spinner } from '../../../components/ui/Spinner';
@@ -60,21 +61,23 @@ export function TicketCreatePage() {
       ) : null}
 
       {!categoriesQuery.isPending ? (
-        <TicketForm
-          mode="create"
-          initialValues={{
-            subject: '',
-            description: '',
-            categoryId: '',
-            priority: 'Medium',
-          }}
-          categories={categoriesQuery.data ?? []}
-          submitting={createTicket.isPending}
-          serverMessages={serverMessages}
-          submitLabel="Create ticket"
-          onSubmit={handleSubmit}
-          onCancel={() => navigate('/tickets')}
-        />
+        <Card>
+          <TicketForm
+            mode="create"
+            initialValues={{
+              subject: '',
+              description: '',
+              categoryId: '',
+              priority: 'Medium',
+            }}
+            categories={categoriesQuery.data ?? []}
+            submitting={createTicket.isPending}
+            serverMessages={serverMessages}
+            submitLabel="Create ticket"
+            onSubmit={handleSubmit}
+            onCancel={() => navigate('/tickets')}
+          />
+        </Card>
       ) : null}
     </section>
   );

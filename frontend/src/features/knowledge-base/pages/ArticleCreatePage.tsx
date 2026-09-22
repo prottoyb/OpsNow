@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Card } from '../../../components/ui/Card';
 import { ErrorState } from '../../../components/ui/ErrorState';
 import { PageHeading } from '../../../components/ui/PageHeading';
 import { Spinner } from '../../../components/ui/Spinner';
@@ -56,15 +57,17 @@ export function ArticleCreatePage() {
       ) : null}
 
       {categoriesQuery.isSuccess ? (
-        <ArticleForm
-          initialValues={{ title: '', content: '', categoryId: '' }}
-          categories={categoriesQuery.data}
-          submitting={createArticle.isPending}
-          serverMessages={serverMessages}
-          submitLabel="Create article"
-          onSubmit={handleSubmit}
-          onCancel={() => navigate('/kb')}
-        />
+        <Card>
+          <ArticleForm
+            initialValues={{ title: '', content: '', categoryId: '' }}
+            categories={categoriesQuery.data}
+            submitting={createArticle.isPending}
+            serverMessages={serverMessages}
+            submitLabel="Create article"
+            onSubmit={handleSubmit}
+            onCancel={() => navigate('/kb')}
+          />
+        </Card>
       ) : null}
     </section>
   );

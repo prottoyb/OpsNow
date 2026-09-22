@@ -24,24 +24,78 @@ import { useSlaMetrics, useSlaPolicies } from '../useSla';
  * not blank out the policy table, and vice versa.
  */
 
-const METRIC_LABELS: ReadonlyArray<{ key: keyof SlaMetrics; label: string }> = [
-  { key: 'openWithSla', label: 'Open tickets with an SLA' },
+type MetricTone = 'neutral' | 'good' | 'bad';
+
+interface MetricDefinition {
+  key: keyof SlaMetrics;
+  label: string;
+  tone: MetricTone;
+}
+
+const RESPONSE_METRICS: readonly MetricDefinition[] = [
+  { key: 'respondedOnTime', label: 'Responded on time', tone: 'good' },
+  { key: 'respondedLate', label: 'Responded late', tone: 'bad' },
+  {
+    key: 'responseOverdueOutstanding',
+    label: 'Response overdue (no reply yet)',
+    tone: 'bad',
+  },
+  { key: 'neverResponded', label: 'Resolved with no response', tone: 'bad' },
+];
+
+const RESOLUTION_METRICS: readonly MetricDefinition[] = [
   {
     key: 'resolutionBreachedInFlight',
     label: 'Resolution overdue (still open)',
+    tone: 'bad',
   },
   {
     key: 'resolutionBreachedCompleted',
     label: 'Resolution breached (already resolved)',
+    tone: 'bad',
   },
-  { key: 'respondedOnTime', label: 'Responded on time' },
-  { key: 'respondedLate', label: 'Responded late' },
-  {
-    key: 'responseOverdueOutstanding',
-    label: 'Response overdue (no reply yet)',
-  },
-  { key: 'neverResponded', label: 'Resolved with no response' },
 ];
+
+/**
+ * A small shape-coded glyph beside each tile's label — never the only signal
+ * (the label text and the tone-neutral figure itself always stand on their
+ * own), but a second, non-colour cue that a "bad" tile is bad at a glance,
+ * the same "never colour alone" principle `Badge` already applies. `good`
+ * gets a check, `bad` a triangle; `neutral` (the lead figure) gets none.
+ */
+function MetricToneGlyph({ tone }: { tone: MetricTone }) {
+  if (tone === 'neutral') return null;
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`size-3.5 ${tone === 'good' ? 'text-emerald-700' : 'text-amber-700'}`}
+    >
+      {tone === 'good' ? (
+        <path d="M5 12l4 4 10-10" />
+      ) : (
+        <path d="M12 4l9 16H3L12 4zm0 6v4m0 3h.01" />
+      )}
+    </svg>
+  );
+}
+
+function MetricTile({ definition, value }: { definition: MetricDefinition; value: number }) {
+  return (
+    <div className="rounded-md border border-slate-200 p-4">
+      <dt className="flex items-center gap-1.5 text-sm text-slate-600">
+        <MetricToneGlyph tone={definition.tone} />
+        {definition.label}
+      </dt>
+      <dd className="mt-1 text-2xl font-semibold text-slate-900">{value}</dd>
+    </div>
+  );
+}
 
 export function SlaDashboardPage() {
   const isStaff = useIsStaff();
@@ -71,32 +125,63 @@ export function SlaDashboardPage() {
         ) : null}
 
         {metricsQuery.isSuccess ? (
-          <>
-            <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {METRIC_LABELS.map(({ key, label }) => (
-                <div
-                  key={key}
-                  className="rounded-md border border-slate-200 p-3"
-                >
-                  <dt className="text-sm text-slate-600">{label}</dt>
-                  <dd className="mt-1 text-2xl font-semibold text-slate-900">
-                    {metricsQuery.data[key]}
-                  </dd>
-                </div>
-              ))}
+          <div className="flex flex-col gap-6">
+            {/* The lead figure stands alone — it isn't a response or
+                resolution count, it's the denominator both groups below are
+                drawn from. */}
+            <dl>
+              <div className="max-w-xs rounded-md border border-slate-200 bg-slate-50 p-4">
+                <dt className="text-sm text-slate-600">
+                  Open tickets with an SLA
+                </dt>
+                <dd className="mt-1 text-2xl font-semibold text-slate-900">
+                  {metricsQuery.data.openWithSla}
+                </dd>
+              </div>
             </dl>
+
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-slate-700">
+                Response
+              </h3>
+              <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {RESPONSE_METRICS.map((definition) => (
+                  <MetricTile
+                    key={definition.key}
+                    definition={definition}
+                    value={metricsQuery.data[definition.key]}
+                  />
+                ))}
+              </dl>
+            </div>
+
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-slate-700">
+                Resolution
+              </h3>
+              <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {RESOLUTION_METRICS.map((definition) => (
+                  <MetricTile
+                    key={definition.key}
+                    definition={definition}
+                    value={metricsQuery.data[definition.key]}
+                  />
+                ))}
+              </dl>
+            </div>
+
             {/*
               Worded so it stays true whatever the backend's at-risk fraction
               is set to — the threshold is deliberately not restated as a
               number anywhere in the frontend.
             */}
-            <p className="mt-3 text-xs text-slate-600">
+            <p className="text-xs text-slate-600">
               An at-risk total is not available. At risk is a share of each
               ticket&rsquo;s own target rather than a fixed cutoff, so the
               threshold differs from ticket to ticket and no single count can
               express it. It is reported on each ticket instead.
             </p>
-          </>
+          </div>
         ) : null}
       </Card>
 
@@ -129,45 +214,45 @@ export function SlaDashboardPage() {
         ) : null}
 
         {policiesQuery.isSuccess && policiesQuery.data.length > 0 ? (
-          <div className="mt-3 overflow-x-auto">
+          <div className="mt-3 overflow-x-auto rounded-card border border-slate-200">
             <table className="w-full border-collapse text-left text-sm">
               <caption className="sr-only">SLA policies</caption>
               <thead>
-                <tr className="border-b border-slate-300 text-slate-700">
-                  <th scope="col" className="px-3 py-2 font-semibold">
+                <tr className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase">
+                  <th scope="col" className="px-3 py-2.5">
                     Policy
                   </th>
-                  <th scope="col" className="px-3 py-2 font-semibold">
+                  <th scope="col" className="px-3 py-2.5">
                     Priority
                   </th>
-                  <th scope="col" className="px-3 py-2 font-semibold">
+                  <th scope="col" className="px-3 py-2.5">
                     Response target
                   </th>
-                  <th scope="col" className="px-3 py-2 font-semibold">
+                  <th scope="col" className="px-3 py-2.5">
                     Resolution target
                   </th>
-                  <th scope="col" className="px-3 py-2 font-semibold">
+                  <th scope="col" className="px-3 py-2.5">
                     Status
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {policiesQuery.data.map((policy) => (
                   <tr
                     key={policy.id}
-                    className="border-b border-slate-200 align-top"
+                    className="align-top transition-colors hover:bg-slate-50"
                   >
-                    <td className="px-3 py-2 text-slate-800">{policy.name}</td>
-                    <td className="px-3 py-2 text-slate-700">
+                    <td className="px-3 py-3 text-slate-800">{policy.name}</td>
+                    <td className="px-3 py-3 text-slate-700">
                       {policy.priority}
                     </td>
-                    <td className="px-3 py-2 text-slate-700">
+                    <td className="px-3 py-3 text-slate-700">
                       {formatDurationMinutes(policy.responseTimeMinutes)}
                     </td>
-                    <td className="px-3 py-2 text-slate-700">
+                    <td className="px-3 py-3 text-slate-700">
                       {formatDurationMinutes(policy.resolutionTimeMinutes)}
                     </td>
-                    <td className="px-3 py-2 text-slate-700">
+                    <td className="px-3 py-3 text-slate-700">
                       {policy.isActive ? 'Active' : 'Inactive'}
                     </td>
                   </tr>
