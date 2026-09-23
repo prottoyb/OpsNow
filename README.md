@@ -28,8 +28,11 @@ system would require.
 
 ## Current Project Status
 
-**Phases 0–16 are complete.** Phase 17 (Final Review & Portfolio
-Preparation) is the only phase left.
+**Phases 0–17 are complete for this repository's scope.** The
+application, its tests, documentation, container definitions and CI
+pipeline are all done; what remains is external deployment
+infrastructure this repository can't supply on its own (see Deployment
+Status below).
 
 Four different things get called "done" in a project like this, so they
 are separated deliberately:
@@ -59,8 +62,9 @@ Completed so far:
 - Project foundation and an approved architecture, recorded as ADR-001
   through ADR-027 in `DECISIONS.md`.
 - A PostgreSQL database with Prisma as the schema/migration source of
-  truth (18 tables, 7 enums, including tables reserved for not-yet-built
-  phases such as Knowledge Base, Notifications and Audit Log).
+  truth (18 tables, 7 enums, including one table, `Notification`,
+  reserved for a phase that was scoped but never scheduled — Knowledge
+  Base and Audit Log are both fully implemented).
 - A NestJS backend foundation (config validation, global error handling,
   Swagger/OpenAPI documentation, a database-backed health check).
 - Authentication: registration, login, JWT access tokens, rotating
@@ -103,17 +107,21 @@ Completed so far:
 
 ## Deployment Status
 
-**Phase 17 — Final Review & Portfolio Preparation** is the only phase
-left. Its review pass, the eleven-diagram architecture/database set under
+**Phases 0–17 are complete for this repository's scope**: the review
+pass, the eleven-diagram architecture/database set under
 `docs/diagrams/`, API documentation, decisions summary and demo material
-are complete — see the Documentation Map below for what each document
-covers. What's still open is only what genuinely can't be closed from
-inside this repository: building the container images (no Docker on the
-authoring machine) and everything in `docs/deployment.md` that needs a
-hosting account, a managed database, a registry, a domain or a
-credential — none of which exist.
+are all done — see the Documentation Map below for what each document
+covers.
 
-Everything else that remains needs something outside this repository. See
+The production images are built and validated in CI (`docker compose
+config`, `nginx -t`) on every push, but the complete Compose stack has
+not been started locally on the authoring machine, since Docker itself
+isn't installed there. What's left is entirely outside this repository:
+everything in `docs/deployment.md` that needs a hosting account, a
+managed database, a registry, a domain or a credential — none of which
+exist.
+
+Everything that remains needs something outside this repository. See
 `docs/deployment.md` for the full list; in short, a hosting platform, a
 managed PostgreSQL instance, a container registry, a domain with TLS, and
 somewhere to keep secrets. None of those exist, so:
@@ -264,9 +272,9 @@ Cross-cutting concerns are handled globally rather than per-route:
 
 PostgreSQL with Prisma as the schema and migration source of truth.
 UUID primary keys throughout. The schema currently defines 18 tables and
-7 enums, including several (knowledge base, notifications, audit log)
-that exist to support not-yet-built phases but have no application code
-using them yet.
+7 enums. Every table is used by application code except `Notification`,
+which exists in the schema for a phase that was scoped but never
+scheduled.
 
 Notable modeling decisions:
 - Soft deletes (`deletedAt`) rather than hard deletes on entities that
@@ -275,7 +283,7 @@ Notable modeling decisions:
   added by hand in the migration: CHECK constraints (e.g. a ticket can't
   be `Closed` without `resolvedAt` set), partial/filtered unique indexes
   (e.g. at most one open assignment per asset), and a generated `tsvector`
-  column with a GIN index for future knowledge-base full-text search.
+  column with a GIN index powering knowledge-base full-text search.
 - `TicketHistory` and `AssetAssignment` are append-only ledgers, not
   mutable status fields — see Ticket-Management and Asset-Management
   sections below.
@@ -661,10 +669,9 @@ The short version of the posture (ADR-027):
 
 ## Current Roadmap
 
-Phases 0–16 are complete. Phase 17 is complete for everything that can be
-finished from inside this repository: the review pass, the architecture
-and database diagrams, API documentation, the decisions summary and demo
-material.
+Phases 0–17 are complete for this repository's scope: the review pass,
+the architecture and database diagrams, API documentation, the decisions
+summary and demo material are all done.
 
 Two items remain — they don't need more engineering, they need resources
 this repository can't supply on its own:
@@ -736,8 +743,8 @@ workflow is what kept it consistent across roughly twenty phases of work.
 ## Project Maturity / Portfolio Status
 
 OpsNow is a **complete, working ITSM system that has never been
-deployed**. As of this checkpoint (Phases 0–16 complete, Phase 17
-complete for everything achievable from inside this repository):
+deployed**. As of this checkpoint (Phases 0–17 complete for this
+repository's scope):
 
 - Every feature area — tickets, SLA, assets, knowledge base, analytics,
   audit logging and the optional AI assistant — is complete end to end
