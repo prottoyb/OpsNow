@@ -2,7 +2,7 @@
 
 This document explains what each diagram in this folder shows, why it's drawn the way it is, and what it tells you about how OpsNow is actually built. It's meant to be read alongside the PNG file the heading refers to. Every diagram has a matching `.mmd` Mermaid source file of the same name — that's the file to edit if the application changes; regenerate the PNG from it rather than hand-editing the image (see "Regenerating these diagrams" at the end).
 
-OpsNow is a full-stack IT Service Management (ITSM) platform: a React single-page app talking to a versioned NestJS REST API, backed by a single PostgreSQL database (18 tables — `User`, `RefreshToken`, `Ticket`, `TicketComment`, `TicketHistory`, `TicketCategory`, `SlaPolicy`, `TicketSla`, `Asset`, `AssetType`, `AssetAssignment`, `TicketAsset`, `KnowledgeBaseCategory`, `KnowledgeBaseArticle`, `KnowledgeBaseArticleFeedback`, `TicketKnowledgeArticle`, `Notification`, `AuditLog`). Eleven diagrams cover it end to end: the runtime architecture, the two halves of the database schema, what the product does, the ticket workflow and its concurrency guarantees, the authentication model, the access-control model, the SLA engine, the CI/CD pipeline, and how the whole thing actually runs (dev and container/runtime).
+OpsNow is a full-stack IT Service Management (ITSM) platform: a React single-page app talking to a versioned NestJS REST API, backed by a single PostgreSQL database (18 tables — `User`, `RefreshToken`, `Ticket`, `TicketComment`, `TicketHistory`, `TicketCategory`, `SlaPolicy`, `TicketSla`, `Asset`, `AssetType`, `AssetAssignment`, `TicketAsset`, `KnowledgeBaseCategory`, `KnowledgeBaseArticle`, `KnowledgeBaseArticleFeedback`, `TicketKnowledgeArticle`, `Notification`, `AuditLog`). Eleven diagrams cover it end to end: the runtime architecture, the two halves of the database schema, what the product does, the ticket workflow and its concurrency guarantees, the authentication model, the access-control model, the SLA engine, the CI pipeline, and how the whole thing actually runs (dev and container/runtime).
 
 ---
 
@@ -157,7 +157,7 @@ Effective access *is* cumulative in practice — reading left to right, each rol
 - **+ Administrator**: the user directory and the audit log — the two views that expose every account's email and every user's recorded actions.
 
 ### The closing note is the most important part of the diagram
-Every rule is enforced on the backend twice, independently: once by `RolesGuard` at the route level, and again by row-level ownership/visibility checks inside the service (confirmed in `tickets.service.ts` — e.g. a non-staff requester is blocked from most transitions once a ticket leaves `New`, and internal-visibility comments are hidden from non-staff, non-requester callers). The frontend's role-aware UI is a convenience layer, never the security boundary.
+Authorization is **layered**, not uniformly doubled. `RolesGuard` enforces a route's declared role requirement — but only on the routes that declare one (e.g. `PATCH /tickets/:id/assignment` and `/priority` require `STAFF_ROLES`; `PATCH /tickets/:id` and `/status` declare no role requirement at all, so any authenticated caller reaches the service). Independently of that, service-level ownership/visibility/business-rule checks constrain access to specific records and operations on **every** route, whether or not `RolesGuard` also restricted it by role (confirmed in `tickets.service.ts` — e.g. a non-staff requester is blocked from most transitions once a ticket leaves `New`, and internal-visibility comments are hidden from non-staff, non-requester callers). So it isn't that every rule is checked twice; it's that the route-level and service-level layers each do the part only they can do, and only the service layer runs for every route. The frontend's role-aware UI is a convenience layer, never the security boundary.
 
 ### Key takeaway
 A role is a fixed enum with four values (`Employee | SupportAgent | TeamLead | Administrator`), not a dynamic permissions table — simple by design, with cumulative access arising from how the route-level role lists happen to be composed.
@@ -190,8 +190,10 @@ The backend's `responseState`/`resolutionState` values are always authoritative.
 
 ---
 
-## 9. CI/CD Pipeline
+## 9. CI Pipeline
 **File:** `09-cicd-pipeline.png` / `09-cicd-pipeline.mmd`
+
+The workflow file itself is named `CI` (`.github/workflows/ci.yml`, `name: CI`), and it says so deliberately: it builds and validates container images but never pushes them anywhere (`push: false` on every image build), and its own header comment states "there is deliberately no deployment job... a workflow that claims to deploy... is worse than no workflow at all." There is no delivery or deployment stage — this is a continuous-integration pipeline, not CI/CD, and the diagram and this section are named accordingly. `docs/deployment.md` is explicit that OpsNow isn't deployed anywhere; see diagram 10 for exactly what does and doesn't run where.
 
 ### What it shows
 Five independent GitHub Actions jobs triggered on every push — Frontend, Backend, Browser E2E, Dependency Audit, and Container Images.
@@ -223,8 +225,8 @@ The browser talks to the Vite dev server on `:5173`, whose proxy rule forwards `
 ### What it shows — container/runtime
 Four services defined in `docker-compose.yml`: a `postgres:16-alpine` container (published only to `127.0.0.1:5433`, i.e. loopback-only, with a named volume for persistence and a `pg_isready` healthcheck); a one-shot `migrate` container (`backend/Dockerfile`, target `migrator`, runs `prisma migrate deploy` then exits, `restart: 'no'`); a `backend` container (target `runtime`) that is **not published to the host at all** — reachable only inside the Docker network — with a healthcheck that hits its own `/api/v1/health` (which also pings the database); and a `frontend` container (nginx, target `runtime`) published at `8080 → 80`, serving the built SPA and reverse-proxying `/api` to `http://backend:3000`. `depends_on` conditions chain correctly: frontend waits on backend being healthy, backend waits on postgres being healthy *and* migrate having completed successfully.
 
-### Same-origin, again, in this environment
-nginx plays exactly the role Vite's proxy plays in development — the backend is never dual-published or reachable at a second, cross-origin address in either environment, which is what keeps the refresh-cookie design in diagram 6 valid in both.
+### Same-origin, again, in this environment — with a precise caveat for dev
+nginx plays exactly the role Vite's proxy plays in development, and browser API traffic is deliberately routed through that same-origin proxy in both environments. The two environments aren't identical here, though: in the container/runtime case the backend genuinely **is** internal-only — `docker-compose.yml` never publishes a port for it, so it isn't reachable from outside the Docker network at all. In development, NestJS also listens directly on `localhost:3000` (`main.ts`), and nothing stops a request from reaching it there — that second address is real and technically reachable, it just isn't the *supported* browser integration path: the SPA only ever calls same-origin through the Vite proxy, and diagram 6's `assertTrustedOrigin()` check independently rejects an auth request whose `Origin` doesn't match its `Host`, which a same-page request to `:3000` from a page served at `:5173` would fail.
 
 ### What has and hasn't actually happened
 This entire container topology is exactly what `.github/workflows/ci.yml` builds and validates on every push (`docker compose config`, `nginx -t`) — confirmed passing repeatedly. What has **not** happened: Docker is not installed on this development machine, so this stack has never been started with a real local `docker compose up`, and there is no cloud deployment anywhere. This diagram documents the *configured, CI-validated* topology, not an observed running system.

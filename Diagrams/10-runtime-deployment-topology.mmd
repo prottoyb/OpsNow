@@ -44,7 +44,7 @@ flowchart TB
 
     ENVNOTE["Key environment variables (names only) — backend: DATABASE_URL ·<br/>JWT_ACCESS_SECRET (32+ chars, no default) · JWT_ACCESS_EXPIRES_IN ·<br/>REFRESH_TOKEN_TTL_SECONDS · AUTH_THROTTLE_TTL_SECONDS / LIMIT ·<br/>TRUST_PROXY_HOPS=1 (ADR-026) · SWAGGER_ENABLED (false by default in<br/>prod, ADR-027) · AI_PROVIDER / AI_API_KEY (empty by default; 'mock'<br/>rejected when NODE_ENV=production) — postgres: POSTGRES_USER /<br/>POSTGRES_PASSWORD (no default, compose fails fast without it) / POSTGRES_DB"]:::note
 
-    SAMEORIGIN["Same-origin edge, both environments: nginx plays in the container/runtime case exactly the role Vite's<br/>dev proxy plays in development — the backend is never dual-published or reachable at a second,<br/>cross-origin address in either environment."]:::note
+    SAMEORIGIN["Same-origin edge: browser API traffic is deliberately routed through the same-origin proxy in both<br/>environments (Vite's dev proxy / nginx). In the container/runtime case the backend is genuinely<br/>internal-only — not published to the host at all. In development, NestJS also listens directly on<br/>localhost:3000; that second address is reachable, but it is not the supported browser integration<br/>path — the SPA only ever calls same-origin through the proxy, and cookie-scoped checks (diagram 6)<br/>reject a request whose Origin doesn't match Host."]:::note
 
     RUNTIME --- ENVNOTE
     RUNTIME --- SAMEORIGIN

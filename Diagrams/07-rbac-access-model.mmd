@@ -31,6 +31,6 @@ flowchart LR
         A2["Audit log<br/>(append-only trail)"]
     end
 
-    NOTE["Effective access is cumulative because each role's route list<br/>is a superset of the previous role's — not a coded inheritance<br/>chain. Every rule above is enforced on the backend (RolesGuard<br/>+ per-row ownership/visibility checks) — the frontend's<br/>role-aware UI is a convenience layer, never the security boundary."]:::note
+    NOTE["Effective access is cumulative because each role's route list<br/>is a superset of the previous role's — not a coded inheritance<br/>chain. Authorization is layered: RolesGuard enforces route-level<br/>role requirements where a route declares them, while service-level<br/>visibility/ownership/business-rule checks independently constrain<br/>every route's data — the frontend's role-aware UI is a convenience<br/>layer, never the security boundary."]:::note
 
     EMP --> SA --> TL --> ADM --> NOTE

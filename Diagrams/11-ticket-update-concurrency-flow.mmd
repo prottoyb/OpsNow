@@ -8,7 +8,7 @@ flowchart LR
 
     REQ["React UI — one of four mutation endpoints:<br/>PATCH /tickets/:id (subject/description/category)<br/>PATCH /tickets/:id/assignment · /:id/status · /:id/priority"]
 
-    subgraph GUARDS["Guards — global, run before the body is parsed"]
+    subgraph GUARDS["Guards — global, run before route validation and controller/service execution"]
         direction TB
         AUTH{"JwtAuthGuard:<br/>valid access token?"}
         ROLES{"RolesGuard:<br/>route declares @Roles(STAFF)?<br/>(only /assignment and /priority do)"}
