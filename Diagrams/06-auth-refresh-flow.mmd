@@ -31,4 +31,4 @@ sequenceDiagram
     A->>D: revoke the one presented token
     A-->>B: 204 (no-op if already unknown/revoked)
 
-    Note over B,D: Presenting an already-rotated token is treated as suspected theft — revoking<br/>the whole family, not just the reused token. Two browser tabs racing a refresh<br/>are serialized client-side via navigator.locks (with an in-memory fallback),<br/>so a legitimate second tab never triggers the reuse/theft path.
+    Note over B,D: Presenting an already-rotated token is treated as suspected theft — revoking the whole family,<br/>not just the reused token. Where supported, navigator.locks serializes refresh attempts across<br/>same-origin tabs, so a legitimate second tab waits and presents the winner's rotated cookie<br/>instead of a stale one. The fallback used when Web Locks is unavailable (jsdom, non-secure<br/>contexts) only deduplicates concurrent refreshes within the current tab — cross-tab<br/>coordination is lost in that case.
