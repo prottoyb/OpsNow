@@ -123,8 +123,8 @@ describe('UpdateTicketDto', () => {
 
   /*
    * Pins down where the "a category cannot be cleared" limitation actually
-   * lives, because TASKS.md's Phase 6b note attributes it to the wrong
-   * mechanism. `@IsOptional()` treats null as absent, so the DTO itself
+   * lives, since it is easy to misattribute to the wrong mechanism.
+   * `@IsOptional()` treats null as absent, so the DTO itself
    * accepts `categoryId: null` and it is NOT stripped by `whitelist`
    * (the property is decorated, so it survives). The 400 comes one layer
    * later, from TicketsService.assertActiveCategory, which runs whenever

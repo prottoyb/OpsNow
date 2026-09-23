@@ -3,7 +3,7 @@ import { TicketPriority } from '@prisma/client';
 
 /**
  * Read-only: `GET /api/v1/sla-policies` exposes the seeded policies as-is.
- * There is no policy CRUD in Phase 7 (see TASKS.md).
+ * Policy CRUD is deliberately out of scope for now.
  */
 export class SlaPolicyResponseDto {
   @ApiProperty()

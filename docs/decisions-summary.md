@@ -84,8 +84,7 @@ It does not replace `DECISIONS.md` and no new ADRs were written for it.
 ## Asset management
 
 - **The assignment ledger *is* the history** — no separate audit table
-  (see the Phase 8a section of `progress.md`; reuses ADR-019's pattern
-  rather than a new ADR). `PATCH /assets/:id/assignment` is the single
+  (reuses ADR-019's pattern rather than a new ADR). `PATCH /assets/:id/assignment` is the single
   seam every assignment change funnels through, so `status` and
   `currentAssigneeId` cannot drift out of sync with the ledger behind the
   scenes — enforced by a partial unique index allowing at most one open

@@ -11,8 +11,8 @@ import { KnowledgeBaseCategoryResponseDto } from '../../knowledge-base-categorie
  * point. A knowledge article body is capped at 50,000 characters, so a
  * full page of 100 list rows could otherwise be a 5MB response for a
  * client that is going to render one line per row. Beyond size, it is the
- * "don't ship more than the client needs" rule from
- * .claude/rules/security.md: the body is the thing readers request
+ * deliberate "don't ship more than the client needs" principle: the body
+ * is the thing readers request
  * deliberately, one at a time, through GET /kb-articles/:id — which also
  * happens to be the only place the view counter can be attributed to an
  * actual read.

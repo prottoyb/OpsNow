@@ -41,7 +41,8 @@ export class KnowledgeArticleFeedbackSummaryDto {
  *
  * This is the shape an Employee must never receive, and the reason
  * GET /kb-articles/:id/feedback is @Roles(...STAFF_ROLES) with a second
- * check in the service (.claude/rules/security.md, Sensitive Data). A
+ * check in the service: feedback authorship must never be exposed to the
+ * person it's about. A
  * feedback comment is unsolicited free text that a colleague wrote about
  * somebody's work while believing only the support team would read it —
  * "this is wrong, Ade's old process was better" is entirely normal

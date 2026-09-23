@@ -9,7 +9,7 @@ export class AssetTypesService {
 
   /** Flat list of active asset types, so a caller can discover valid
    * `assetTypeId` values when creating or updating an asset. Read-only:
-   * there is no asset-type CRUD in Phase 8a (see TASKS.md). */
+   * asset-type CRUD is deliberately out of scope for now. */
   async findAllActive(): Promise<AssetTypeResponseDto[]> {
     const assetTypes = await this.prisma.assetType.findMany({
       where: { isActive: true },

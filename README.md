@@ -23,9 +23,8 @@ system would require.
   presented differently depending on whether the viewer is an employee
   raising an issue or a staff member handling it — and that distinction
   is enforced on the server, not just hidden in the UI.
-- A **incrementally built system**, developed and reviewed one phase at
-  a time, with every phase's decisions recorded in `DECISIONS.md` and
-  every phase's status tracked in `TASKS.md`/`progress.md`.
+- An **incrementally built system**, developed and reviewed one phase at
+  a time, with every phase's decisions recorded in `DECISIONS.md`.
 
 ## Current Project Status
 
@@ -102,17 +101,17 @@ Completed so far:
   a documented production posture with environment validation that
   refuses to boot on a bad configuration (Phase 16).
 
-## What Remains to Be Built
+## Deployment Status
 
 **Phase 17 — Final Review & Portfolio Preparation** is the only phase
-left. Its review pass, architecture/database diagrams, API documentation,
-decisions summary, demo data and interview/demo material are complete —
-see the Documentation Map above and `TASKS.md`'s Phase 17 section for the
-line-by-line checklist. What's still open is only what genuinely can't be
-closed from inside this repository: building the container images (no
-Docker on the authoring machine) and everything in `docs/deployment.md`
-that needs a hosting account, a managed database, a registry, a domain or
-a credential — none of which exist.
+left. Its review pass, the eleven-diagram architecture/database set under
+`docs/diagrams/`, API documentation, decisions summary and demo material
+are complete — see the Documentation Map below for what each document
+covers. What's still open is only what genuinely can't be closed from
+inside this repository: building the container images (no Docker on the
+authoring machine) and everything in `docs/deployment.md` that needs a
+hosting account, a managed database, a registry, a domain or a
+credential — none of which exist.
 
 Everything else that remains needs something outside this repository. See
 `docs/deployment.md` for the full list; in short, a hosting platform, a
@@ -130,11 +129,10 @@ somewhere to keep secrets. None of those exist, so:
   one-off SQL promotion; a small `create-admin` CLI is the right fix and
   is recorded as a gap.
 
-Smaller tracked deferrals are listed per phase in `TASKS.md` and are not
-repeated here. The two that were called out in earlier versions of this
-README have moved on: auth rate limiting **is now implemented**
-(ADR-026), and the staff-visible user directory endpoint is **still
-open**.
+Smaller deferrals tracked during development are not repeated here. The
+two that were called out in earlier versions of this README have moved
+on: auth rate limiting **is now implemented** (ADR-026), and the
+staff-visible user directory endpoint is **still open**.
 
 ## What the Finished System Is Intended to Provide
 
@@ -441,8 +439,9 @@ all green, against real local Postgres.
   addition to the deterministic unit tests that mock a lost race.
 
 Every feature phase also went through an independent QA/Security review
-and a separate Senior Review before being considered complete — see
-`progress.md` for the specific findings and fixes recorded per phase.
+and a separate Senior Review before being considered complete, with
+findings fixed (or explicitly deferred) before the phase was marked
+done.
 
 ## Security Considerations
 
@@ -502,24 +501,19 @@ OpsNow/
 │   │   └── lib/                 API client, query infrastructure
 │   └── e2e/                  Playwright specs
 ├── docs/
+│   ├── diagrams/            Eleven Mermaid + PNG architecture/data-flow diagrams
 │   ├── docker.md            Running the containerised stack
 │   ├── deployment.md        Production posture and the remaining external steps
 │   ├── decisions-summary.md Fast-reference trade-off summary of DECISIONS.md
 │   ├── architecture/        System architecture and database ERD (Mermaid)
 │   ├── api/                 Human-readable API conventions (companion to Swagger)
-│   ├── portfolio/           Interview prep and demo walkthrough
+│   ├── portfolio/           Demo walkthrough script
 │   └── releases/            Release notes per tag
 ├── database/               Reserved for standalone DB assets (currently empty)
 ├── .github/workflows/      CI pipeline (Phase 15)
 ├── docker-compose.yml      Full-stack local run (Phase 14)
 ├── .env.docker.example     Environment template for the Compose stack
-├── scripts/
-│   └── setup-ai-team.ps1   Links .claude/ to the shared AI team framework (see below)
-├── .claude/                Structured AI-development workflow (see below)
-├── TASKS.md                Phase-by-phase task checklist (source of truth for status)
-├── progress.md             Full development log, phase by phase
-├── DECISIONS.md            Architecture Decision Records (ADR-001…ADR-027)
-└── CLAUDE.md               Project-specific development instructions
+└── DECISIONS.md            Architecture Decision Records (ADR-001…ADR-027)
 ```
 
 Both `backend/` and `frontend/` additionally carry a multi-stage
@@ -667,17 +661,13 @@ The short version of the posture (ADR-027):
 
 ## Current Roadmap
 
-See `TASKS.md` for the authoritative, task-level breakdown.
+Phases 0–16 are complete. Phase 17 is complete for everything that can be
+finished from inside this repository: the review pass, the architecture
+and database diagrams, API documentation, the decisions summary and demo
+material.
 
-Phases 0–16 are complete. Phase 17's checklist is complete for everything
-that can be finished from inside this repository: the review pass, the
-architecture and database diagrams, API documentation, the decisions
-summary, demo data, and interview/demo material. See `TASKS.md` for
-exactly which Phase 17 line items remain open and why.
-
-Two items are not Phase 17 work in the ordinary sense — they don't need
-more engineering, they need resources this repository can't supply on its
-own — and are tracked as such in `TASKS.md`:
+Two items remain — they don't need more engineering, they need resources
+this repository can't supply on its own:
 
 1. Build and start the container stack on a machine that has Docker, and
    fix whatever the first run surfaces.
@@ -688,17 +678,16 @@ own — and are tracked as such in `TASKS.md`:
 
 | Document | What it's for |
 | --- | --- |
+| `docs/diagrams/` | The full eleven-diagram set (architecture, both ERDs, auth flow, RBAC, ticket lifecycle, SLA lifecycle, CI pipeline, deployment topology, ticket-mutation concurrency), each with Mermaid source and a rendered PNG |
 | `docs/architecture/system-architecture.md` | Component/request-pipeline diagram, refresh-token flow, the AI provider boundary |
 | `docs/architecture/database-erd.md` | Entity-relationship diagrams (core ITSM + supporting tables) matching the actual Prisma schema |
 | `docs/api/README.md` | API conventions — auth model, RBAC, error envelope, 404-vs-403, concurrency/409, pagination — companion to Swagger, not a duplicate of it |
 | `docs/decisions-summary.md` | One-paragraph-per-decision fast reference into the full `DECISIONS.md` ADRs |
-| `docs/portfolio/interview-prep.md` | 60-second/2-3-minute explanations, a walked-through hard problem, honest trade-offs |
 | `docs/portfolio/demo-walkthrough.md` | A live-demo/recording script, with the seeded demo accounts |
 | `docs/docker.md` | Running the containerised stack |
 | `docs/deployment.md` | Production posture and the external steps a real deployment would need |
 | `docs/releases/v0.1.0.md` | Release notes for the current tag |
 | `DECISIONS.md` | The full Architecture Decision Records, ADR-001 through ADR-027 |
-| `TASKS.md` / `progress.md` | Phase-by-phase task checklist and full development log |
 
 ## Engineering Decisions / Design Principles
 
@@ -718,65 +707,31 @@ principles run through all of them:
   rejected as premature.
 - **Security is enforced on the backend, always.** Role-aware UI exists
   for usability, never as the actual boundary.
-- **Don't drop known gaps silently.** Deferred work is tracked per
-  phase in `TASKS.md`, not abandoned. The same applies to what has not
-  been *verified*: the container images and the CI pipeline are written
-  but have never been executed, and that is stated wherever they are
-  described rather than left for someone to find out.
+- **Don't drop known gaps silently.** Deferred work is recorded and
+  revisited, not abandoned. The same applies to what has not been
+  *verified*: the production images are built and validated in CI, but
+  the full Compose stack has not been started locally on the authoring
+  machine, and that is stated wherever it's relevant rather than left for
+  someone to find out.
 
 ## AI-Assisted Development Workflow
 
-OpsNow is built using a structured Claude Code agentic development
-workflow for engineering tasks — implementation, independent QA/security
-review, and senior code review are handled by distinct, specialized
-roles rather than a single undifferentiated pass. This is a development
-practice, not a product feature; nothing about it is exposed to end
-users of the application itself.
+OpsNow was built using a structured AI-assisted development workflow:
+implementation, independent QA/security review, and senior code review
+are handled by distinct, specialized roles rather than a single
+undifferentiated pass, with a human approval gate between phases. This is
+a development practice, not a product feature; nothing about it is
+exposed to end users of the application itself, and it introduces no
+runtime dependency for `backend/` or `frontend/`. See ADR-012 in
+`DECISIONS.md` for the recorded decision.
 
-The supporting structure lives under `.claude/`:
-
-- **`.claude/agents`** — specialized role definitions (e.g. a
-  fullstack-engineer role for implementation, separate QA/security and
-  senior-reviewer roles for independent review, a software-architect role
-  for upfront design review).
-- **`.claude/rules`** — shared engineering, security, testing and
-  documentation rules that apply consistently across roles and phases.
-- **`.claude/skills`** — reusable workflows for recurring processes such
-  as feature development and security review.
-- **`.claude/agent-memory`** — persisted, per-role notes that carry
-  context forward between sessions, so review standards stay consistent
-  phase over phase.
-
-`.claude/framework`, `.claude/agents`, `.claude/rules` and `.claude/skills`
-are not files committed to this repository — they are local Windows
-directory junctions into a separate, shared `AI-Software-Team` framework
-repository that OpsNow consumes but doesn't fork or duplicate. This keeps
-the framework's own history, versioning and reuse across other projects
-intact instead of forking it per-project. `.gitignore` excludes `.claude/`,
-and none of these junctions (or `.claude/` itself) are tracked in Git.
-
-`CLAUDE.md` pulls in the framework's own constitution with the stable,
-relative `@.claude/framework/CLAUDE.md` import rather than an absolute
-path, so the tracked project config never hard-codes any one developer's
-local checkout location.
-
-Run `.\scripts\setup-ai-team.ps1` to create or repair all four junctions —
-including creating `.claude/` itself on a fresh checkout, since it won't
-exist until this script runs. It defaults to this developer's local
-framework checkout path but accepts `-TeamPath` for a different location,
-validates the source before touching anything, never overwrites a real
-directory, and is safe to run repeatedly. This is a development-time
-dependency only: OpsNow the application has no runtime dependency on
-Claude Code or the framework repository, and none of this affects
-`backend/` or `frontend/`.
-
-In practice, every completed phase in this repository went through this
+In practice, every completed phase in this repository went through the
 same cycle: an implementation pass, followed by independent QA/security
-and senior review against the real running code, with findings fixed (or
-explicitly deferred and tracked) before the phase was marked complete.
-The engineering substance of the result — the architecture, the access
-control, the concurrency handling, the tests — is the point; the workflow
-is what kept it consistent across ~20 phases of work.
+review and a separate senior review against the real running code, with
+findings fixed (or explicitly deferred) before the phase was marked
+complete. The engineering substance of the result — the architecture, the
+access control, the concurrency handling, the tests — is the point; the
+workflow is what kept it consistent across roughly twenty phases of work.
 
 ## Project Maturity / Portfolio Status
 
@@ -804,8 +759,7 @@ complete for everything achievable from inside this repository):
   exercised: **Docker itself has never been installed or run locally** on
   the authoring machine, so no local `docker compose up` has happened —
   distinct from CI having built the images. This is labelled as such in
-  `docs/docker.md`, `TASKS.md` and `progress.md` rather than being left
-  to be discovered.
+  `docs/docker.md` rather than being left to be discovered.
 - "Production-ready" would be an overstatement while the images are
   untried and there is no error reporting, log aggregation or backup
   strategy. Closing that is the work described in `docs/deployment.md`,

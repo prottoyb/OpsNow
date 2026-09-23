@@ -1,2 +1,0 @@
-- [Review scope for OpsNow phases](project_review_scope.md) — ADR-001..027 settled; phases reuse ticket patterns on purpose, so don't propose new abstractions.
-- [Don't run test suites during review](feedback_parallel_review_no_test_runs.md) — QA runs in parallel on the shared dev DB; static checks only, judgement over execution.

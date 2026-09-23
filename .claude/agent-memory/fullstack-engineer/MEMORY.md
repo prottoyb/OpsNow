@@ -1,6 +1,0 @@
-- [Fresh worktree setup](worktree-setup-opsnow.md) — npm ci both packages, copy backend/.env, prisma generate, start the API before Playwright.
-- [The dev database is not ours to reset](opsnow-dev-db-is-not-ours-to-reset.md) — never seed/wipe opsnow_dev; verify seed counts before and after every run.
-- [OpsNow docs use escaped, double-spaced markdown](project-docs-escaped-markdown.md) — edit DECISIONS/TASKS/progress/README programmatically; line endings differ per file.
-- [Control chars in sources](feedback-control-chars-in-sources.md) — `\uXXXX` in written files becomes a real byte; re-escape it or git sees binary.
-- [Worktree branch may predate "already committed" work](feedback-worktree-branch-mismatch.md) — check git log AND whether the ff/checkout repair is permitted, before designing anything.
-- [An isolated worktree cannot write to the main checkout](feedback-worktree-writes-blocked-outside.md) — Read works but Write/Edit/git are refused; probe with one write first.

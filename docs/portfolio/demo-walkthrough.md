@@ -115,5 +115,4 @@ claim concrete rather than asserted.
 - Open `docs/architecture/system-architecture.md` and
   `docs/architecture/database-erd.md` for the diagrams.
 - Reference `DECISIONS.md`/`docs/decisions-summary.md` for why a specific
-  design choice was made, and `progress.md` for the specific review
-  findings that shaped it.
+  design choice was made.

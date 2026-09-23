@@ -3,8 +3,10 @@
 > **Status: OpsNow is NOT deployed anywhere.**
 >
 > There is no hosting account, no managed database, no container registry, no
-> domain and no credential for this project. Nothing in this repository has
-> ever run outside a developer's machine.
+> domain and no credential for this project. The application has never run
+> as a deployed service — CI builds and validates the container images on
+> GitHub-hosted runners, but nothing has been pushed to a registry or run
+> behind a real domain.
 >
 > What exists is everything that can be built and verified without a target:
 > production images, a Compose stack, a CI pipeline, environment validation
@@ -321,8 +323,8 @@ the order they have to happen.
    one-line `RECORD` entry naming the timestamp, user id, email and the
    role it changed from and to; file that line in this deployment's change
    record, because it is the only durable evidence the promotion happened.
-   See the deferred item in `TASKS.md` for why role changes have no audit
-   action yet.
+   This is a recorded, deliberately deferred gap rather than an oversight —
+   role changes have no audit-log action yet.
 9. **Add the deployment job to CI.** Only once steps 1–5 exist. Until then,
    `.github/workflows/ci.yml` deliberately has no deploy job and no empty
    secret references — configuration that has never been executed is worse

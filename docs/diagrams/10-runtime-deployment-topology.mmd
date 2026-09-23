@@ -15,7 +15,7 @@ flowchart TB
     end
     DEVLABEL --- DEV
 
-    RUNLABEL["CONTAINER / RUNTIME TOPOLOGY — built and validated by CI on every push<br/>(docker compose config, nginx -t). Docker itself has never been installed or<br/>run on this development machine, so this stack has never actually been<br/>started with a local docker compose up."]:::note
+    RUNLABEL["CONTAINER / RUNTIME TOPOLOGY — validated by CI on every push<br/>(docker compose config, nginx -t). Intended production/runtime topology;<br/>see docs/deployment.md for current deployment status."]:::note
 
     subgraph RUNTIME[" "]
         direction LR

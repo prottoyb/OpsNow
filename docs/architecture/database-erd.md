@@ -13,6 +13,11 @@ partial/filtered unique indexes, the generated `tsvector` search column)
 are added by hand to the migration SQL and are called out below rather
 than shown on the diagram, which is ERD notation, not DDL.
 
+See [`docs/diagrams/`](../diagrams/README.md) for the full eleven-diagram
+set, including these two ERDs alongside the runtime architecture, auth
+flow, RBAC, SLA lifecycle, CI pipeline, deployment topology, and
+ticket-mutation concurrency diagrams.
+
 ## Core ITSM tables
 
 ```mermaid

@@ -301,9 +301,9 @@ jobs:
         working-directory: backend
         # `--omit=dev` because a vulnerability in a test-only package is not
         # shipped and is a different, lower-severity conversation. Fails on
-        # high and critical; introducing or keeping a known-vulnerable
-        # dependency needs the exception process in .claude/rules/security.md,
-        # not a flag change here.
+        # high and critical; a known-vulnerable dependency must be replaced
+        # or justified and explicitly accepted, not silenced by loosening
+        # this flag.
         run: npm audit --omit=dev --audit-level=high
 
       - name: Audit frontend runtime dependencies

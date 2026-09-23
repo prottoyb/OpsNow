@@ -8,9 +8,9 @@ during the development of OpsNow.
 
 
 
-The purpose is to preserve the reasoning behind decisions so that development
+The purpose is to preserve the reasoning behind decisions so that
 
-can continue consistently across different AI agent sessions and so the
+architectural consistency is maintained as the system evolves, and so the
 
 architecture can be clearly explained during technical interviews.
 
@@ -580,11 +580,9 @@ Project state will be maintained through:
 
 
 
-\- CLAUDE.md
+\- Internal development records (project instructions, a task checklist
 
-\- TASKS.md
-
-\- progress.md
+  and a development log, kept outside the public repository)
 
 \- DECISIONS.md
 
@@ -1030,7 +1028,7 @@ authentication (ADR-018) and role checks (ADR-006). The schema also has a
 
 generic `AuditLog` model in addition to `TicketHistory`; Phase 6a writes
 
-only `TicketHistory` (what TASKS.md's checklist names), and the boundary
+only `TicketHistory`, and the boundary
 
 between the two audit mechanisms is left for whichever future phase owns
 
@@ -1902,7 +1900,7 @@ it is a real limitation, and whether to close it (by enabling focus
 
 refetching for ticket queries, or by a visibility-driven invalidate) is
 
-deferred to the project owner in `TASKS.md`, because either option
+deferred to the project owner, because either option
 
 changes shared query configuration well beyond this phase's scope. The
 
@@ -2299,7 +2297,7 @@ recommended the SDK for its typed errors and structured-output helpers,
 
 and that recommendation is reasonable in general — it was declined here on
 
-this project's own scope-control rule (CLAUDE.md, ADR-017) for a specific
+this project's own scope-control rule (ADR-017) for a specific
 
 reason: the live path is off in every default install and in CI, so the
 
@@ -2501,7 +2499,7 @@ its keep.
 
 
 
-12. Phase 12 is backend-only. TASKS.md's Phase 12 list contains no
+12. Phase 12 is backend-only. The phase's defined scope contains no
 
 frontend items, unlike Phases 10 and 11 which name their UI explicitly, so
 
@@ -2523,9 +2521,9 @@ Amended after the backend shipped: Phase 12 is no longer backend-only. The
 
 project owner asked for the staff-facing UI, so the phase was split into
 
-12a (backend) and 12b (frontend) like every phase since Phase 6, and
+12a (backend) and 12b (frontend) like every phase since Phase 6, and the
 
-TASKS.md now names the frontend items it previously lacked. The reasoning
+phase's defined scope now includes the frontend items it previously lacked. The reasoning
 
 above was about scope, not about architecture, and nothing else in this
 
@@ -2935,7 +2933,7 @@ would need the same pause-ledger arithmetic ADR-020 applies to due dates,
 
 which is a larger change than this phase's scope; it is recorded as a
 
-tracked limitation in TASKS.md rather than left for a reader to discover
+deferred limitation rather than left for a reader to discover
 
 from a surprising number.
 
@@ -3377,7 +3375,7 @@ Context:
 
 Phase 4 shipped authentication with no brute-force protection and recorded
 
-that gap as a deferred task in TASKS.md, flagged by that phase's architect
+that gap as deferred work, flagged by that phase's architect
 
 review as a real exposure. Phase 13 is the hardening phase, so it is the
 
@@ -4053,11 +4051,9 @@ own start-up logs gets no protection from it.
 
 The absence of a deployment pipeline means the first real deployment will
 
-be done by hand, which is exactly the kind of change
+be done by hand, which is exactly the kind of change this project's own
 
-`.claude/rules/engineering.md` says should be reproducible from the
-
-repository. That gap is accepted and recorded rather than papered over, and
+engineering standards say should be reproducible from the repository. That gap is accepted and recorded rather than papered over, and
 
 closing it is Phase 17 work that needs a target to exist first.
 

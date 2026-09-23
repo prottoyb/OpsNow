@@ -58,8 +58,8 @@ function SkeletonCard({ lines = 3 }: { lines?: number }) {
 /**
  * Shaped like the ticket/asset/article detail page it stands in for (a
  * heading, a badge row, a main card and 2–3 aside cards) rather than a
- * generic spinner, so the page does not blank-then-pop once data arrives —
- * see `.claude/rules/ui-design.md`'s "a skeleton, not a blank screen" rule.
+ * generic spinner, so the page does not blank-then-pop once data arrives:
+ * a skeleton that mirrors the real layout, not a blank screen.
  * The pulsing shapes are decorative (`aria-hidden`); `label` carries the same
  * accessible loading announcement `FullPageSpinner` gave via a visually
  * hidden `role="status"` region, so nothing is lost for assistive tech.

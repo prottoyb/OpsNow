@@ -1,5 +1,0 @@
-- [OpsNow repo layout](opsnow-repo-layout.md) — CLAUDE.md/rules/agents are symlinks to D:/Projects/Claude/AI-Software-Team; worktrees show them as 1-line path files.
-- [OpsNow CAS concurrency pattern](opsnow-cas-pattern.md) — TicketsService's updateMany+count!==1 CAS convention; how to verify it under race.
-- [OpsNow clock-domain finding (Phase 7 SLA)](opsnow-sla-clock-domain-finding.md) — resolvedAt is app-clock while SLA due dates/now() are DB-clock; MEDIUM finding, open as of 2026-09-16.
-- [NUL-byte 500 gap](project_nul-byte-500-gap.md) — no DTO rejects U+0000; any string field can reach Postgres and produce an unhandled 500.
-- [Asset visibility bypass via ticket links](project_asset-visibility-ticket-link.md) — GET /tickets/:id/assets returns full assets with no asset-level scoping.

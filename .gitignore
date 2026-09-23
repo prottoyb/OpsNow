@@ -28,5 +28,11 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Claude
+# Local AI-development files
+# Kept locally; not part of the public portfolio repository
 .claude/
+CLAUDE.md
+TASKS.md
+progress.md
+scripts/setup-ai-team.ps1
+docs/portfolio/interview-prep.md

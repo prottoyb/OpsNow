@@ -11,8 +11,8 @@ import { SlaService } from './sla.service';
 /**
  * Both routes are staff-only (`@Roles` guard, plus SlaService's own
  * `assertStaff` as defense-in-depth — matches TicketsController's pattern
- * for its staff-only routes). Read-only: there is no policy CRUD in
- * Phase 7 (see TASKS.md).
+ * for its staff-only routes). Read-only: policy CRUD is deliberately out
+ * of scope for now.
  */
 @ApiTags('sla')
 @Roles(...STAFF_ROLES)

@@ -133,8 +133,8 @@ const TD = 'px-3 py-3 align-top';
  * Deliberately a simplification, not a recovery path: entity type/id is not
  * duplicated into "View details" (which covers IP/user agent/metadata only),
  * so this genuinely narrows what a phone-width viewport can see, in exchange
- * for not forcing horizontal scroll on every row (`.claude/rules/ui-design.md`:
- * avoid unnecessary horizontal scroll). Widening the viewport — or resizing —
+ * for not forcing horizontal scroll on every row. Widening the viewport — or
+ * resizing —
  * is what recovers the column.
  */
 const ENTITY_CELL = 'hidden sm:table-cell';

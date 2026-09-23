@@ -12,8 +12,8 @@ export interface StatTileProps {
   hint?: string;
   /**
    * True to flag this figure as needing attention right now — a left accent
-   * border plus a text badge, never colour alone
-   * (`.claude/rules/ui-design.md`). Use only for a figure that is
+   * border plus a text badge, never colour alone, so the signal doesn't
+   * depend on colour perception. Use only for a figure that is
    * unambiguously bad whenever it is non-zero (e.g. an in-flight SLA
    * breach), not for an ordinary or merely high count.
    */

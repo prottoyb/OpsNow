@@ -21,8 +21,8 @@ export interface CardProps extends ComponentPropsWithoutRef<'section'> {
  * The shared bounded-content surface (a ticket's Details/Status/Triage/About
  * panels, a filter bar, a stat tile, the AI assistant panel, ...). Replaces
  * the `rounded-md border border-slate-200 bg-white p-4` markup that was
- * previously hand-copied across every feature directory — see
- * `.claude/rules/ui-design.md`'s "reuse before creating" guidance.
+ * previously hand-copied across every feature directory — reuse this
+ * shared surface rather than recreating it per feature.
  *
  * `heading` renders a visible title AND automatically labels the `<section>`
  * as an accessible region via `aria-labelledby` (pass your own

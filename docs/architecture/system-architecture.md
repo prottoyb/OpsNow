@@ -5,6 +5,11 @@ calling a versioned NestJS REST API, backed by a single PostgreSQL
 database. There is deliberately no microservices split, no message queue,
 and no monorepo tooling (ADR-001/017).
 
+See [`docs/diagrams/`](../diagrams/README.md) for the full eleven-diagram
+set (runtime architecture, both ERDs, auth flow, RBAC, SLA lifecycle, CI
+pipeline, deployment topology, and ticket-mutation concurrency), of which
+the diagram below is one.
+
 ```mermaid
 flowchart TB
     subgraph client["Browser"]

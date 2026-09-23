@@ -23,6 +23,6 @@ flowchart LR
     TRIGGER --> DOCKER --> GATE
 
     GATE{"All 5 jobs green?"}:::gate
-    GATE -->|yes| PASS["Meets the project's release/merge<br/>acceptance criterion<br/>(GitHub branch-protection status<br/>was not independently verified)"]:::pass
+    GATE -->|yes| PASS["Meets the project's release/merge<br/>acceptance criterion.<br/>Repository protections are configured<br/>separately from this workflow."]:::pass
     GATE -->|no| FAIL["Fix & push again"]:::fail
     FAIL --> TRIGGER

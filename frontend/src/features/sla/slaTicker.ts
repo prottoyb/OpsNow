@@ -21,7 +21,7 @@ import { useSyncExternalStore } from 'react';
  * countdown can sit at "Due now" beside a badge that still reads "on track"
  * until something remounts the query. The badge remains the backend's last
  * word, so this is stale rather than wrong — but it is a real consequence,
- * recorded in ADR-021 and tracked in TASKS.md as a deferred decision, not
+ * recorded in ADR-021 as a deferred decision, not
  * something this ticker should paper over with a focus-driven refetch.
  */
 
